@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/quotation_ai_controller.dart';
+import '../../../../../core/utils/app_feedback.dart';
 
 Future<void> openQuotationRuleDetailSheet(
   BuildContext context,
@@ -16,8 +17,11 @@ Future<void> openQuotationRuleDetailSheet(
   if (!context.mounted) return;
 
   if (rule == null) {
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-      const SnackBar(content: Text('No se pudo abrir la regla relacionada.')),
+    AppFeedback.showToast(
+      context,
+      title: 'Regla',
+      body: 'No se pudo abrir la regla relacionada.',
+      kind: AppFeedbackKind.error,
     );
     return;
   }

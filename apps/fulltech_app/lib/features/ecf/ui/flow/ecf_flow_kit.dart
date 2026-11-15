@@ -52,6 +52,7 @@ class EcfSection extends StatelessWidget {
     this.trailing,
     this.icon,
     this.padding = const EdgeInsets.fromLTRB(16, 14, 16, 16),
+    this.embedded = false,
   });
 
   final String title;
@@ -60,50 +61,51 @@ class EcfSection extends StatelessWidget {
   final IconData? icon;
   final Widget child;
   final EdgeInsetsGeometry padding;
+  final bool embedded;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return EcfSurface(
-      padding: padding,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              if (icon != null) ...[
-                Icon(icon, size: 17, color: AppColors.primary),
-                const SizedBox(width: 8),
-              ],
-              Expanded(
-                child: Text(
-                  title,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
-                  ),
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 17, color: AppColors.primary),
+              const SizedBox(width: 8),
+            ],
+            Expanded(
+              child: Text(
+                title,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
                 ),
               ),
-              if (trailing != null) trailing!,
-            ],
-          ),
-          if (subtitle != null) ...[
-            const SizedBox(height: 3),
-            Text(
-              subtitle!,
-              style: theme.textTheme.bodySmall?.copyWith(
-                fontSize: 12,
-                height: 1.35,
-                color: AppColors.textMuted,
-              ),
             ),
+            if (trailing != null) trailing!,
           ],
-          const SizedBox(height: 12),
-          child,
+        ),
+        if (subtitle != null) ...[
+          const SizedBox(height: 3),
+          Text(
+            subtitle!,
+            style: theme.textTheme.bodySmall?.copyWith(
+              fontSize: 12,
+              height: 1.35,
+              color: AppColors.textMuted,
+            ),
+          ),
         ],
-      ),
+        const SizedBox(height: 12),
+        child,
+      ],
     );
+    return embedded
+        ? Padding(padding: padding, child: content)
+        : EcfSurface(padding: padding, child: content);
   }
 }
 

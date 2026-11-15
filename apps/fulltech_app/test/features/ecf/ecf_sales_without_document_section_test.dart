@@ -1,4 +1,5 @@
 import 'package:daleventa_pos/features/ecf/data/ecf_repository.dart';
+import 'package:daleventa_pos/core/widgets/compact_square_switch.dart';
 import 'package:daleventa_pos/features/ecf/ecf_models.dart';
 import 'package:daleventa_pos/features/ecf/ui/ecf_config_page.dart';
 import 'package:dio/dio.dart';
@@ -105,7 +106,7 @@ void main() {
       );
       // El contenido sigue completo: título, explicación y switch.
       expect(find.text('Vender sin comprobante'), findsOneWidget);
-      expect(find.byType(Switch), findsOneWidget);
+      expect(find.byType(CompactSquareSwitch), findsOneWidget);
     },
   );
 

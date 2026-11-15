@@ -8,9 +8,10 @@ import 'package:go_router/go_router.dart';
 import 'package:validators/validators.dart' as validators;
 
 import '../../../core/auth/app_role.dart';
-import '../../../core/auth/business_registration_policy.dart';
+import '../../../core/utils/open_web_registration.dart';
 import '../../../core/auth/auth_provider.dart';
 import '../../../core/errors/api_exception.dart';
+import '../../../core/debug/app_error_reporter.dart';
 import '../../../core/routing/route_access.dart';
 import '../../../core/routing/routes.dart';
 import '../../../core/theme/app_colors.dart';
@@ -31,7 +32,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   final _passwordFocusNode = FocusNode();
-  _LoginNoticeData? _notice;
   bool _obscurePassword = true;
 
   final _rememberedUsersStorage = const RememberedLoginUsersStorage();
@@ -61,14 +61,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
     _passwordFocusNode.dispose();
+    AppFeedback.dismissPersistentNotification();
     super.dispose();
   }
 
   void _clearNoticeOnInput() {
-    if (_notice == null || !_notice!.isError || !mounted) {
-      return;
-    }
-    setState(() => _notice = null);
+    AppFeedback.dismissPersistentNotification();
+    AppErrorReporter.instance.clear();
   }
 
   Future<void> _loadSavedUsers() async {
@@ -166,7 +165,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           message: 'Revisa tu usuario y contrasena.',
           helpText: 'Intenta nuevamente o solicita ayuda al administrador.',
           feedbackKind: AppFeedbackKind.warning,
-          showNotification: false,
         );
       case ApiErrorType.forbidden:
         return _LoginNoticeData.error(
@@ -225,15 +223,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       message: 'Puedes vender 48 h.',
       helpText: 'Sincroniza al volver.',
       feedbackKind: AppFeedbackKind.info,
-      compactNotification: true,
     );
   }
 
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
+    final email = _emailCtrl.text.trim();
+    if (!validators.isEmail(email) || _passwordCtrl.text.isEmpty) {
+      _showLoginFailureNotification(
+        const _LoginNoticeData.error(
+          title: 'Revisa tus datos',
+          message: 'Introduce un correo válido y tu contraseña.',
+          helpText: '',
+          feedbackKind: AppFeedbackKind.warning,
+        ),
+      );
+      return;
+    }
     if (!mounted) return;
     FocusScope.of(context).unfocus();
-    setState(() => _notice = null);
+    AppFeedback.dismissPersistentNotification();
     try {
       final user = await ref
           .read(authStateProvider.notifier)
@@ -252,10 +260,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     } on ApiException catch (e) {
       if (mounted) {
         final notice = _buildErrorNotice(e);
-        setState(() => _notice = notice);
-        if (notice.showNotification) {
-          _showLoginFailureNotification(notice);
-        }
+        _showLoginFailureNotification(notice);
       }
     } catch (e) {
       if (mounted) {
@@ -266,7 +271,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           helpText:
               'Si el problema persiste, informa al area tecnica para revisar el sistema.',
         );
-        setState(() => _notice = notice);
         _showLoginFailureNotification(notice);
       }
     }
@@ -274,15 +278,39 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   void _showLoginFailureNotification(_LoginNoticeData notice) {
     if (!mounted) return;
+    AppErrorReporter.instance.clear();
     AppFeedback.showPersistentNotification(
       context,
       AppFeedbackNotification(
         title: notice.title,
         body: '${notice.message} ${notice.helpText}',
         kind: notice.feedbackKind,
-        compact: notice.compactNotification,
+        compact: true,
+        paragraph: true,
+        actionLabel: notice.actionLabel,
+        onAction: notice.actionUri == null
+            ? null
+            : () => _openHelp(notice.actionUri!),
       ),
       scope: 'LoginScreen',
+    );
+  }
+
+  Future<void> _openHelp(Uri uri) async {
+    if (await tryOpenUrl(uri)) return;
+    try {
+      await Clipboard.setData(ClipboardData(text: uri.toString()));
+    } catch (_) {
+      // Keep the address visible if the clipboard is unavailable.
+    }
+    if (!mounted) return;
+    _showLoginFailureNotification(
+      _LoginNoticeData.error(
+        title: 'Abre el enlace de ayuda',
+        message: uri.toString(),
+        helpText: '',
+        feedbackKind: AppFeedbackKind.info,
+      ),
     );
   }
 
@@ -298,9 +326,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final cardWidth = size.width >= 900
         ? 392.0
         : availableCardWidth.clamp(0.0, maxCompactWidth);
-    final businessRegistrationDisabled = ref.watch(
-      businessRegistrationDisabledProvider,
-    );
     final theme = Theme.of(context);
     final headerStyle = theme.textTheme.headlineSmall?.copyWith(
       color: AppColors.textPrimary,
@@ -492,16 +517,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   textInputAction: TextInputAction.next,
                                   onFieldSubmitted: (_) =>
                                       FocusScope.of(context).nextFocus(),
-                                  validator: (v) {
-                                    final value = v?.trim() ?? '';
-                                    if (value.isEmpty) {
-                                      return 'Ingresa tu email';
-                                    }
-                                    if (!validators.isEmail(value)) {
-                                      return 'Email invalido';
-                                    }
-                                    return null;
-                                  },
                                 ),
                                 const SizedBox(height: 12),
                                 TextFormField(
@@ -531,14 +546,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   onFieldSubmitted: (_) {
                                     if (!loading) unawaited(_submit());
                                   },
-                                  validator: (v) => (v == null || v.isEmpty)
-                                      ? 'Ingresa tu contrasena'
-                                      : null,
                                 ),
-                                if (_notice != null) ...[
-                                  const SizedBox(height: 12),
-                                  _LoginNoticeCard(data: _notice!),
-                                ],
                                 const SizedBox(height: 16),
                                 PrimaryButton(
                                   label: 'Iniciar sesión',
@@ -575,41 +583,32 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                     ),
                                   ),
                                 ),
-                                if (businessRegistrationDisabled) ...[
-                                  const SizedBox(height: 14),
-                                  const _ExistingBusinessAccountNotice(),
-                                ] else ...[
-                                  const SizedBox(height: 14),
-                                  OutlinedButton.icon(
-                                    onPressed: loading
-                                        ? null
-                                        : () => context.go(Routes.register),
-                                    icon: const Icon(Icons.storefront_rounded),
-                                    label: const Text('Crear mi negocio'),
-                                    style: OutlinedButton.styleFrom(
-                                      minimumSize: const Size.fromHeight(48),
-                                      backgroundColor: Colors.white,
-                                      foregroundColor: AppColors.primaryDark,
-                                      iconColor: AppColors.primary,
-                                      iconSize: 20,
-                                      side: const BorderSide(
-                                        color: AppColors.secondaryBorder,
-                                        width: 1.2,
-                                      ),
-                                      shadowColor: AppColors.primary.withValues(
-                                        alpha: 0.12,
-                                      ),
-                                      elevation: 2,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      textStyle: const TextStyle(
-                                        fontWeight: FontWeight.w900,
-                                        letterSpacing: 0.2,
-                                      ),
+                                const SizedBox(height: 14),
+                                Wrap(
+                                  alignment: WrapAlignment.center,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  children: [
+                                    Text(
+                                      '¿No tienes una cuenta?',
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(
+                                            color: AppColors.textSecondary,
+                                          ),
                                     ),
-                                  ),
-                                ],
+                                    TextButton(
+                                      onPressed: loading
+                                          ? null
+                                          : () => openWebRegistration(context),
+                                      style: TextButton.styleFrom(
+                                        textStyle: theme.textTheme.labelMedium,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                        ),
+                                      ),
+                                      child: const Text('Crear cuenta'),
+                                    ),
+                                  ],
+                                ),
                               ],
                             ),
                           ),
@@ -627,225 +626,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 }
 
-class _ExistingBusinessAccountNotice extends StatelessWidget {
-  const _ExistingBusinessAccountNotice();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF5F8FC),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFE1E8F2)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '¿No tienes una cuenta?',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: const Color(0xFF1F3552),
-              fontWeight: FontWeight.w800,
-              height: 1.25,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Solicita acceso al administrador de tu empresa.',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: const Color(0xFF52667C),
-              fontWeight: FontWeight.w600,
-              height: 1.3,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            'FullPOS Cloud requiere una cuenta empresarial existente.',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: const Color(0xFF52667C),
-              fontWeight: FontWeight.w600,
-              height: 1.3,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _LoginNoticeData {
   const _LoginNoticeData.error({
     required this.title,
     required this.message,
     required this.helpText,
     this.feedbackKind = AppFeedbackKind.error,
-    this.showNotification = true,
-    this.compactNotification = false,
     this.actionLabel,
     this.actionUri,
-  }) : isError = true;
+  });
 
   final String title;
   final String message;
   final String helpText;
   final AppFeedbackKind feedbackKind;
-  final bool showNotification;
-  final bool compactNotification;
-  final bool isError;
   final String? actionLabel;
   final Uri? actionUri;
-}
-
-class _LoginNoticeCard extends StatelessWidget {
-  const _LoginNoticeCard({required this.data});
-
-  final _LoginNoticeData data;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final backgroundColor = _loginNoticeBackground(data.feedbackKind);
-    final foregroundColor = _loginNoticeForeground(data.feedbackKind);
-    final accentColor = _loginNoticeAccent(data.feedbackKind);
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: backgroundColor,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: accentColor.withValues(alpha: 0.28)),
-        boxShadow: [
-          BoxShadow(
-            color: accentColor.withValues(alpha: 0.08),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: accentColor.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(11),
-            ),
-            child: Icon(
-              data.isError
-                  ? Icons.error_outline_rounded
-                  : Icons.check_circle_outline_rounded,
-              color: accentColor,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  data.title,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    color: foregroundColor,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  data.message,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: foregroundColor,
-                    height: 1.35,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  data.helpText,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: foregroundColor.withValues(alpha: 0.86),
-                    height: 1.3,
-                  ),
-                ),
-                if (data.actionLabel != null && data.actionUri != null) ...[
-                  const SizedBox(height: 12),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: FilledButton.icon(
-                      onPressed: () => safeOpenWhatsApp(
-                        context,
-                        data.actionUri!,
-                        copiedMessage:
-                            'No se pudo abrir WhatsApp. Numero copiado.',
-                      ),
-                      icon: const Icon(Icons.chat_rounded, size: 18),
-                      label: Text(data.actionLabel!),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF1957E6),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 12,
-                        ),
-                        textStyle: const TextStyle(
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-Color _loginNoticeBackground(AppFeedbackKind kind) {
-  switch (kind) {
-    case AppFeedbackKind.success:
-      return AppColors.successSoft;
-    case AppFeedbackKind.warning:
-      return AppColors.warningSoft;
-    case AppFeedbackKind.error:
-      return AppColors.errorSoft;
-    case AppFeedbackKind.info:
-      return AppColors.surfaceAlt;
-  }
-}
-
-Color _loginNoticeForeground(AppFeedbackKind kind) {
-  switch (kind) {
-    case AppFeedbackKind.success:
-      return const Color(0xFF14532D);
-    case AppFeedbackKind.warning:
-      return const Color(0xFF7C3E00);
-    case AppFeedbackKind.error:
-      return const Color(0xFF7F1D1D);
-    case AppFeedbackKind.info:
-      return AppColors.textPrimary;
-  }
-}
-
-Color _loginNoticeAccent(AppFeedbackKind kind) {
-  switch (kind) {
-    case AppFeedbackKind.success:
-      return AppColors.success;
-    case AppFeedbackKind.warning:
-      return AppColors.warning;
-    case AppFeedbackKind.error:
-      return AppColors.error;
-    case AppFeedbackKind.info:
-      return AppColors.secondary;
-  }
 }
 
 /// Premium brand-blue gradient used by the login action button.

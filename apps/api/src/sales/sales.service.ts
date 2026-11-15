@@ -25,6 +25,7 @@ import { TaxService } from "../tax/tax.service";
 import { ecfRefundRequestId } from "../ecf/documents/ecf-refund-identity";
 import { EcfPreparationService } from "../ecf/documents/ecf-preparation.service";
 import { EcfDocumentQueryService } from "../ecf/documents/ecf-document-query.service";
+import { EcfSequenceService } from "../ecf/documents/ecf-sequence.service";
 import {
   DEFAULT_UNIT_OF_MEASURE,
   unitSnapshotFields,
@@ -2042,12 +2043,20 @@ export class SalesService {
     try {
       const sale = await this.prisma.$transaction(async (tx) => {
         const electronic = electronicType === "E31" || electronicType === "E32";
+        let sequenceExpiry: Date | null = null;
         if (electronic) {
           // Keep activation/configuration stable through local fiscal preparation.
           await tx.$queryRaw`SELECT company_id FROM ecf_company_configurations WHERE company_id = ${companyId}::uuid FOR SHARE`;
           const fiscal = await new EcfDocumentQueryService(this.prisma).capabilities(user, tx);
           if (!fiscal.posReady || !fiscal.posAvailableTypes.includes(electronicType)) {
             throw new ConflictException("ECF_SALE_NOT_READY");
+          }
+          if (electronicType === "E31") {
+            sequenceExpiry = await new EcfSequenceService(this.prisma).e31Expiry(user, tx);
+            if (dto.sequenceDueDate && dto.sequenceDueDate.slice(0, 10) !== sequenceExpiry.toISOString().slice(0, 10)) {
+              throw new ConflictException({ code: "ECF_SEQUENCE_EXPIRY_MISMATCH",
+                message: "El vencimiento E31 debe coincidir con la autorización registrada de esta empresa." });
+            }
           }
         }
         const shouldResolveOperationalContext =
@@ -2115,7 +2124,7 @@ export class SalesService {
                 ),
             fiscalVoucherType: electronicType || null,
             ncf: null,
-            ncfExpirationDate: electronicType === "E31" && dto.sequenceDueDate ? new Date(dto.sequenceDueDate) : null,
+            ncfExpirationDate: sequenceExpiry,
             issuerNameSnapshot,
             issuerTaxIdSnapshot,
             issuerAddressSnapshot,
@@ -2249,7 +2258,7 @@ export class SalesService {
         if (electronic) {
           const preparation = new EcfPreparationService(this.prisma);
           const input = { saleId: sale.id, paymentType: (paymentMethod === "credit" ? 2 : 1) as 1 | 2,
-            incomeType: 1 as const, sequenceDueDate: dto.sequenceDueDate };
+            incomeType: 1 as const, sequenceDueDate: sequenceExpiry?.toISOString().slice(0, 10) };
           const prepared = electronicType === "E31"
             ? await preparation.prepareFromSale(user, { ...input, documentType: "E31" }, tx)
             : await preparation.prepareConsumoFromSale(user, { ...input, documentType: "E32" }, tx);

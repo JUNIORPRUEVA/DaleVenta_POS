@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'external_launcher.dart';
+import 'app_feedback.dart';
 
 Future<bool> _tryOpenUri(Uri uri) async {
   try {
@@ -81,9 +82,7 @@ Future<void> safeOpenUrl(
   }
 
   if (!context.mounted) return;
-  ScaffoldMessenger.of(
-    context,
-  ).showSnackBar(SnackBar(content: Text(copiedMessage)));
+  AppFeedback.showToast(context, title: 'Enlace', body: copiedMessage);
 }
 
 Future<void> safeOpenWhatsApp(

@@ -18,6 +18,8 @@ import '../widgets/sales_catalog_command_bar.dart';
 import '../../../../core/models/product_model.dart';
 import '../../../../core/ai_assistant/presentation/widgets/ai_assistant_dock_button.dart';
 import '../widgets/sales_ticket_bar.dart';
+import '../../../ventas/ecf_pos_fiscal.dart';
+import '../../../ventas/ecf_pos_fiscal_selector.dart';
 
 /// Escenario aislado: usa el panel real con fixtures, sin guardar operaciones.
 void main() => runApp(
@@ -88,6 +90,8 @@ class _SalesDetailPanelPreviewState extends State<SalesDetailPanelPreview> {
   String _fiscal = 'Factura normal';
   String? _priceList;
   bool _options = true;
+  bool _electronic = false;
+  EcfPosFiscalMode _ecf = EcfPosFiscalMode.e32;
   bool _note = false;
   int? _selected;
   String? _auxiliary;
@@ -277,6 +281,12 @@ class _SalesDetailPanelPreviewState extends State<SalesDetailPanelPreview> {
                                           setState(() => _options = !_options),
                                       child: const Text('Alternar opciones'),
                                     ),
+                                    OutlinedButton(
+                                      onPressed: () => setState(
+                                        () => _electronic = !_electronic,
+                                      ),
+                                      child: const Text('Probar e-CF'),
+                                    ),
                                   ],
                                 ),
                               ],
@@ -303,6 +313,23 @@ class _SalesDetailPanelPreviewState extends State<SalesDetailPanelPreview> {
                           isAdmin: true,
                           utilityAmount: total * 0.25,
                           money: _money,
+                          ecfSelector: _electronic
+                              ? EcfPosFiscalSelector(
+                                  modes: const [
+                                    EcfPosFiscalMode.e31,
+                                    EcfPosFiscalMode.e32,
+                                    EcfPosFiscalMode.normal,
+                                  ],
+                                  selected: _ecf,
+                                  embedded: true,
+                                  compact: true,
+                                  missingBuyer:
+                                      _ecf == EcfPosFiscalMode.e31 &&
+                                      _client == 'Sin cliente',
+                                  onSelected: (value) =>
+                                      setState(() => _ecf = value),
+                                )
+                              : null,
                           priceListSelector: _options
                               ? SalesDetailPriceListSelector(
                                   value: _priceList,

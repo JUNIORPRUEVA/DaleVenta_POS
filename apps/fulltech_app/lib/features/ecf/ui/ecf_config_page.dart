@@ -4,11 +4,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/auth/app_permissions.dart';
 import '../../../core/auth/auth_provider.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/compact_square_switch.dart';
 import '../data/ecf_repository.dart';
 import '../ecf_models.dart';
 import 'ecf_credit_note_action.dart';
 import 'ecf_production_activation_action.dart';
 import 'flow/ecf_sequence_range_section.dart';
+
+const _fiscalConfigShape = RoundedRectangleBorder(
+  borderRadius: BorderRadius.all(Radius.circular(6)),
+);
 
 /// Estado y numeración del módulo e-CF.
 ///
@@ -34,132 +39,203 @@ class EcfConfigPage extends ConsumerWidget {
     final caps = capabilities.valueOrNull;
     final user = ref.watch(authStateProvider).user;
 
-    return Scaffold(
-      // Sin barra propia: el shell ya muestra el título y el botón de volver.
-      backgroundColor: Colors.transparent,
-      body: RefreshIndicator(
-        onRefresh: () async {
-          ref.invalidate(ecfCapabilitiesProvider);
-          ref.invalidate(ecfSequencesProvider);
-          ref.invalidate(ecfEligibleOriginalsProvider);
-          await ref.read(ecfCapabilitiesProvider.future);
-        },
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 940),
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-              children: [
-                _Panel(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+    final baseTheme = Theme.of(context);
+    return Theme(
+      data: baseTheme.copyWith(
+        filledButtonTheme: FilledButtonThemeData(
+          style: (baseTheme.filledButtonTheme.style ?? const ButtonStyle())
+              .copyWith(
+                shape: const WidgetStatePropertyAll(_fiscalConfigShape),
+              ),
+        ),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: (baseTheme.outlinedButtonTheme.style ?? const ButtonStyle())
+              .copyWith(
+                shape: const WidgetStatePropertyAll(_fiscalConfigShape),
+              ),
+        ),
+        textButtonTheme: TextButtonThemeData(
+          style: (baseTheme.textButtonTheme.style ?? const ButtonStyle())
+              .copyWith(
+                shape: const WidgetStatePropertyAll(_fiscalConfigShape),
+                side: const WidgetStatePropertyAll(BorderSide(color: AppColors.border)),
+              ),
+        ),
+      ),
+      child: Scaffold(
+        // Sin barra propia: el shell ya muestra el título y el botón de volver.
+        backgroundColor: Colors.transparent,
+        body: RefreshIndicator(
+          onRefresh: () async {
+            ref.invalidate(ecfCapabilitiesProvider);
+            ref.invalidate(ecfSequencesProvider);
+            ref.invalidate(ecfEligibleOriginalsProvider);
+            await ref.read(ecfCapabilitiesProvider.future);
+          },
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 940),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final contentWidth = (constraints.maxWidth - 24).clamp(
+                    0.0,
+                    double.infinity,
+                  );
+                  final panelWidth = contentWidth >= 740
+                      ? (contentWidth - 12) / 2
+                      : contentWidth;
+                  return ListView(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
                     children: [
-                      Text(
-                        'Estado del módulo',
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(height: 2),
-                      const _Muted(
-                        'Información técnica de la facturación electrónica de '
-                        'esta empresa. La activación se hace en Menú → Empresa.',
-                      ),
-                      const SizedBox(height: 12),
-                      capabilities.when(
-                        data: (data) => _CapabilitiesLine(capabilities: data),
-                        loading: () => const _Muted('Cargando…'),
-                        error: (error, _) => const _Muted(
-                          'No se pudo consultar el estado del módulo.',
-                        ),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        children:
+                            <Widget>[
+                                  _Panel(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Estado del módulo',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .titleMedium
+                                              ?.copyWith(
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        const _Muted(
+                                          'Estado y opciones fiscales de tu empresa.',
+                                        ),
+                                        const SizedBox(height: 12),
+                                        capabilities.when(
+                                          data: (data) => _CapabilitiesLine(
+                                            capabilities: data,
+                                          ),
+                                          loading: () =>
+                                              const _Muted('Cargando…'),
+                                          error: (error, _) => const _Muted(
+                                            'No se pudo consultar el estado del módulo.',
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  if (caps?.canActivateProduction == true)
+                                    const EcfProductionActivationAction(),
+                                  if (caps != null &&
+                                      caps.enabled &&
+                                      hasUserPermission(
+                                        user,
+                                        AppPermission.manageEcfSequences,
+                                      )) ...[
+                                    EcfSequenceRangeSection(
+                                      key: ValueKey(
+                                        'ecf-config-numbering-${user?.companyId}-${user?.id}-${caps.environment}',
+                                      ),
+                                      canManage: true,
+                                      stackedSummary: true,
+                                    ),
+                                  ],
+                                  if (caps != null &&
+                                      caps.documentTypes.isNotEmpty) ...[
+                                    _Panel(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          const _SectionTitle(
+                                            'Tipos de comprobante',
+                                          ),
+                                          const SizedBox(height: 2),
+                                          const _Muted(
+                                            'E31, E32 y E34 consumen el rango de numeración que la '
+                                            'DGII autorizó a la empresa.',
+                                          ),
+                                          const SizedBox(height: 8),
+                                          for (final type in caps.documentTypes)
+                                            _DocumentTypeRow(type: type),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                  // Solo tiene sentido cuando la empresa YA factura
+                                  // electrónicamente: sin e-CF no hay comprobante del que
+                                  // prescindir.
+                                  if (caps != null && caps.enabled) ...[
+                                    _Panel(
+                                      child: EcfSalesWithoutDocumentSection(
+                                        embedded: true,
+                                        capabilities: caps,
+                                        canManage: hasUserPermission(
+                                          ref.watch(authStateProvider).user,
+                                          AppPermission.manageEcfConfig,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                  if (sequenceItems.isNotEmpty) ...[
+                                    _Panel(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          const _SectionTitle(
+                                            'Rangos de numeración',
+                                          ),
+                                          const SizedBox(height: 2),
+                                          const _Muted(
+                                            'Un número consumido no se reutiliza, ni siquiera si '
+                                            'el comprobante se anula o falla la emisión.',
+                                          ),
+                                          const SizedBox(height: 8),
+                                          for (final sequence in sequenceItems)
+                                            _SequenceRow(sequence: sequence),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                  if (originalItems.isNotEmpty) ...[
+                                    _Panel(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          const _SectionTitle(
+                                            'Facturas originales para nota de crédito (E34)',
+                                          ),
+                                          const SizedBox(height: 2),
+                                          const _Muted(
+                                            'Solo aparecen facturas fiscalmente aceptadas con '
+                                            'saldo disponible.',
+                                          ),
+                                          const SizedBox(height: 8),
+                                          for (final original in originalItems)
+                                            _OriginalRow(original: original),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ]
+                                .asMap()
+                                .entries
+                                .map(
+                                  (entry) => SizedBox(
+                                    width: entry.key == 0
+                                        ? contentWidth
+                                        : panelWidth,
+                                    child: entry.value,
+                                  ),
+                                )
+                                .toList(),
                       ),
                     ],
-                  ),
-                ),
-                const EcfProductionActivationAction(),
-                if (caps != null &&
-                    caps.enabled &&
-                    hasUserPermission(user, AppPermission.manageEcfSequences)) ...[
-                  const SizedBox(height: 10),
-                  EcfSequenceRangeSection(
-                    key: ValueKey(
-                      'ecf-config-numbering-${user?.companyId}-${user?.id}-${caps.environment}',
-                    ),
-                    canManage: true,
-                  ),
-                ],
-                if (caps != null) ...[
-                  const SizedBox(height: 10),
-                  _Panel(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const _SectionTitle('Tipos de comprobante'),
-                        const SizedBox(height: 2),
-                        const _Muted(
-                          'E31, E32 y E34 consumen el rango de numeración que la '
-                          'DGII autorizó a la empresa.',
-                        ),
-                        const SizedBox(height: 8),
-                        for (final type in caps.documentTypes)
-                          _DocumentTypeRow(type: type),
-                      ],
-                    ),
-                  ),
-                ],
-                // Solo tiene sentido cuando la empresa YA factura
-                // electrónicamente: sin e-CF no hay comprobante del que
-                // prescindir.
-                if (caps != null && caps.enabled) ...[
-                  const SizedBox(height: 10),
-                  EcfSalesWithoutDocumentSection(
-                    capabilities: caps,
-                    canManage: hasUserPermission(
-                      ref.watch(authStateProvider).user,
-                      AppPermission.manageEcfConfig,
-                    ),
-                  ),
-                ],
-                if (sequenceItems.isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  _Panel(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const _SectionTitle('Rangos de numeración'),
-                        const SizedBox(height: 2),
-                        const _Muted(
-                          'Un número consumido no se reutiliza, ni siquiera si '
-                          'el comprobante se anula o falla la emisión.',
-                        ),
-                        const SizedBox(height: 8),
-                        for (final sequence in sequenceItems)
-                          _SequenceRow(sequence: sequence),
-                      ],
-                    ),
-                  ),
-                ],
-                if (originalItems.isNotEmpty) ...[
-                  const SizedBox(height: 10),
-                  _Panel(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const _SectionTitle(
-                          'Facturas originales para nota de crédito (E34)',
-                        ),
-                        const SizedBox(height: 2),
-                        const _Muted(
-                          'Solo aparecen facturas fiscalmente aceptadas con '
-                          'saldo disponible.',
-                        ),
-                        const SizedBox(height: 8),
-                        for (final original in originalItems)
-                          _OriginalRow(original: original),
-                      ],
-                    ),
-                  ),
-                ],
-              ],
+                  );
+                },
+              ),
             ),
           ),
         ),
@@ -328,10 +404,10 @@ class _Panel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(6),
         border: Border.all(color: const Color(0xFFDDE7EE)),
       ),
       child: child,
@@ -526,98 +602,106 @@ class _EcfSalesWithoutDocumentSectionState
     final showsWarning = enabled && warning.isNotEmpty;
 
     final content = Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const _SectionTitle('Vender sin comprobante'),
-                    if (!widget.embedded && !showsWarning) ...[
-                      const SizedBox(height: 2),
-                      const _Muted(
-                        'Actívala cuando necesites cerrar ventas sin '
-                        'comprobante electrónico. Cada venta queda identificada '
-                        'con el usuario y el motivo.',
-                      ),
-                    ],
-                  ],
-                ),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: widget.embedded
+              ? CrossAxisAlignment.center
+              : CrossAxisAlignment.start,
+          children: [
+            if (widget.embedded) ...[
+              CompactSquareSwitch(
+                value: enabled,
+                onChanged: canManage && !_saving ? _toggle : null,
+                label: 'Vender sin comprobante',
               ),
-              if (_saving)
-                const Padding(
-                  padding: EdgeInsets.only(top: 4, left: 8),
-                  child: SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                )
-              else
-                Switch(value: enabled, onChanged: canManage ? _toggle : null),
+              const SizedBox(width: 4),
             ],
-          ),
-          if (!widget.embedded && enabled && warning.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-              ),
-              child: Row(
+            Expanded(
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(
-                    Icons.info_outline_rounded,
-                    size: 16,
-                    color: Color(0xFF64748B),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      warning,
-                      style: const TextStyle(
-                        fontSize: 11.5,
-                        height: 1.45,
-                        color: Color(0xFF475569),
-                      ),
+                  const _SectionTitle('Vender sin comprobante'),
+                  if (!widget.embedded && !showsWarning) ...[
+                    const SizedBox(height: 2),
+                    const _Muted(
+                      'Actívala cuando necesites cerrar ventas sin '
+                      'comprobante electrónico. Cada venta queda identificada '
+                      'con el usuario y el motivo.',
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),
+            if (!widget.embedded && _saving)
+              const Padding(
+                padding: EdgeInsets.only(top: 4, left: 8),
+                child: SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              )
+            else if (!widget.embedded)
+              Switch(value: enabled, onChanged: canManage ? _toggle : null),
           ],
-          if (_error != null) ...[
-            const SizedBox(height: 8),
-            Text(
-              _error!,
-              style: const TextStyle(fontSize: 11.5, color: AppColors.error),
+        ),
+        if (!widget.embedded && enabled && warning.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
             ),
-          ],
-          if (!canManage) ...[
-            const SizedBox(height: 8),
-            const _Muted(
-              'Solo un administrador con permiso de configuración e-CF puede '
-              'cambiar esta opción.',
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(
+                  Icons.info_outline_rounded,
+                  size: 16,
+                  color: Color(0xFF64748B),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    warning,
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      height: 1.45,
+                      color: Color(0xFF475569),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ],
-      );
+        if (_error != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            _error!,
+            style: const TextStyle(fontSize: 11.5, color: AppColors.error),
+          ),
+        ],
+        if (!canManage) ...[
+          const SizedBox(height: 8),
+          const _Muted(
+            'Solo un administrador con permiso de configuración e-CF puede '
+            'cambiar esta opción.',
+          ),
+        ],
+      ],
+    );
 
     if (widget.nested) {
       return Container(
         margin: const EdgeInsets.only(left: 10),
         padding: const EdgeInsets.only(left: 12),
         decoration: const BoxDecoration(
-          border: Border(
-            left: BorderSide(color: Color(0xFFE2E8F0), width: 2),
-          ),
+          border: Border(left: BorderSide(color: Color(0xFFE2E8F0), width: 2)),
         ),
         child: content,
       );

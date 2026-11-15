@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
@@ -219,6 +220,9 @@ class PrinterSettingsRepository {
   }
 
   Future<PrinterSettingsModel> getOrCreate() async {
+    // Browser printing uses the system dialog and has no native SQLite store.
+    // Do not inherit unscoped legacy receipt identity from another company.
+    if (kIsWeb) return const PrinterSettingsModel();
     final current = await getSettings();
     if (current != null) return current;
     final now = DateTime.now().millisecondsSinceEpoch;

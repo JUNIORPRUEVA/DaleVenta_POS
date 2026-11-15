@@ -174,8 +174,9 @@ void main() {
     _Repo repo, {
     String role = 'ADMIN',
     double width = 1280,
+    double height = 1100,
   }) async {
-    tester.view.physicalSize = Size(width, 1100);
+    tester.view.physicalSize = Size(width, height);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     late _Auth auth;
@@ -217,6 +218,25 @@ void main() {
     await tester.tap(check);
     await tester.pump();
   }
+
+  testWidgets(
+    'configuración compacta conserva controles visibles y botones rectangulares',
+    (tester) async {
+      await pump(tester, _Repo(environment: 'PRODUCTION'), height: 640);
+      expect(find.text('Estado del módulo').hitTestable(), findsOneWidget);
+      expect(find.text('Rangos de numeración').hitTestable(), findsOneWidget);
+      expect(find.text('Vender sin comprobante').hitTestable(), findsOneWidget);
+      expect(find.text('Tipos de comprobante'), findsNothing);
+      final declare = find.byKey(const ValueKey('ecf_dgii_declare_another'));
+      expect(declare.hitTestable(), findsOneWidget);
+      final theme = Theme.of(tester.element(declare));
+      final shape =
+          theme.textButtonTheme.style!.shape!.resolve({})
+              as RoundedRectangleBorder;
+      expect(shape.borderRadius, BorderRadius.circular(6));
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   for (final environment in ['SANDBOX', 'PRODUCTION']) {
     testWidgets(

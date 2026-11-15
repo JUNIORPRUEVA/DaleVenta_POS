@@ -192,14 +192,23 @@ export class EcfPortalEnrollmentService {
     });
     if (!company) return { ok: false, blockedReason: "COMPANY_NOT_FOUND" };
 
-    const current = await this.prisma.ecfPortalEnrollment.findFirst({
-      where: { companyId, status: ECF_PORTAL_ENROLLMENT_STATUS.ACTIVE },
-      select: { id: true },
-    });
-    if (current) return { ok: true, id: current.id, created: false };
-
-    try {
-      const created = await this.prisma.ecfPortalEnrollment.create({
+    return this.prisma.$transaction(async tx => {
+      // Serialize grants for this tenant. Automatic enrollment must recheck
+      // administrative history inside the write, not only in the UI/read path.
+      await tx.$queryRaw`SELECT id FROM companies WHERE id = ${companyId}::uuid FOR UPDATE`;
+      if (input.source === "AUTO_ELIGIBLE") {
+        const latest = await tx.ecfPortalEnrollment.findFirst({ where: { companyId },
+          orderBy: { createdAt: "desc" } });
+        if (latest) {
+          const decision = decidePortalEligibility({ enrollment: latest, legacyEligible: false, now: new Date() });
+          if (!decision.eligible) return { ok: false as const, blockedReason: decision.reason };
+        }
+      }
+      const current = await tx.ecfPortalEnrollment.findFirst({
+        where: { companyId, status: ECF_PORTAL_ENROLLMENT_STATUS.ACTIVE }, select: { id: true },
+      });
+      if (current) return { ok: true as const, id: current.id, created: false };
+      const created = await tx.ecfPortalEnrollment.create({
         data: {
           companyId,
           source: input.source,
@@ -211,16 +220,8 @@ export class EcfPortalEnrollmentService {
         },
         select: { id: true },
       });
-      return { ok: true, id: created.id, created: true };
-    } catch {
-      // Carrera contra otra concesión simultánea: el índice único parcial ganó.
-      const existing = await this.prisma.ecfPortalEnrollment.findFirst({
-        where: { companyId, status: ECF_PORTAL_ENROLLMENT_STATUS.ACTIVE },
-        select: { id: true },
-      });
-      if (existing) return { ok: true, id: existing.id, created: false };
-      throw new Error("PORTAL_ENROLLMENT_GRANT_FAILED");
-    }
+      return { ok: true as const, id: created.id, created: true };
+    });
   }
 
   /** Revoca la autorización vigente. No borra: deja historial. */
@@ -271,12 +272,10 @@ export class EcfPortalEnrollmentService {
   /**
    * Inscripción automática de una empresa que cumple la regla.
    *
-   * Condiciones, todas verificables en la base: e-CF habilitado, identidad
-   * fiscal registrada y una postulación ya iniciada por nuestro backend. No se
-   * inscribe a quien solo tiene una cuenta.
+   * Condiciones: e-CF habilitado e identidad fiscal registrada. No se inscribe
+   * a quien solo tiene una cuenta ni se sustituye una revocación/caducidad.
    *
-   * Solo se ejecuta si `ECF_PORTAL_AUTO_ENROLL_ENABLED=true`; por defecto está
-   * apagada y el sistema falla cerrado.
+   * Habilitada por defecto; la bandera permite detener nuevas inscripciones.
    *
    * Nunca lanza: un fallo aquí no puede romper el flujo que la invoca.
    */
@@ -287,10 +286,9 @@ export class EcfPortalEnrollmentService {
 
     try {
       const existing = await this.prisma.ecfPortalEnrollment.findFirst({
-        where: { companyId: id, status: ECF_PORTAL_ENROLLMENT_STATUS.ACTIVE },
-        select: { id: true },
+        where: { companyId: id }, orderBy: { createdAt: "desc" },
       });
-      if (existing) return true;
+      if (existing) return decidePortalEligibility({ enrollment: existing, legacyEligible: false, now: new Date() }).eligible;
 
       const eligible = await this.meetsAutoEnrollmentRule(id);
       if (!eligible) return false;
@@ -299,7 +297,7 @@ export class EcfPortalEnrollmentService {
         companyId: id,
         source: "AUTO_ELIGIBLE",
         reason:
-          "Inscripción automática: e-CF habilitado, identidad fiscal registrada y postulación iniciada.",
+          "Inscripción automática: e-CF habilitado e identidad fiscal registrada.",
         actorUserId: null,
       });
       return granted.ok;

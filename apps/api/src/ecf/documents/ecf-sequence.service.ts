@@ -61,8 +61,14 @@ export class EcfSequenceService {
     documentType: EcfSequenceDocumentType,
     range: { startNumber: number; endNumber: number },
     environment: EcfEnvironment,
+    tx?: Tx,
   ) {
-    const authorization = await new EcfDgiiAuthorizedSequencesService(
+    if (tx) {
+      await tx.$queryRaw`SELECT id FROM ecf_dgii_authorized_sequences WHERE company_id = ${companyId}::uuid AND document_type = ${documentType} AND environment = ${environment}::ecf_environment FOR SHARE`;
+    }
+    const authorization = tx ? await tx.ecfDgiiAuthorizedSequence.findUnique({
+      where: { companyId_documentType: { companyId, documentType, environment } },
+    }) : await new EcfDgiiAuthorizedSequencesService(
       this.prisma,
     ).findFor(companyId, documentType, environment);
     const check = checkDeclaredRangeWithinAuthorization(range, authorization);
@@ -82,7 +88,9 @@ export class EcfSequenceService {
     documentType: EcfSequenceDocumentType,
     number: number,
     environment: EcfEnvironment,
+    expectedSequenceExpiry?: string,
   ) {
+    await tx.$queryRaw`SELECT id FROM ecf_dgii_authorized_sequences WHERE company_id = ${companyId}::uuid AND document_type = ${documentType} AND environment = ${environment}::ecf_environment FOR SHARE`;
     const authorization = await tx.ecfDgiiAuthorizedSequence.findUnique({
       where: { companyId_documentType: { companyId, documentType, environment } },
     });
@@ -101,6 +109,9 @@ export class EcfSequenceService {
     if (!check.ok) {
       throw new ConflictException(`${check.code}: ${check.message}`);
     }
+    if (expectedSequenceExpiry && authorization?.expiresAt?.toISOString().slice(0, 10) !== expectedSequenceExpiry) {
+      throw new ConflictException("ECF_SEQUENCE_EXPIRY_MISMATCH");
+    }
   }
 
   private assertRange(input: { startNumber: number; endNumber: number }) {
@@ -115,6 +126,37 @@ export class EcfSequenceService {
     const parsed = value instanceof Date ? value : new Date(value);
     if (Number.isNaN(parsed.getTime())) throw new BadRequestException("ECF_SEQUENCE_VALID_UNTIL_INVALID");
     return parsed;
+  }
+
+  /** The declared company/environment authorization owns the E31 expiry.
+   * Reading legacy ranges never rewrites them or resets their consumed frontier.
+   */
+  async e31Expiry(user: TenantUser, tx?: Tx): Promise<Date> {
+    const companyId = requireTenant(user);
+    const db = tx ?? this.prisma;
+    const environment = await numberingEnvironment(db, companyId);
+    if (tx) {
+      await tx.$queryRaw`SELECT id FROM ecf_dgii_authorized_sequences WHERE company_id = ${companyId}::uuid AND document_type = 'E31' AND environment = ${environment}::ecf_environment FOR SHARE`;
+    }
+    const authorization = await db.ecfDgiiAuthorizedSequence.findUnique({
+      where: { companyId_documentType: { companyId, documentType: "E31", environment } },
+    });
+    if (!authorization?.expiresAt) throw new ConflictException({ code: "ECF_E31_EXPIRY_REQUIRED",
+      message: "Registra el vencimiento de la autorización E31 de esta empresa antes de facturar." });
+    if (authorization.expiresAt.getTime() <= Date.now()) throw new ConflictException({ code: "ECF_DGII_SEQUENCE_EXPIRED",
+      message: "La autorización E31 está vencida. Registra la autorización vigente de la DGII." });
+    return authorization.expiresAt;
+  }
+
+  private async rangeExpiry(user: TenantUser, type: EcfSequenceDocumentType, value: Date | string | null | undefined, tx: Tx) {
+    const requested = this.parseValidUntil(value);
+    if (type !== "E31") return requested;
+    const declared = await this.e31Expiry(user, tx);
+    if (requested && requested.toISOString().slice(0, 10) !== declared.toISOString().slice(0, 10)) {
+      throw new ConflictException({ code: "ECF_SEQUENCE_EXPIRY_MISMATCH",
+        message: "El vencimiento E31 debe coincidir con la autorización registrada de esta empresa." });
+    }
+    return declared;
   }
 
   /** Legacy TEST allocations retain their original ledger/environment. Their
@@ -165,9 +207,10 @@ export class EcfSequenceService {
     if (input.expectedEnvironment && input.expectedEnvironment !== environment) throw new ConflictException("ECF_NUMBERING_ENVIRONMENT_CHANGED");
     this.assertRange(input);
     await this.assertWithinAuthorization(companyId, documentType, input, environment);
-    const validUntil = this.parseValidUntil(input.validUntil);
     return this.prisma.$transaction(async (tx) => {
       await lockNumberingEnvironment(tx, companyId, environment);
+      await this.assertWithinAuthorization(companyId, documentType, input, environment, tx);
+      const validUntil = await this.rangeExpiry(user, documentType, input.validUntil, tx);
       await this.assertLegacyTestFrontier(tx, companyId, documentType, input.startNumber, environment);
       const existing = await tx.ecfSequence.findFirst({ where: { companyId, environment, documentType, active: true } });
       if (existing) throw new ConflictException("ECF_SEQUENCE_ALREADY_EXISTS");
@@ -189,9 +232,10 @@ export class EcfSequenceService {
     if (input.expectedEnvironment && input.expectedEnvironment !== environment) throw new ConflictException("ECF_NUMBERING_ENVIRONMENT_CHANGED");
     this.assertRange(input);
     await this.assertWithinAuthorization(companyId, documentType, input, environment);
-    const validUntil = this.parseValidUntil(input.validUntil);
     return this.prisma.$transaction(async (tx) => {
       await lockNumberingEnvironment(tx, companyId, environment);
+      await this.assertWithinAuthorization(companyId, documentType, input, environment, tx);
+      const validUntil = await this.rangeExpiry(user, documentType, input.validUntil, tx);
       await this.assertLegacyTestFrontier(tx, companyId, documentType, input.startNumber, environment);
       await tx.$queryRaw`SELECT id FROM ecf_sequences WHERE company_id = ${companyId}::uuid AND document_type = ${documentType} AND environment = ${environment}::ecf_environment FOR UPDATE`;
       const current = await tx.ecfSequence.findFirst({ where: { companyId, environment, documentType, active: true } });
@@ -213,7 +257,7 @@ export class EcfSequenceService {
    * carries a unique (company, operation_key) index, so a retry re-reads the e-NCF
    * it already consumed instead of burning a second number.
    */
-  async allocate(user: TenantUser, documentType: string, options: { documentId?: string; operationKey?: string; tx?: Tx; environment?: EcfEnvironment } = {}) {
+  async allocate(user: TenantUser, documentType: string, options: { documentId?: string; operationKey?: string; tx?: Tx; environment?: EcfEnvironment; expectedSequenceExpiry?: string } = {}) {
     const companyId = requireTenant(user);
     if (options.environment && options.environment !== await numberingEnvironment(options.tx ?? this.prisma, companyId)) {
       throw new ConflictException("ECF_NUMBERING_ENVIRONMENT_CHANGED");
@@ -223,7 +267,8 @@ export class EcfSequenceService {
       if (recorded) return recorded;
     }
     const run = (tx: Tx) => this.allocateIn(tx, { companyId, userId: user.id, documentType,
-      documentId: options.documentId, operationKey: options.operationKey, environment: options.environment });
+      documentId: options.documentId, operationKey: options.operationKey, environment: options.environment,
+      expectedSequenceExpiry: options.expectedSequenceExpiry });
     return options.tx ? run(options.tx) : this.prisma.$transaction(run);
   }
 
@@ -238,7 +283,7 @@ export class EcfSequenceService {
 
   /** Transaction-aware variant, for callers that must allocate inside their own unit of work. */
   async allocateIn(tx: Tx, params: { companyId: string; userId: string; documentType: string;
-    documentId?: string; operationKey?: string; environment?: EcfEnvironment }) {
+    documentId?: string; operationKey?: string; environment?: EcfEnvironment; expectedSequenceExpiry?: string }) {
     const type = this.assertType(params.documentType);
     const environment = await numberingEnvironment(tx, params.companyId);
     await lockNumberingEnvironment(tx, params.companyId, environment);
@@ -270,6 +315,7 @@ export class EcfSequenceService {
       type,
       sequence.next_number,
       environment,
+      params.expectedSequenceExpiry,
     );
     // Consumed permanently: the increment is the only mutation, and it is inside
     // the locked transaction, so two concurrent allocations can never collide.

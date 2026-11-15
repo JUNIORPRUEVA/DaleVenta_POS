@@ -29,10 +29,12 @@ import 'ecf_flow_kit.dart';
 /// * **Se oculta sola** cuando ya hay numeración usable y declarada: no se pide
 ///   dos veces el mismo dato, pero queda un resumen legible de lo declarado.
 class EcfSequenceRangeSection extends ConsumerStatefulWidget {
-  const EcfSequenceRangeSection({super.key, required this.canManage});
+  const EcfSequenceRangeSection({super.key, required this.canManage, this.embedded = false, this.stackedSummary = false});
 
   /// Mismo permiso que exige el backend (`manageEcfSequences`).
   final bool canManage;
+  final bool embedded;
+  final bool stackedSummary;
 
   @override
   ConsumerState<EcfSequenceRangeSection> createState() =>
@@ -184,6 +186,7 @@ class _EcfSequenceRangeSectionState
           documentType: type,
           startNumber: start,
           endNumber: authorization.rangeTo,
+          validUntil: authorization.expiresAt?.toUtc().toIso8601String(),
         );
       } else {
         await repository.registerSequence(
@@ -191,6 +194,7 @@ class _EcfSequenceRangeSectionState
           documentType: type,
           startNumber: start,
           endNumber: authorization.rangeTo,
+          validUntil: authorization.expiresAt?.toUtc().toIso8601String(),
         );
       }
       if (!mounted) return;
@@ -276,6 +280,11 @@ class _EcfSequenceRangeSectionState
       setState(() => _error = 'Debes aceptar la declaración para guardar.');
       return;
     }
+    final expiry = _normalizeExpiry(_expires.text);
+    if (type == 'E31' && expiry == null) {
+      setState(() => _error = 'Registra el vencimiento E31 que aparece en tu autorización.');
+      return;
+    }
 
     setState(() {
       _saving = true;
@@ -292,7 +301,7 @@ class _EcfSequenceRangeSectionState
         rangeFrom: from,
         rangeTo: to,
         approvedQuantity: approved,
-        expiresAt: _normalizeExpiry(_expires.text),
+        expiresAt: expiry,
         declarationAccepted: true,
       );
       if (!mounted || _authorized.environment != environment) return;
@@ -306,6 +315,7 @@ class _EcfSequenceRangeSectionState
           documentType: type,
           startNumber: from,
           endNumber: to,
+          validUntil: expiry,
         );
       } else {
         await repository.registerSequence(
@@ -313,6 +323,7 @@ class _EcfSequenceRangeSectionState
           documentType: type,
           startNumber: _rangeStart(type, from),
           endNumber: to,
+          validUntil: expiry,
         );
       }
       if (!mounted || _authorized.environment != environment) return;
@@ -367,6 +378,13 @@ class _EcfSequenceRangeSectionState
   String _describeError(Object error) {
     final text = error.toString();
     final backendMessage = _messageAfterCode(text);
+    if (text.contains('ECF_E31_EXPIRY_REQUIRED')) {
+      return 'Registra el vencimiento E31 que aparece en tu autorización.';
+    }
+    if (text.contains('ECF_SEQUENCE_EXPIRY_MISMATCH') ||
+        text.contains('ECF_SEQUENCE_EXPIRY_INVALID')) {
+      return backendMessage ?? 'Revisa el vencimiento de la autorización de esta empresa.';
+    }
     if (text.contains('ECF_DGII_SEQUENCE_QUANTITY_MISMATCH')) {
       return backendMessage ?? _quantityError;
     }
@@ -427,6 +445,8 @@ class _EcfSequenceRangeSectionState
     // tipo que quizá no use. Declarar otro tipo es una acción explícita.
     if (declared.isNotEmpty && !_showAnotherType) {
       return EcfSection(
+        embedded: widget.embedded,
+        padding: widget.embedded ? EdgeInsets.zero : const EdgeInsets.fromLTRB(16, 14, 16, 16),
         title: _authorized.environment == 'SANDBOX'
             ? 'Numeración de pruebas (TEST)'
             : 'Numeración autorizada por la DGII',
@@ -470,6 +490,8 @@ class _EcfSequenceRangeSectionState
     }
 
     return EcfSection(
+      embedded: widget.embedded,
+      padding: widget.embedded ? EdgeInsets.zero : const EdgeInsets.fromLTRB(16, 14, 16, 16),
       title: _authorized.environment == 'SANDBOX'
           ? 'Numeración de pruebas (TEST)'
           : 'Numeración autorizada por la DGII',
@@ -525,9 +547,9 @@ class _EcfSequenceRangeSectionState
                 const SizedBox(width: 10),
                 Expanded(
                   child: _textField(
-                    'Vence',
+                    _selectedType == 'E31' ? 'Vence (obligatorio)' : 'Vence',
                     _expires,
-                    '31/12/2027',
+                    'DD/MM/AAAA',
                     'ecf_dgii_expires',
                   ),
                 ),
@@ -536,7 +558,11 @@ class _EcfSequenceRangeSectionState
             const SizedBox(height: 8),
             Text(
               _authorized.environment == 'SANDBOX'
-                  ? 'Escribe solo los números: el prefijo lo agrega el sistema. Usa el vencimiento confirmado para TEST; si no aplica, deja «Vence» vacío.'
+                  ? (_selectedType == 'E31'
+                      ? 'Usa el rango y el vencimiento E31 confirmados para TEST. La fecha se usará automáticamente al facturar.'
+                      : 'Escribe solo los números: el prefijo lo agrega el sistema. Usa el vencimiento confirmado para TEST; si no aplica, deja «Vence» vacío.')
+                  : _selectedType == 'E31'
+                  ? 'La fecha de tu autorización E31 se usará automáticamente al facturar.'
                   : 'Escribe solo los números: el prefijo lo agrega el sistema. Si la DGII muestra «N/A», deja «Vence» vacío.',
               style: const TextStyle(
                 fontSize: 11.5,
@@ -578,6 +604,14 @@ class _EcfSequenceRangeSectionState
           initialValue: _selectedType,
           isDense: true,
           decoration: _decoration(null),
+          selectedItemBuilder: (context) => [
+            for (final type in _authorized.supportedTypes)
+              Text(
+                '$type · ${_typeLabel(type).replaceFirst(' ($type)', '')}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+          ],
           items: [
             for (final type in _authorized.supportedTypes)
               DropdownMenuItem(
@@ -655,6 +689,17 @@ class _EcfSequenceRangeSectionState
     final expiry = item.expiresAt == null
         ? 'Sin vencimiento'
         : 'Vence ${_formatDate(item.expiresAt!)}';
+    if (widget.stackedSummary) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(_typeLabel(item.documentType), style: Theme.of(context).textTheme.bodyMedium),
+          const SizedBox(height: 4),
+          Text('$range · $expiry · aut. ${item.authorizationNumber}',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
+        ]),
+      );
+    }
     return EcfSummaryRow(
       label: _typeLabel(item.documentType),
       value: '$range · $expiry · aut. ${item.authorizationNumber}',

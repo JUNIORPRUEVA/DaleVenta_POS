@@ -104,7 +104,7 @@ local("reviewed legacy TEST classification, isolated PostgreSQL", () => {
     const user = { id: randomUUID(), companyId, role: "ADMIN" };
     await db.ecfDgiiAuthorizedSequence.create({ data: { companyId, environment: "SANDBOX", documentType: "E31",
       authorizationNumber: "Synthetic reviewed TEST", rangeFrom: 1, rangeTo: 1000, approvedQuantity: 1000,
-      declarationVersion: "synthetic-local" } });
+      declarationVersion: "synthetic-local", expiresAt: new Date("2035-12-31T23:59:59.999Z") } });
     const input = { documentType: "E31", startNumber: 1, endNumber: 1000 };
     await expect(service.register(user, input)).rejects.toThrow("ECF_SEQUENCE_LEGACY_TEST_REVIEW_REQUIRED");
     // A legacy range may predate the review; create that fixture without ever

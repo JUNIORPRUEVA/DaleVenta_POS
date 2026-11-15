@@ -20,6 +20,7 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:daleventa_pos/core/widgets/compact_square_switch.dart';
 import 'package:daleventa_pos/core/auth/auth_provider.dart';
 import 'package:daleventa_pos/core/company/company_settings_feedback.dart';
 import 'package:daleventa_pos/core/company/company_settings_model.dart';
@@ -43,6 +44,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../support/feedback_finders.dart';
 
 const _outDir = '../../docs/settings-notifications-visual-evidence';
 
@@ -292,7 +294,7 @@ Finder _companySettingSwitch(String title) =>
     find.byKey(ValueKey('company_setting_switch_$title'));
 
 bool _companySettingSwitchValue(WidgetTester tester, String title) =>
-    tester.widget<Switch>(_companySettingSwitch(title)).value;
+    tester.widget<CompactSquareSwitch>(_companySettingSwitch(title)).value;
 
 // ---- Tests ------------------------------------------------------------------
 
@@ -385,7 +387,7 @@ void main() {
           );
 
           // X close affordance is present and reachable.
-          expect(find.byTooltip('Cerrar notificación'), findsOneWidget);
+          expect(closeFeedbackButton(), findsOneWidget);
 
           // No overflow/clipping of the card at this width.
           expect(tester.takeException(), isNull);
@@ -397,7 +399,7 @@ void main() {
           expect(card, findsOneWidget);
 
           // X dismisses it.
-          await tester.tap(find.byTooltip('Cerrar notificación'));
+          await tester.tap(closeFeedbackButton());
           await tester.pump();
           expect(card, findsNothing);
           expect(tester.takeException(), isNull);
@@ -495,14 +497,14 @@ void main() {
           find.byKey(const ValueKey('persistent_feedback_card')),
           findsOneWidget,
         );
-        expect(find.byTooltip('Cerrar notificación'), findsOneWidget);
+        expect(closeFeedbackButton(), findsOneWidget);
         expect(tester.takeException(), isNull);
 
         // Capture with the card visible over the narrow real screen.
         await _shot(tester, 'settings-screen-units-rejected-mobile');
 
         // X is reachable on a narrow screen and closes the card.
-        await tester.tap(find.byTooltip('Cerrar notificación'));
+        await tester.tap(closeFeedbackButton());
         await tester.pump();
         expect(
           find.byKey(const ValueKey('persistent_feedback_card')),

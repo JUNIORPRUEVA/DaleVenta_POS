@@ -20,6 +20,9 @@ FullPOS Cloud contains the operational apps and a public static website:
   The old questionnaire is retired from routing (`/onboarding` redirects to
   `/home`). Legacy status fields remain for old clients; the new progress is
   derived from activation data, not from an invented completion flag.
+  Windows, Android and iOS offer a compact registration link that opens the
+  public Astro form in the external browser. The Flutter `/register` route
+  returns to login; native account creation is disabled by the shared policy.
 
 ```text
 Flutter app / PWA / Windows
@@ -40,7 +43,17 @@ Flutter app / PWA / Windows
 E31/E32 checkout persists its fiscal intent in `Sale.fiscalVoucherType` and the
 E31 sequence expiry in `ncfExpirationDate` before preparation. Preparation checks
 that type and uses the frozen expiry; a later client cannot substitute it. No
-new sale or fiscal schema is introduced. Electronic operations require a real
+new sale or fiscal schema is introduced. The E31 expiry is derived from the
+authenticated company's authorization in its current numbering environment,
+not from an arbitrary checkout date. Range registration/renewal and atomic sale
+preparation re-read that authorization under a shared row lock. Capabilities add
+the nullable `e31SequenceDueDate` projection for the POS; older clients may still
+send the matching date, and newer clients tolerate servers without this field.
+Standalone preparation pins the resolved expiry through the allocation check;
+a changed authorization is rejected before incrementing the next number.
+Fiscal providers invalidate on session/company changes so a late response from
+the previous company cannot replace the active company's numbering.
+Electronic operations require a real
 read-only `/health` preflight with offline cache and retries disabled; interrupted POSTs produce an uncertain result,
 never a new offline electronic invoice. Existing Windows durable sale attempts
 retain their request identity for reconciliation.

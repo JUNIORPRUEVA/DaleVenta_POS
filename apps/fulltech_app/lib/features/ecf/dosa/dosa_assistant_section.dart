@@ -484,7 +484,7 @@ class _DosaPrepareCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               portalOnly
-                  ? 'Abriremos el asistente oficial de DOSA con los datos de '
+                  ? 'Abriremos el asistente de postulación con los datos de '
                         'tu empresa. Allí completarás el certificado y las '
                         'credenciales. No se emite ningún comprobante.'
                   : 'Vincula esta empresa con su RNC verificado para abrir el '

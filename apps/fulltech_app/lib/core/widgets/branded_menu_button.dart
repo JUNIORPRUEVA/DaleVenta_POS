@@ -70,8 +70,13 @@ class _BrandedMenuButtonState extends State<BrandedMenuButton> {
                   children: [
                     Image.asset(
                       'assets/image/nuevologo.png',
-                      width: 36,
-                      height: 36,
+                      width: 40,
+                      height: 40,
+                      fit: BoxFit.contain,
+                      // Keep the original pixels for the renderer's mipmaps.
+                      // Decoding directly to 40px discards fine edges first.
+                      filterQuality: FilterQuality.medium,
+                      isAntiAlias: true,
                       excludeFromSemantics: true,
                     ),
                     const SizedBox(width: 8),

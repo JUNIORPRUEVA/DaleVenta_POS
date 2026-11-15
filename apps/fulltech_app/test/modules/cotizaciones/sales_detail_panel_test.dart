@@ -9,6 +9,7 @@ import 'package:daleventa_pos/modules/cotizaciones/presentation/widgets/sales_de
 import 'package:daleventa_pos/modules/cotizaciones/presentation/widgets/sales_detail_shortcut.dart';
 import 'package:daleventa_pos/modules/cotizaciones/presentation/widgets/sales_ticket_bar.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -68,6 +69,105 @@ Future<void> pumpPanel(
 }
 
 void main() {
+  for (final density in [VisualDensity.standard, VisualDensity.compact]) {
+    for (final textScale in [1.0, 1.3]) {
+      testWidgets(
+        'texto del cliente seleccionado alineado a escala $textScale con $density',
+        (tester) async {
+          tester.view.physicalSize = const Size(550, 300);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: AppTheme.light.copyWith(visualDensity: density),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(textScale)),
+                child: child!,
+              ),
+              home: Scaffold(
+                body: SalesDetailHeader(
+                  clientSelector: SalesClientSelector(
+                    name: 'Fune, srl',
+                    phone: '',
+                    hasClient: true,
+                    framed: false,
+                    search: (_) async => [],
+                    onSelected: (_) {},
+                    onClear: () {},
+                    onCreate: () {},
+                  ),
+                  fiscalLabel: 'Normal',
+                  hasNote: false,
+                  onQuote: () {},
+                  onOpenFiscalData: null,
+                  onOpenNote: () {},
+                  onPdf: () {},
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          final editable = tester
+              .state<EditableTextState>(find.byType(EditableText))
+              .renderEditable;
+          final label = tester.renderObject<RenderParagraph>(
+            find.text('Cliente'),
+          );
+          final valueY = editable
+              .localToGlobal(
+                Offset(
+                  0,
+                  editable.getDryBaseline(
+                    editable.constraints,
+                    TextBaseline.alphabetic,
+                  )!,
+                ),
+              )
+              .dy;
+          final labelY = label
+              .localToGlobal(
+                Offset(
+                  0,
+                  label.getDryBaseline(
+                    label.constraints,
+                    TextBaseline.alphabetic,
+                  )!,
+                ),
+              )
+              .dy;
+          expect(valueY, closeTo(labelY, 0.5));
+          const selection = TextSelection(baseOffset: 0, extentOffset: 1);
+          final valueBox = editable
+              .getBoxesForSelection(selection)
+              .first
+              .toRect();
+          final labelBox = label
+              .getBoxesForSelection(
+                selection,
+                boxHeightStyle: editable.selectionHeightStyle,
+              )
+              .first
+              .toRect();
+          expect(
+            editable.localToGlobal(valueBox.center).dy,
+            closeTo(label.localToGlobal(labelBox.center).dy, 0.5),
+          );
+          expect(
+            label.localToGlobal(labelBox.center).dy,
+            closeTo(
+              tester
+                  .getCenter(find.byKey(const ValueKey('sales-client-row')))
+                  .dy,
+              1,
+            ),
+          );
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
   setUpAll(() async {
     final font = FontLoader('Manrope');
     for (final weight in ['Regular', 'Medium', 'SemiBold', 'Bold']) {
@@ -106,6 +206,43 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('e-CF y lista de precios quedan alineados antes del cliente', (
+    tester,
+  ) async {
+    await pumpPanel(tester, const Size(1280, 800));
+    await tester.tap(find.text('Probar e-CF'));
+    await tester.pumpAndSettle();
+    final fiscal = tester.getRect(find.text('Comprobante'));
+    final prices = tester.getRect(find.text('Lista de precios'));
+    final client = tester.getRect(find.text('Cliente'));
+    expect(fiscal.top, prices.top);
+    expect(fiscal.left, lessThan(prices.left));
+    expect(client.top, greaterThan(fiscal.bottom));
+    final fields = find.byType(SalesDetailField);
+    expect(fields, findsNWidgets(2));
+    expect(tester.getRect(fields.first).top, tester.getRect(fields.last).top);
+    expect(
+      tester.getRect(fields.first).bottom,
+      tester.getRect(fields.last).bottom,
+    );
+    expect(
+      tester.getSize(find.byKey(const ValueKey('sales-client-row'))).height,
+      38,
+    );
+    expect(find.text('COMPROBANTE ELECTRÓNICO'), findsNothing);
+    expect(find.text('Nuevo'), findsOneWidget);
+    await tester.tap(find.text('E32 - Consumo'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('E31 - Crédito fiscal').last);
+    await tester.pumpAndSettle();
+    expect(
+      find.text('E31 exige un cliente con RNC/Cédula y nombre.'),
+      findsOneWidget,
+    );
+    expect(find.text('Subtotal'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   for (final size in [
     const Size(1920, 1080),
     const Size(1280, 800),
@@ -120,7 +257,7 @@ void main() {
         closeTo(salesDetailPanelWidth(size.width - 56), 0.01),
       );
       expect(find.text('Cliente'), findsOneWidget);
-      expect(find.text('Mayoreo'), findsOneWidget);
+      expect(find.text('Lista de precios'), findsOneWidget);
       expect(find.text('Comprobante'), findsOneWidget);
       expect(find.byTooltip('Guardar cotización'), findsOneWidget);
       expect(find.byTooltip('Agregar nota'), findsOneWidget);
@@ -157,14 +294,14 @@ void main() {
       );
       expect(
         tester.getSize(find.byType(SalesDetailHeader)).height,
-        lessThan(150),
+        lessThan(180),
       );
       expect(
-        tester.getRect(find.text('Mayoreo')).top,
+        tester.getRect(find.text('Lista de precios')).top,
         lessThan(tester.getRect(find.text('Cliente')).top),
       );
       expect(
-        tester.getRect(find.text('Mayoreo')).top,
+        tester.getRect(find.text('Lista de precios')).top,
         tester.getRect(find.text('Comprobante')).top,
       );
       expect(tester.takeException(), isNull);
@@ -280,7 +417,7 @@ void main() {
       expect(find.text('Seleccionar cliente'), findsOneWidget);
       await tester.tap(find.text('Alternar opciones'));
       await tester.pumpAndSettle();
-      expect(find.text('Mayoreo'), findsNothing);
+      expect(find.text('Lista de precios'), findsNothing);
       expect(find.text('Comprobante'), findsNothing);
       await tester.tap(find.text('Venta vacía'));
       await tester.pumpAndSettle();
@@ -306,6 +443,14 @@ void main() {
       find.text('Distribuidora de productos y servicios del Caribe'),
     );
     await tester.pumpAndSettle();
+    final clientInput = find.descendant(
+      of: find.byType(SalesClientSelector),
+      matching: find.byType(EditableText),
+    );
+    expect(
+      tester.getCenter(clientInput).dy,
+      closeTo(tester.getCenter(find.text('Cliente')).dy, 0.5),
+    );
     expect(tester.takeException(), isNull);
   });
 }

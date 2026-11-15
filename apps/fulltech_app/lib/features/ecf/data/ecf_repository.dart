@@ -52,6 +52,10 @@ List<Map<String, dynamic>> _asList(dynamic data) {
 }
 
 final ecfRepositoryProvider = Provider<EcfRepository>((ref) {
+  // All dependent fiscal views belong to the current session/company.
+  ref.watch(authStateProvider.select(
+    (state) => (state.isAuthenticated, state.user?.id, state.user?.companyId),
+  ));
   return EcfRepository(ref.watch(dioProvider));
 });
 

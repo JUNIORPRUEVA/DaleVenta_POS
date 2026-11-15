@@ -3,11 +3,17 @@ import 'package:daleventa_pos/core/company/company_settings_model.dart';
 import 'package:daleventa_pos/core/company/company_settings_repository.dart';
 import 'package:daleventa_pos/core/models/user_model.dart';
 import 'package:daleventa_pos/core/widgets/app_drawer.dart';
+import 'package:daleventa_pos/core/widgets/app_navigation.dart';
+import 'package:daleventa_pos/core/widgets/responsive_shell.dart';
+import 'package:daleventa_pos/core/routing/routes.dart';
+import 'package:daleventa_pos/core/license/license_repository.dart';
 import 'package:daleventa_pos/modules/cash/cash_models.dart';
 import 'package:daleventa_pos/modules/cash/cash_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Los grupos del drawer siguen siendo alcanzables en pantallas pequeñas.
 /// Las opciones de «Más módulos» no deben reaparecer, ni siquiera con e-CF activo.
@@ -54,6 +60,9 @@ ProviderContainer _buildContainer() {
         ),
       ),
       cashRepositoryProvider.overrideWithValue(_SilentCashRepository()),
+      licenseStatusProvider.overrideWith(
+        (ref) async => LicenseStatusModel.fromJson({}),
+      ),
       // Activar e-CF no debe añadir módulos extra al drawer.
       companySettingsProvider.overrideWith(
         (ref) async => CompanySettings.empty().copyWith(ecfEnabled: true),
@@ -149,8 +158,11 @@ Future<void> _expectAllOptionsReachable(WidgetTester tester) async {
   );
 
   final groups = <String, List<String>>{
-    'Ventas': ['Facturación', 'Lista de ventas'],
-    'Cliente': ['Cliente', 'Cotizaciones', 'Créditos'],
+    'Ventas': [
+      'Historial de ventas',
+      'Historial de créditos',
+      'Historial de cotizaciones',
+    ],
     'Inventario': ['Productos', 'Ajuste stock', 'Categorías', 'Recuento'],
     'Compras': [
       'Nueva compra',
@@ -166,6 +178,15 @@ Future<void> _expectAllOptionsReachable(WidgetTester tester) async {
       await tester.pumpAndSettle();
     }
   }
+
+  for (final label in ['Facturar', 'Cliente']) {
+    await scrollToTop();
+    await _scrollUntilFound(tester, find.text(label));
+    _expectReachable(tester, label);
+  }
+  expect(find.text('Lista de ventas'), findsNothing);
+  expect(find.text('Cotizaciones'), findsNothing);
+  expect(find.text('Créditos'), findsNothing);
 
   for (final entry in groups.entries) {
     await scrollToTop();
@@ -202,6 +223,114 @@ Future<void> _expectAllOptionsReachable(WidgetTester tester) async {
 }
 
 void main() {
+  final histories = {
+    'Historial de ventas': Routes.ventasLista,
+    'Historial de créditos': Routes.ventasCreditos,
+    'Historial de cotizaciones': Routes.cotizacionesHistorial,
+  };
+  for (final entry in histories.entries) {
+    testWidgets('drawer agrupa ${entry.key} y conserva su ruta', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final container = _buildContainer();
+      addTearDown(container.dispose);
+      final router = GoRouter(
+        routes: [
+          GoRoute(
+            path: '/',
+            builder: (_, __) => Scaffold(
+              drawer: AppDrawer(currentUser: _adminUser()),
+              appBar: AppBar(
+                leading: Builder(
+                  builder: (context) => IconButton(
+                    icon: const Icon(Icons.menu),
+                    onPressed: () => Scaffold.of(context).openDrawer(),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          GoRoute(
+            path: entry.value,
+            builder: (_, __) => Scaffold(body: Text('Destino ${entry.value}')),
+          ),
+        ],
+      );
+      addTearDown(router.dispose);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp.router(routerConfig: router),
+        ),
+      );
+      await _openDrawer(tester);
+      expect(find.text(entry.key), findsNothing);
+      await tester.tap(find.text('Ventas'));
+      await tester.pumpAndSettle();
+      for (final title in histories.keys) {
+        expect(find.text(title), findsOneWidget);
+      }
+      await tester.ensureVisible(find.text(entry.key));
+      await tester.tap(find.text(entry.key));
+      await tester.pumpAndSettle();
+      expect(find.text('Destino ${entry.value}'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+    testWidgets('sidebar abre Ventas para ${entry.key} sin duplicados', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({});
+      tester.view.physicalSize = const Size(1280, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final container = _buildContainer();
+      addTearDown(container.dispose);
+      String? destination;
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            home: Scaffold(
+              body: Align(
+                alignment: Alignment.centerLeft,
+                child: SizedBox(
+                  width: 194,
+                  child: DesktopSidebar(
+                    collapsed: false,
+                    currentUser: _adminUser(),
+                    sections: buildAppNavigationSections(
+                      _adminUser(),
+                      multiWarehouseEnabled: false,
+                    ),
+                    currentLocation: entry.value,
+                    onToggleSidebar: () {},
+                    onNavigate: (route) => destination = route,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      for (final title in histories.keys) {
+        expect(find.text(title).hitTestable(), findsOneWidget);
+      }
+      expect(find.text('Cliente'), findsOneWidget);
+      expect(find.text('Facturar'), findsOneWidget);
+      expect(
+        tester.widget<Text>(find.text('Facturar')).style?.color,
+        isNot(Colors.white),
+      );
+      await tester.tap(find.text(entry.key));
+      await tester.pumpAndSettle();
+      expect(destination, entry.value);
+      expect(tester.takeException(), isNull);
+    });
+  }
   group('Drawer — todas las opciones alcanzables', () {
     testWidgets('teléfono pequeño 390x500', (tester) async {
       tester.view.physicalSize = const Size(390, 500);

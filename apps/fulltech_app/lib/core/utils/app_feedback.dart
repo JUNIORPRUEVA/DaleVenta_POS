@@ -14,12 +14,18 @@ class AppFeedbackNotification {
     required this.body,
     this.kind = AppFeedbackKind.info,
     this.compact = false,
+    this.paragraph = false,
+    this.actionLabel,
+    this.onAction,
   });
 
   final String title;
   final String body;
   final AppFeedbackKind kind;
   final bool compact;
+  final bool paragraph;
+  final String? actionLabel;
+  final VoidCallback? onAction;
 }
 
 class AppFeedback {
@@ -229,7 +235,7 @@ class AppFeedback {
     _persistentEntry?.remove();
     late final OverlayEntry entry;
     entry = OverlayEntry(
-      builder: (context) => _PersistentFeedbackCard(
+      builder: (context) => AppFeedbackNotice(
         notification: notification,
         onClose: () {
           if (_persistentEntry == entry) _persistentEntry = null;
@@ -342,8 +348,10 @@ class AppFeedback {
   }
 }
 
-class _PersistentFeedbackCard extends StatelessWidget {
-  const _PersistentFeedbackCard({
+/// Shared corner notice, also used by login's global incident overlay.
+class AppFeedbackNotice extends StatelessWidget {
+  const AppFeedbackNotice({
+    super.key,
     required this.notification,
     required this.onClose,
   });
@@ -361,9 +369,15 @@ class _PersistentFeedbackCard extends StatelessWidget {
     // ni AppBars, con separación segura de los bordes superior y derecho.
     final rightMargin = (isNarrow ? 12.0 : 24.0) + media.padding.right;
     final leftMargin = isNarrow ? 12.0 : 24.0;
-    final top = media.padding.top + kToolbarHeight + (isNarrow ? 8.0 : 12.0);
+    final top =
+        media.padding.top +
+        (notification.paragraph
+            ? 12.0
+            : kToolbarHeight + (isNarrow ? 8.0 : 12.0));
     final availableWidth = media.size.width - rightMargin - leftMargin;
-    final maxWidth = notification.compact ? 280.0 : 420.0;
+    final maxWidth = notification.paragraph
+        ? 360.0
+        : (notification.compact ? 280.0 : 420.0);
     final cardWidth = (isNarrow ? availableWidth : maxWidth)
         .clamp(0.0, maxWidth)
         .toDouble();
@@ -404,7 +418,38 @@ class _PersistentFeedbackCard extends StatelessWidget {
               ),
               SizedBox(width: notification.compact ? 7 : 10),
               Expanded(
-                child: notification.compact
+                child: notification.paragraph
+                    ? Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text.rich(
+                            TextSpan(
+                              children: [
+                                TextSpan(
+                                  text: '${notification.title}. ',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                TextSpan(text: notification.body),
+                              ],
+                            ),
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: AppColors.textPrimary,
+                                  height: 1.45,
+                                ),
+                          ),
+                          if (notification.actionLabel != null &&
+                              notification.onAction != null)
+                            TextButton(
+                              onPressed: notification.onAction,
+                              child: Text(notification.actionLabel!),
+                            ),
+                        ],
+                      )
+                    : notification.compact
                     ? Text(
                         '${notification.title}: ${notification.body}',
                         maxLines: 1,
@@ -436,8 +481,10 @@ class _PersistentFeedbackCard extends StatelessWidget {
                       ),
               ),
               IconButton(
-                tooltip: 'Cerrar notificación',
-                icon: const Icon(Icons.close_rounded),
+                icon: const Icon(
+                  Icons.close_rounded,
+                  semanticLabel: 'Cerrar notificación',
+                ),
                 color: AppColors.textMuted,
                 visualDensity: VisualDensity.compact,
                 padding: EdgeInsets.zero,

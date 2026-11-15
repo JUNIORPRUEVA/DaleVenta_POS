@@ -46,7 +46,16 @@ void main() {
       );
       await tester.runAsync(
         () => precacheImage(
-          const AssetImage('assets/image/nuevologo.png'),
+          tester
+              .widget<Image>(
+                find
+                    .descendant(
+                      of: find.byType(BrandedMenuButton),
+                      matching: find.byType(Image),
+                    )
+                    .first,
+              )
+              .image,
           tester.element(find.byType(RefinedTopbarPreview)),
         ),
       );
@@ -56,8 +65,8 @@ void main() {
       final sync = tester.getRect(find.byType(RefinedSyncIndicator));
       final company = tester.getRect(find.byType(RefinedCompanyLabel));
       expect(sync.size, const Size(40, 40));
-      expect(sync.left - turn.right, 8);
-      expect(company.left - sync.right, 8);
+      expect(sync.left - turn.right, 2);
+      expect(company.left - sync.right, 2);
       expect(turn.center.dy, sync.center.dy);
       expect(company.center.dy, sync.center.dy);
       expect(find.byType(BrandedMenuButton), findsOneWidget);

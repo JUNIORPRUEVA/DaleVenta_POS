@@ -21,8 +21,7 @@ Future<Uint8List> buildPurchaseOrderPdf({
   final qtyFmt = PdfKitFormats.qty();
   final dateFmt = PdfKitFormats.shortDate();
   final companyName = pdfFallback(company?.companyName, fallback: 'FULLTECH');
-  final isDraft = order.status == 'DRAFT';
-  final orderCode = isDraft || order.orderNumber.trim().isEmpty
+  final orderCode = order.orderNumber.trim().isEmpty
       ? 'BORRADOR'
       : order.orderNumber;
 
@@ -47,7 +46,6 @@ Future<Uint8List> buildPurchaseOrderPdf({
         logoImage: logoImage,
         order: order,
         orderCode: orderCode,
-        isDraft: isDraft,
         dateFmt: dateFmt,
         pageNumber: context.pageNumber,
         pagesCount: context.pagesCount,
@@ -77,7 +75,6 @@ pw.Widget _pageHeader({
   required pw.MemoryImage? logoImage,
   required PurchaseOrderModel order,
   required String orderCode,
-  required bool isDraft,
   required DateFormat dateFmt,
   required int pageNumber,
   required int pagesCount,
@@ -145,8 +142,7 @@ pw.Widget _pageHeader({
                         ? '-'
                         : dateFmt.format(order.orderDate!),
                   ),
-                  if (!isDraft)
-                    ('Estado', purchaseOrderStatusLabel(order.status)),
+                  ('Estado', purchaseOrderStatusLabel(order.status)),
                 ],
               ),
             ),
@@ -230,8 +226,8 @@ List<pw.Widget> _detailSection(
         pdfHeaderCell('Código', align: pw.TextAlign.left),
         pdfHeaderCell('Descripción', align: pw.TextAlign.left),
         pdfHeaderCell('Cant.'),
-        pdfHeaderCell('Costo', align: pw.TextAlign.right),
-        pdfHeaderCell('Subtotal', align: pw.TextAlign.right),
+        pdfHeaderCell('Costo unidad', align: pw.TextAlign.right),
+        pdfHeaderCell('Total', align: pw.TextAlign.right),
       ],
     ),
   ];
@@ -409,7 +405,7 @@ pw.Widget _totalsPanel(PurchaseOrderModel order, NumberFormat money) {
             children: [
               pw.Expanded(
                 child: pw.Text(
-                  'TOTAL DE INVERSIÓN',
+                  'TOTAL',
                   style: pw.TextStyle(
                     fontSize: 10.4,
                     fontWeight: pw.FontWeight.bold,

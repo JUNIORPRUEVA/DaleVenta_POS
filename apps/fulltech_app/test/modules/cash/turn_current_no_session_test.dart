@@ -10,6 +10,7 @@ import 'package:daleventa_pos/core/offline/offline_store.dart';
 import 'package:daleventa_pos/core/offline/pending_sync_action.dart';
 import 'package:daleventa_pos/core/offline/sync_queue_service.dart';
 import 'package:daleventa_pos/modules/cash/cash_repository.dart';
+import 'package:daleventa_pos/modules/cash/cash_providers.dart';
 import 'package:daleventa_pos/modules/cash/cash_turn_menu_button.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -208,6 +209,17 @@ void main() {
     // sqflite ffi (I/O real), que NO avanza con el reloj falso de los
     // testWidgets: hace falta `runAsync` para que el estado async se asiente.
     await settleAsync(tester);
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(CashTurnMenuButton)),
+    );
+    for (var attempt = 0;
+        attempt < 100 && container.read(activeCashSessionControllerProvider).isLoading;
+        attempt++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.pump();
+    }
+    expect(container.read(activeCashSessionControllerProvider).isLoading, isFalse,
+      reason: 'El menú debe abrirse después de terminar la lectura real de SQLite.');
   }
 
   Future<void> openTurnMenu(WidgetTester tester) async {
@@ -721,6 +733,8 @@ void main() {
     await settleAsync(tester);
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pump(const Duration(milliseconds: 400));
+
+    await pumpUntilFound(tester, find.text('No tienes un turno abierto actualmente.'), tries: 250);
 
     expect(
       AppErrorReporter.instance.lastError.value,

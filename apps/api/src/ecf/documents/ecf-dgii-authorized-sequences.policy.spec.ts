@@ -139,14 +139,25 @@ describe("validateAuthorizationDeclaration", () => {
     );
   });
 
-  it("acepta sin vencimiento cuando la DGII muestra N/A", () => {
+  it("acepta N/A para E32, que no requiere vencimiento E31", () => {
     const result = validateAuthorizationDeclaration(
-      declaration({ expiresAt: null }),
+      declaration({ documentType: "E32", expiresAt: null }),
       NOW,
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.expiresAt).toBeNull();
+  });
+
+  it("E31 exige la fecha declarada y rechaza fechas inexistentes", () => {
+    expect(validateAuthorizationDeclaration(declaration({ expiresAt: null }), NOW)).toMatchObject({
+      ok: false, code: ECF_DGII_DECLARATION_ERRORS.expiryRequired,
+    });
+    for (const expiresAt of ["incorrecta", "2027-02-31", "2027-13-01", "2027-02-31T23:59:59.999Z"]) {
+      expect(validateAuthorizationDeclaration(declaration({ expiresAt }), NOW)).toMatchObject({
+        ok: false, code: ECF_DGII_DECLARATION_ERRORS.expiryInvalid,
+      });
+    }
   });
 
   it("una fecha sin hora vale hasta el FIN de ese día", () => {

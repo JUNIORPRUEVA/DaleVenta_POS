@@ -9,6 +9,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter/services.dart';
+import 'package:daleventa_pos/core/theme/app_theme.dart';
+import 'package:daleventa_pos/core/widgets/fulltech_dialog.dart';
+import '../../support/platform_goldens.dart';
 
 class _Lists extends PriceListsRepository {
   _Lists() : super(Dio());
@@ -17,6 +21,7 @@ class _Lists extends PriceListsRepository {
   List<PriceListTierDraft>? savedTiers;
   final List<String> searches = [];
   int creates = 0;
+  final List<String?> categories = [];
   @override
   Future<PriceListModel> createPriceList({
     required String name,
@@ -79,8 +84,10 @@ Future<_Lists> _pump(
   WidgetTester tester, {
   bool enabled = true,
   double width = 1200,
+  double height = 900,
+  double textScale = 1,
 }) async {
-  tester.view.physicalSize = Size(width, 900);
+  tester.view.physicalSize = Size(width, height);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
@@ -89,6 +96,23 @@ Future<_Lists> _pump(
   dio.interceptors.add(
     InterceptorsWrapper(
       onRequest: (request, handler) {
+        if (request.path.endsWith('/products/categories')) {
+          handler.resolve(
+            Response(
+              requestOptions: request,
+              data: {
+                'items': [
+                  {'name': 'Prueba', 'count': 1},
+                  {'name': 'Fuera de primera página', 'count': 20},
+                ],
+              },
+            ),
+          );
+          return;
+        }
+        repository.categories.add(
+          request.queryParameters['category'] as String?,
+        );
         repository.searches.add('${request.queryParameters['search'] ?? ''}');
         handler.resolve(
           Response(
@@ -124,14 +148,108 @@ Future<_Lists> _pump(
         priceListsRepositoryProvider.overrideWithValue(repository),
         dioProvider.overrideWithValue(dio),
       ],
-      child: const MaterialApp(home: PriceListsScreen()),
+      child: MaterialApp(
+        theme: AppTheme.light,
+        debugShowCheckedModeBanner: false,
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.linear(textScale)),
+          child: child!,
+        ),
+        home: const PriceListsScreen(),
+      ),
     ),
   );
+  await tester.pumpAndSettle();
+  await tester.runAsync(() async {
+    final context = tester.element(find.byType(PriceListsScreen));
+    for (final name in ['add', 'close', 'search']) {
+      await precacheImage(AssetImage('assets/image/action_$name.png'), context);
+    }
+  });
   await tester.pumpAndSettle();
   return repository;
 }
 
 void main() {
+  setUpAll(() async {
+    final font = FontLoader('Manrope');
+    for (final weight in ['Regular', 'Medium', 'SemiBold', 'Bold']) {
+      font.addFont(rootBundle.load('assets/fonts/manrope/Manrope-$weight.ttf'));
+    }
+    await font.load();
+    await (FontLoader(
+      'MaterialIcons',
+    )..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'))).load();
+  });
+  for (final size in [
+    const Size(390, 844),
+    const Size(1024, 600),
+    const Size(1920, 1080),
+    const Size(2560, 1440),
+  ]) {
+    testWidgets('diseño, formulario y selector lateral $size', (tester) async {
+      final repository = await _pump(
+        tester,
+        width: size.width,
+        height: size.height,
+        textScale: size.width == 1024 ? 1.15 : 1,
+      );
+      expect(tester.takeException(), isNull);
+      await expectLater(
+        find.byType(MaterialApp),
+        matchesGoldenFile(
+          platformGolden('goldens/price_lists_${size.width.toInt()}.png'),
+        ),
+      );
+      await tester.tap(find.text('Nueva lista'));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<FullTechDialog>(find.byType(FullTechDialog)).borderRadius,
+        0,
+      );
+      expect(tester.takeException(), isNull);
+      await expectLater(
+        find.byType(MaterialApp),
+        matchesGoldenFile(
+          platformGolden('goldens/price_dialog_${size.width.toInt()}.png'),
+        ),
+      );
+      await tester.tap(find.text('Cancelar'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Elegir producto'));
+      await tester.tap(find.text('Elegir producto'));
+      await tester.pumpAndSettle();
+      final drawer = tester.getRect(
+        find.byKey(const ValueKey('price-product-drawer')),
+      );
+      expect(drawer.right, closeTo(size.width, 1));
+      expect(drawer.height, closeTo(size.height, 1));
+      expect(
+        drawer.width,
+        closeTo(
+          size.width < 640 ? size.width : (size.width * .38).clamp(360, 760),
+          1,
+        ),
+      );
+      expect(tester.takeException(), isNull);
+      await expectLater(
+        find.byType(MaterialApp),
+        matchesGoldenFile(
+          platformGolden('goldens/price_picker_${size.width.toInt()}.png'),
+        ),
+      );
+      await tester.tap(find.byType(DropdownButtonFormField<String>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Fuera de primera página').last);
+      await tester.pumpAndSettle();
+      expect(repository.categories, contains('Fuera de primera página'));
+      await tester.tap(find.byTooltip('Cerrar productos'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('price-product-drawer')), findsNothing);
+    });
+  }
   testWidgets('creates a list through its form', (tester) async {
     final repository = await _pump(tester);
     await tester.tap(find.text('Nueva lista'));

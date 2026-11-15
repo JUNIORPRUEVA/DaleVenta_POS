@@ -1,6 +1,9 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+// PDF extraction in tests reuses the existing pdfviewer transitive dependency.
+// ignore: depend_on_referenced_packages
+import 'package:syncfusion_flutter_pdf/pdf.dart';
 
 import 'package:daleventa_pos/core/company/company_settings_model.dart';
 import 'package:daleventa_pos/modules/compras/purchase_models.dart';
@@ -10,10 +13,16 @@ void main() {
   group('PurchaseOrder status label', () {
     test('maps every real status to a professional Spanish label', () {
       expect(purchaseOrderStatusLabel('DRAFT'), 'Borrador');
-      expect(purchaseOrderStatusLabel('PENDING_APPROVAL'), 'Pendiente de aprobación');
+      expect(
+        purchaseOrderStatusLabel('PENDING_APPROVAL'),
+        'Pendiente de aprobación',
+      );
       expect(purchaseOrderStatusLabel('APPROVED'), 'Aprobada');
       expect(purchaseOrderStatusLabel('SENT'), 'Enviada');
-      expect(purchaseOrderStatusLabel('PARTIALLY_RECEIVED'), 'Recibida parcial');
+      expect(
+        purchaseOrderStatusLabel('PARTIALLY_RECEIVED'),
+        'Recibida parcial',
+      );
       expect(purchaseOrderStatusLabel('RECEIVED'), 'Recibida');
       expect(purchaseOrderStatusLabel('CANCELLED'), 'Cancelada');
     });
@@ -55,6 +64,28 @@ void main() {
   });
 
   group('PurchaseOrder PDF generation', () {
+    test(
+      'borrador guardado conserva número, estado y total en el PDF',
+      () async {
+        final bytes = await buildPurchaseOrderPdf(
+          order: _order(4, status: 'DRAFT', orderNumber: 'OC-000001'),
+          company: _company(),
+        );
+        final document = PdfDocument(inputBytes: bytes);
+        try {
+          final text = PdfTextExtractor(
+            document,
+          ).extractText().replaceAll(RegExp(r'\s+'), ' ');
+          expect(text, contains('OC-000001'));
+          expect(text, contains('Borrador'));
+          expect(text, contains('7,680.00'));
+          expect(text, contains('CANATECH SRL'));
+          expect(text, isNot(contains('DRAFT')));
+        } finally {
+          document.dispose();
+        }
+      },
+    );
     test('template keeps the unified professional language in source', () {
       final source = File(
         'lib/modules/compras/utils/purchase_order_pdf_service.dart',
@@ -166,7 +197,8 @@ PurchaseOrderModel _order(
         PurchaseOrderItemModel(
           id: 'item-$index',
           productName: 'Producto de prueba ${index + 1}',
-          productCode: 'b3e5350c-b3f6-4591-a507-afaa800fc${index.toString().padLeft(3, '0')}',
+          productCode:
+              'b3e5350c-b3f6-4591-a507-afaa800fc${index.toString().padLeft(3, '0')}',
           quantity: 2,
           receivedQuantity: 0,
           pendingQuantity: 2,

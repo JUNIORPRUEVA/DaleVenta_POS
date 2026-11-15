@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:daleventa_pos/features/ecf/data/ecf_repository.dart';
+import 'package:daleventa_pos/core/theme/app_theme.dart';
 import 'package:daleventa_pos/features/ecf/ecf_authorized_sequence_models.dart';
 import 'package:daleventa_pos/features/ecf/ecf_models.dart';
 import 'package:daleventa_pos/features/ecf/ui/flow/ecf_sequence_range_section.dart';
@@ -38,6 +39,8 @@ class _FakeRepository extends EcfRepository {
   int? lastTo;
   int? lastApproved;
   String? lastAuthorizationNumber;
+  String? lastExpiry;
+  String? lastRangeExpiry;
 
   @override
   Future<EcfAuthorizedSequencesView> authorizedSequences() async {
@@ -71,6 +74,7 @@ class _FakeRepository extends EcfRepository {
     lastDocumentType = documentType;
     lastAuthorizationNumber = authorizationNumber;
     lastApproved = approvedQuantity;
+    lastExpiry = expiresAt;
     if (declarationFailure != null) throw declarationFailure!;
     declared = [
       EcfAuthorizedSequence(
@@ -80,6 +84,7 @@ class _FakeRepository extends EcfRepository {
         rangeTo: rangeTo,
         approvedQuantity: approvedQuantity,
         declarationVersion: 'v1',
+        expiresAt: expiresAt == null ? null : DateTime.parse(expiresAt),
       ),
     ];
   }
@@ -96,6 +101,7 @@ class _FakeRepository extends EcfRepository {
     lastDocumentType = documentType;
     lastFrom = startNumber;
     lastTo = endNumber;
+    lastRangeExpiry = validUntil;
     if (sequenceFailure != null) throw sequenceFailure!;
     existing = [
       EcfSequenceInfo(
@@ -124,6 +130,7 @@ class _FakeRepository extends EcfRepository {
     lastDocumentType = documentType;
     lastFrom = startNumber;
     lastTo = endNumber;
+    lastRangeExpiry = validUntil;
     if (sequenceFailure != null) throw sequenceFailure!;
     existing = [
       EcfSequenceInfo(
@@ -192,7 +199,8 @@ Future<_FakeRepository> _pump(
       child: RepaintBoundary(
         key: _environmentCaptureKey,
         child: MaterialApp(
-          theme: ThemeData(fontFamily: 'Manrope'),
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.light,
           home: Scaffold(
             body: SingleChildScrollView(
               child: Padding(
@@ -227,6 +235,7 @@ Future<void> _fill(
     find.byKey(const ValueKey('ecf_dgii_approved')),
     approved,
   );
+  await tester.enterText(find.byKey(const ValueKey('ecf_dgii_expires')), '31/12/2035');
   if (accept) {
     await tester.tap(find.byKey(const ValueKey('ecf_dgii_declaration_check')));
     await tester.pump();
@@ -332,6 +341,28 @@ void main() {
     });
   }
 
+  for(final width in [320.0,390.0,1280.0]) {
+    testWidgets('E31 production expiry form remains readable at width $width',(tester) async {
+      tester.view.physicalSize=Size(width,1000);tester.view.devicePixelRatio=1;
+      addTearDown(tester.view.reset);
+      await _pump(tester);
+      await _fill(tester,accept:false);
+      expect(find.text('Vence (obligatorio)'),findsOneWidget);
+      expect(find.textContaining('se usará automáticamente al facturar'),findsOneWidget);
+      expect(tester.takeException(),isNull);
+      final output=Platform.environment['FULLPOS_ECF_ENV_QA_OUTPUT'];
+      if(output!=null) {
+        final boundary=_environmentCaptureKey.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+        await tester.runAsync(()async {
+          final picture=await boundary.toImage();final bytes=await picture.toByteData(format:ui.ImageByteFormat.png);
+          await Directory(output).create(recursive:true);
+          await File('$output/production-e31-${width.toInt()}.png').writeAsBytes(bytes!.buffer.asUint8List());
+          picture.dispose();
+        });
+      }
+    });
+  }
+
   testWidgets('TEST numbering is explicitly separated from production', (
     tester,
   ) async {
@@ -414,6 +445,19 @@ void main() {
     expect(repository.lastFrom, 1);
     expect(repository.lastTo, 150);
     expect(repository.lastDocumentType, 'E31');
+    expect(repository.lastExpiry, '2035-12-31T23:59:59.999Z');
+    expect(repository.lastRangeExpiry, repository.lastExpiry);
+  });
+
+  testWidgets('E31 sin fecha no guarda una autorización incompleta', (tester) async {
+    final repository = await _pump(tester);
+    await _fill(tester);
+    await tester.enterText(find.byKey(const ValueKey('ecf_dgii_expires')), '');
+    await tester.tap(find.byKey(const ValueKey('ecf_dgii_declaration_save')));
+    await tester.pumpAndSettle();
+    expect(repository.declarations, 0);
+    expect(repository.saves, 0);
+    expect(find.textContaining('Registra el vencimiento E31'), findsOneWidget);
   });
 
   testWidgets('con autorización y numeración usables muestra el resumen', (

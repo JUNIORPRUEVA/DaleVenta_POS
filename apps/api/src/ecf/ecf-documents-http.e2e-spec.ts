@@ -181,6 +181,7 @@ uat("e-CF E2E HTTP + PostgreSQL desechable", () => {
         rangeTo: 20,
         approvedQuantity: 20,
         declarationAccepted: true,
+        ...(documentType === "E31" ? { expiresAt: "2026-12-31" } : {}),
       })
       .expect(201);
     await http()

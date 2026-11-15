@@ -132,6 +132,8 @@ jobs:
         working-directory: apps/fulltech_app
       - run: flutter analyze
         working-directory: apps/fulltech_app
+      - run: flutter test --platform chrome test/features/settings/printer_settings_web_test.dart
+        working-directory: apps/fulltech_app
       - run: flutter test
         working-directory: apps/fulltech_app
 

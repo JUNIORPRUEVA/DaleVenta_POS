@@ -259,6 +259,9 @@ class FullTechDialog extends StatelessWidget {
   /// Ancho máximo del diálogo.
   final double maxWidth;
 
+  /// Optional outline radius; keeps the shared dialog default when omitted.
+  final double? borderRadius;
+
   /// Si se muestra el botón de cerrar (X).
   final bool showCloseButton;
 
@@ -283,6 +286,7 @@ class FullTechDialog extends StatelessWidget {
     required this.child,
     this.actions,
     this.maxWidth = FullTechDialogTokens.maxWidthMedium,
+    this.borderRadius,
     this.showCloseButton = false,
     this.onClose,
     this.subtitle,
@@ -352,9 +356,10 @@ class FullTechDialog extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: FullTechDialogTokens.surfaceColor,
                   borderRadius: BorderRadius.circular(
-                    maxWidth <= FullTechDialogTokens.maxWidthSmall
-                        ? FullTechDialogTokens.borderRadiusSmall
-                        : FullTechDialogTokens.borderRadius,
+                    borderRadius ??
+                        (maxWidth <= FullTechDialogTokens.maxWidthSmall
+                            ? FullTechDialogTokens.borderRadiusSmall
+                            : FullTechDialogTokens.borderRadius),
                   ),
                   boxShadow: FullTechDialogTokens.shadow,
                 ),

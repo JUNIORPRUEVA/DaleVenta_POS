@@ -119,7 +119,7 @@ void main() {
   test('en el árbol de la app el aviso de error va DESPUÉS del de licencia', () {
     final source = File('lib/main.dart').readAsStringSync();
     final licenseIndex = source.indexOf('const LicensePurchaseOverlay()');
-    final errorOverlayIndex = source.indexOf('const AppErrorOverlay()');
+    final errorOverlayIndex = source.indexOf('AppErrorOverlay(');
 
     expect(licenseIndex, greaterThan(-1));
     expect(errorOverlayIndex, greaterThan(-1));

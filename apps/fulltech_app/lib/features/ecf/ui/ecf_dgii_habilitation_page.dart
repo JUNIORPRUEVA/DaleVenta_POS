@@ -562,6 +562,12 @@ class _EcfDgiiHabilitationPageState
     // cuando no hay expediente, y eso ocultaría la carga local del certificado
     // a una empresa que todavía no ha decidido su proveedor.
     final intentState = ref.watch(dosaIntentStateProvider).valueOrNull;
+    // The standard customer completes DOSA's certification before declaring
+    // production numbering. TEST ranges are not an extra onboarding requirement.
+    final fiscalCapabilities = capabilities.valueOrNull;
+    final showNumbering = fiscalCapabilities?.certificationStatus == 'AUTHORIZED_SANDBOX' ||
+        (fiscalCapabilities?.environment == 'PRODUCTION' &&
+            fiscalCapabilities?.productionEnabled == true);
     final intentIsDosa =
         intentState != null &&
         intentState.sessionId != null &&
@@ -642,9 +648,10 @@ class _EcfDgiiHabilitationPageState
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               const EcfProductionActivationAction(),
-                              EcfSequenceRangeSection(
+                              if (showNumbering) EcfSequenceRangeSection(
                                 key: ValueKey('ecf-completed-numbering-${user?.companyId}'),
                                 canManage: canManageSequences,
+                                embedded: true,
                               ),
                             ],
                           ),
@@ -796,7 +803,7 @@ class _EcfDgiiHabilitationPageState
                             // su propio paso (Autorización). Repetirlos aquí
                             // duplicaba el mismo aviso en dos pantallas.
                             activation: null,
-                            sequence: dosaOwnsCertificate && canManageSequences
+                            sequence: dosaOwnsCertificate && canManageSequences && showNumbering
                                 ? EcfSequenceRangeSection(
                                     key: ValueKey(
                                       'dosa-sequences-preparation-${user?.companyId}',
@@ -868,7 +875,7 @@ class _EcfDgiiHabilitationPageState
                                           ),
                                         )
                                       : null,
-                                  sequence: canManageSequences
+                                  sequence: canManageSequences && showNumbering
                                       ? EcfSequenceRangeSection(
                                           key: ValueKey(
                                             'dosa-sequences-tracking-${user?.companyId}',

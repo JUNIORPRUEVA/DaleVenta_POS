@@ -6,7 +6,5 @@ final businessRegistrationDisabledProvider = Provider<bool>((ref) {
 });
 
 bool get isBusinessRegistrationDisabledOnCurrentPlatform {
-  if (kIsWeb) return false;
-  return defaultTargetPlatform == TargetPlatform.iOS ||
-      defaultTargetPlatform == TargetPlatform.android;
+  return !kIsWeb;
 }

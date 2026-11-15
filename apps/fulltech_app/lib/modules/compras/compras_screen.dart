@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:printing/printing.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 
 import '../../core/auth/admin_authorization.dart';
@@ -17,13 +16,15 @@ import '../../core/pagination/infinite_scroll_load_more_trigger.dart';
 import '../../core/pagination/paged_load_more_footer.dart';
 import '../../core/pagination/paged_list_controller.dart';
 import '../../core/routing/routes.dart';
+import '../../core/routing/app_navigator.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/uom/uom_formatters.dart';
 import '../../core/utils/money_formatters.dart';
+import '../../core/utils/app_feedback.dart';
 import '../../core/utils/safe_url_launcher.dart';
-import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
 import '../../core/widgets/pdf_action_menu.dart';
+import '../../core/widgets/pdf_preview_panel.dart';
 import '../../core/widgets/product_network_image.dart';
 import '../../features/catalogo/application/product_search_controller.dart';
 import '../../features/catalogo/data/catalog_repository.dart';
@@ -31,6 +32,7 @@ import '../../core/auth/auth_repository.dart';
 import 'data/purchase_order_draft_storage.dart';
 import 'data/purchases_repository.dart';
 import 'purchase_models.dart';
+import 'purchase_visual_theme.dart';
 import 'utils/purchase_order_pdf_service.dart';
 
 class ComprasScreen extends ConsumerStatefulWidget {
@@ -356,7 +358,6 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
 
   @override
   Widget build(BuildContext context) {
-    final user = ref.watch(authStateProvider).user;
     final isMobile = MediaQuery.sizeOf(context).width < 700;
     final sectionIndex = _mobileTabIndexFromValue(widget.initialMobileTab);
     final pages = [
@@ -366,50 +367,58 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
       _purchaseInvoicesTab(),
       _recommendationsTab(),
     ];
-    return Scaffold(
-      appBar: CustomAppBar(
-        title: _mobileTitleForIndex(sectionIndex),
-        titleWidget: isMobile && sectionIndex == 0 && _mobilePurchaseSearchOpen
-            ? _mobilePurchaseSearchField()
-            : null,
-        fallbackRoute: Routes.cotizaciones,
-        preferDrawerLeading: true,
-        showLogo: false,
-        trailing: isMobile ? const SizedBox.shrink() : null,
-        actions: isMobile
-            ? _mobileAppBarActions(sectionIndex)
-            : _desktopAppBarActions(sectionIndex),
-      ),
-      drawer: buildAdaptiveDrawer(context, currentUser: user),
-      body: Stack(
-        children: [
-          Positioned.fill(
-            child: isMobile
-                ? pages[sectionIndex]
-                : sectionIndex <= 1
-                ? pages[sectionIndex]
-                : _PurchaseDesktopFrame(child: pages[sectionIndex]),
-          ),
-          if (_loading)
-            const Positioned(
-              left: 0,
-              right: 0,
-              top: 0,
-              child: LinearProgressIndicator(minHeight: 2),
+    return Theme(
+      data: purchaseVisualTheme(context),
+      child: Scaffold(
+        appBar: CustomAppBar(
+          title: _mobileTitleForIndex(sectionIndex),
+          titleWidget:
+              isMobile && sectionIndex == 0 && _mobilePurchaseSearchOpen
+              ? _mobilePurchaseSearchField()
+              : null,
+          fallbackRoute: Routes.cotizaciones,
+          showLogo: false,
+          showDepartmentLabel: false,
+          trailing: isMobile ? const SizedBox.shrink() : null,
+          actions: isMobile
+              ? _mobileAppBarActions(sectionIndex)
+              : _desktopAppBarActions(sectionIndex),
+        ),
+        body: Stack(
+          children: [
+            Positioned.fill(
+              child: isMobile
+                  ? pages[sectionIndex]
+                  : sectionIndex == 0
+                  ? pages[sectionIndex]
+                  : _PurchaseDesktopFrame(child: pages[sectionIndex]),
             ),
-        ],
+            if (_loading)
+              const Positioned(
+                left: 0,
+                right: 0,
+                top: 0,
+                child: LinearProgressIndicator(minHeight: 2),
+              ),
+          ],
+        ),
       ),
     );
   }
 
   List<Widget> _desktopAppBarActions(int sectionIndex) {
+    if (sectionIndex == 4) {
+      return [
+        _viewPurchaseAction(),
+        IconButton(
+          tooltip: 'Actualizar',
+          onPressed: _loading ? null : _load,
+          icon: const PurchaseIcon(Icons.refresh_rounded),
+        ),
+      ];
+    }
     if (sectionIndex == 0) {
       return [
-        IconButton(
-          tooltip: 'Producto externo',
-          onPressed: _openExternalProductDialog,
-          icon: const Icon(Icons.add_rounded),
-        ),
         IconButton(
           tooltip: 'Filtros',
           onPressed: _openPurchaseFilterDrawer,
@@ -417,13 +426,13 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
             isLabelVisible:
                 _selectedCategory != null || _selectedSupplierId != null,
             smallSize: 8,
-            child: const Icon(Icons.filter_alt_outlined),
+            child: const PurchaseIcon(Icons.filter_alt_outlined),
           ),
         ),
         IconButton(
           tooltip: 'Actualizar',
           onPressed: _loading ? null : _load,
-          icon: const Icon(Icons.refresh_rounded),
+          icon: const PurchaseIcon(Icons.refresh_rounded),
         ),
       ];
     }
@@ -435,27 +444,27 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
           icon: Badge(
             isLabelVisible: _statusFilter.isNotEmpty,
             smallSize: 8,
-            child: const Icon(Icons.filter_alt_outlined),
+            child: const PurchaseIcon(Icons.filter_alt_outlined),
           ),
         ),
         IconButton(
           tooltip: 'Actualizar',
           onPressed: _loading ? null : _load,
-          icon: const Icon(Icons.refresh_rounded),
+          icon: const PurchaseIcon(Icons.refresh_rounded),
         ),
       ];
     }
     if (sectionIndex == 2) {
       return [
         IconButton(
-          tooltip: 'Crear suplidor',
+          tooltip: 'Nuevo suplidor',
           onPressed: () => _supplierDialog(),
-          icon: const Icon(Icons.add_business_outlined),
+          icon: const PurchaseIcon(Icons.add_business_outlined),
         ),
         IconButton(
           tooltip: 'Actualizar',
           onPressed: _loading ? null : _load,
-          icon: const Icon(Icons.refresh_rounded),
+          icon: const PurchaseIcon(Icons.refresh_rounded),
         ),
       ];
     }
@@ -464,7 +473,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
         IconButton(
           tooltip: 'Subir factura',
           onPressed: _uploadPurchaseInvoiceDialog,
-          icon: const Icon(Icons.upload_file_outlined),
+          icon: const PurchaseIcon(Icons.upload_file_outlined),
         ),
         IconButton(
           tooltip: 'Filtros',
@@ -476,13 +485,13 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                 _invoiceFromCtrl.text.trim().isNotEmpty ||
                 _invoiceToCtrl.text.trim().isNotEmpty,
             smallSize: 8,
-            child: const Icon(Icons.filter_alt_outlined),
+            child: const PurchaseIcon(Icons.filter_alt_outlined),
           ),
         ),
         IconButton(
           tooltip: 'Actualizar',
           onPressed: _loading ? null : _load,
-          icon: const Icon(Icons.refresh_rounded),
+          icon: const PurchaseIcon(Icons.refresh_rounded),
         ),
       ];
     }
@@ -490,18 +499,19 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
       IconButton(
         tooltip: 'Actualizar',
         onPressed: _loading ? null : _load,
-        icon: const Icon(Icons.refresh_rounded),
+        icon: const PurchaseIcon(Icons.refresh_rounded),
       ),
     ];
   }
 
   List<Widget> _mobileAppBarActions(int mobileIndex) {
+    if (mobileIndex == 4) return [_viewPurchaseAction()];
     if (mobileIndex == 0) {
       return [
         IconButton(
           tooltip: 'Producto externo',
           onPressed: _openExternalProductDialog,
-          icon: const Icon(Icons.add_rounded),
+          icon: const PurchaseIcon(Icons.add_rounded),
         ),
         IconButton(
           tooltip: _mobilePurchaseSearchOpen ? 'Cerrar búsqueda' : 'Buscar',
@@ -509,7 +519,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
             _mobilePurchaseSearchOpen = !_mobilePurchaseSearchOpen;
             if (!_mobilePurchaseSearchOpen) _searchCtrl.clear();
           }),
-          icon: Icon(
+          icon: PurchaseIcon(
             _mobilePurchaseSearchOpen
                 ? Icons.close_rounded
                 : Icons.search_rounded,
@@ -522,7 +532,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
             isLabelVisible:
                 _selectedCategory != null || _selectedSupplierId != null,
             smallSize: 8,
-            child: const Icon(Icons.filter_alt_outlined),
+            child: const PurchaseIcon(Icons.filter_alt_outlined),
           ),
         ),
       ];
@@ -535,7 +545,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
           icon: Badge(
             isLabelVisible: _statusFilter.isNotEmpty,
             smallSize: 8,
-            child: const Icon(Icons.filter_alt_outlined),
+            child: const PurchaseIcon(Icons.filter_alt_outlined),
           ),
         ),
       ];
@@ -543,9 +553,9 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     if (mobileIndex == 2) {
       return [
         IconButton(
-          tooltip: 'Crear suplidor',
+          tooltip: 'Nuevo suplidor',
           onPressed: () => _supplierDialog(),
-          icon: const Icon(Icons.add_business_outlined),
+          icon: const PurchaseIcon(Icons.add_business_outlined),
         ),
       ];
     }
@@ -554,7 +564,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
         IconButton(
           tooltip: 'Subir factura',
           onPressed: _uploadPurchaseInvoiceDialog,
-          icon: const Icon(Icons.upload_file_outlined),
+          icon: const PurchaseIcon(Icons.upload_file_outlined),
         ),
         IconButton(
           tooltip: 'Filtros',
@@ -566,7 +576,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                 _invoiceFromCtrl.text.trim().isNotEmpty ||
                 _invoiceToCtrl.text.trim().isNotEmpty,
             smallSize: 8,
-            child: const Icon(Icons.filter_alt_outlined),
+            child: const PurchaseIcon(Icons.filter_alt_outlined),
           ),
         ),
       ];
@@ -582,17 +592,20 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
         autofocus: true,
         onChanged: (_) => setState(() {}),
         style: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.w700,
+          color: AppColors.textPrimary,
+          fontWeight: FontWeight.w500,
         ),
-        cursorColor: Colors.white,
+        cursorColor: AppColors.primary,
         decoration: InputDecoration(
           hintText: 'Buscar producto',
           hintStyle: TextStyle(
-            color: Colors.white.withValues(alpha: .75),
+            color: AppColors.textSecondary,
             fontWeight: FontWeight.w600,
           ),
-          prefixIcon: const Icon(Icons.search_rounded, color: Colors.white),
+          prefixIcon: const PurchaseIcon(
+            Icons.search_rounded,
+            color: AppColors.textPrimary,
+          ),
           suffixIcon: _searchCtrl.text.trim().isEmpty
               ? null
               : IconButton(
@@ -601,27 +614,42 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                     _searchCtrl.clear();
                     setState(() {});
                   },
-                  icon: const Icon(Icons.close_rounded, color: Colors.white),
+                  icon: const PurchaseIcon(
+                    Icons.close_rounded,
+                    color: AppColors.textPrimary,
+                  ),
                 ),
           filled: true,
-          fillColor: Colors.white.withValues(alpha: .14),
+          fillColor: AppColors.surfaceSubtle,
           contentPadding: EdgeInsets.zero,
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.zero,
             borderSide: BorderSide(color: Colors.white.withValues(alpha: .28)),
           ),
           enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.zero,
             borderSide: BorderSide(color: Colors.white.withValues(alpha: .28)),
           ),
           focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.zero,
             borderSide: const BorderSide(color: Colors.white),
           ),
         ),
       ),
     );
   }
+
+  Widget _viewPurchaseAction() => IconButton(
+    tooltip: 'Ver nueva compra',
+    icon: const PurchaseIcon(Icons.shopping_cart_outlined),
+    onPressed: _loading
+        ? null
+        : () async {
+            _draftSaveTimer?.cancel();
+            await _saveDraft();
+            if (mounted) AppNavigator.go(context, Routes.compras);
+          },
+  );
 
   Widget _newPurchaseTab() {
     final size = MediaQuery.sizeOf(context);
@@ -674,11 +702,13 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                   : isWide
                   ? 7
                   : 5;
-              final aspectRatio = width < 380
-                  ? .98
-                  : width < 720
-                  ? 1.08
-                  : 1.36;
+              final aspectRatio =
+                  (width / crossAxisCount) /
+                  (200 *
+                      (MediaQuery.textScalerOf(context).scale(12) / 12).clamp(
+                        1.0,
+                        1.5,
+                      ));
               return InfiniteScrollLoadMoreListener(
                 threshold: 360,
                 hasMore: _productState.hasMore,
@@ -725,7 +755,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     return Row(
       children: [
         Expanded(child: productGrid),
-        SizedBox(width: (size.width * .38).clamp(520.0, 720.0), child: cart),
+        SizedBox(width: (size.width * .38).clamp(380.0, 600.0), child: cart),
       ],
     );
   }
@@ -755,7 +785,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: .86),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.zero,
         border: Border.all(
           color: theme.colorScheme.outlineVariant.withValues(alpha: .34),
         ),
@@ -767,7 +797,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
           children: [
             const Text(
               'Compra',
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900),
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
             ),
             const SizedBox(width: 8),
             Expanded(
@@ -780,7 +810,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                 style: theme.textTheme.bodySmall?.copyWith(
                   fontSize: 10,
                   color: const Color(0xFF52667C),
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ),
@@ -789,7 +819,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
               style: theme.textTheme.bodySmall?.copyWith(fontSize: 9.5),
             ),
             const SizedBox(width: 4),
-            const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
+            const PurchaseIcon(Icons.keyboard_arrow_down_rounded, size: 18),
           ],
         ),
       ),
@@ -803,7 +833,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
       padding: const EdgeInsets.all(6),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.zero,
         border: Border.all(
           color: theme.colorScheme.outlineVariant.withValues(alpha: .45),
         ),
@@ -832,11 +862,11 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                   : LayoutBuilder(
                       builder: (context, constraints) {
                         final width = constraints.maxWidth;
-                        final columns = width < 340 ? 2 : 3;
+                        final columns = width < 480 ? 2 : 3;
                         const spacing = 7.0;
                         final cellWidth =
                             (width - (spacing * (columns - 1))) / columns;
-                        const visibleRows = 3.0;
+                        const visibleRows = 2.0;
                         final cellHeight =
                             (constraints.maxHeight -
                                 (spacing * (visibleRows - 1))) /
@@ -948,7 +978,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 11,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ),
@@ -956,7 +986,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                   _draftUnitsLabel(_cart),
                   style: theme.textTheme.bodySmall?.copyWith(
                     fontSize: 10.5,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w600,
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
@@ -973,7 +1003,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 10.5,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w500,
                       color: Color(0xFF1957E6),
                     ),
                   ),
@@ -984,7 +1014,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                     Text(
                       'TOTAL',
                       style: theme.textTheme.labelMedium?.copyWith(
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w600,
                         letterSpacing: 1,
                       ),
                     ),
@@ -994,7 +1024,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontSize: 22,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w600,
                         height: 1,
                       ),
                     ),
@@ -1021,11 +1051,14 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                         0xFFDC2626,
                       ).withValues(alpha: .08),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(5),
+                        borderRadius: BorderRadius.zero,
                       ),
                     ),
                     onPressed: _cart.isEmpty ? null : _confirmClearPurchase,
-                    icon: const Icon(Icons.delete_sweep_outlined, size: 22),
+                    icon: const PurchaseIcon(
+                      Icons.delete_sweep_outlined,
+                      size: 22,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -1034,7 +1067,10 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                     onPressed: _cart.isEmpty || _saving
                         ? null
                         : _openDraftPdfPreview,
-                    icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
+                    icon: const PurchaseIcon(
+                      Icons.picture_as_pdf_outlined,
+                      size: 16,
+                    ),
                     label: const Text(
                       'Ver PDF',
                       maxLines: 1,
@@ -1045,7 +1081,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                       padding: const EdgeInsets.symmetric(horizontal: 10),
                       visualDensity: VisualDensity.compact,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(5),
+                        borderRadius: BorderRadius.zero,
                       ),
                     ),
                   ),
@@ -1061,7 +1097,10 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                             dimension: 16,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Icon(Icons.check_circle_outline, size: 16),
+                        : const PurchaseIcon(
+                            Icons.check_circle_outline,
+                            size: 16,
+                          ),
                     label: const Text(
                       'Generar',
                       maxLines: 1,
@@ -1074,10 +1113,10 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                       visualDensity: VisualDensity.compact,
                       textStyle: const TextStyle(
                         fontSize: 13.5,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w600,
                       ),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(5),
+                        borderRadius: BorderRadius.zero,
                       ),
                     ),
                   ),
@@ -1106,7 +1145,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
           child: DecoratedBox(
             decoration: BoxDecoration(
               color: theme.colorScheme.surface,
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.zero,
               border: Border.all(
                 color: theme.dividerColor.withValues(alpha: .35),
               ),
@@ -1123,147 +1162,163 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.receipt_long_outlined,
-                        color: theme.colorScheme.primary,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Orden de compra',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w800,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      _StatusChip(label: '${_cart.length} items'),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String?>(
-                    initialValue: _selectedSupplierId,
-                    isExpanded: true,
-                    decoration: _fieldDecoration(
-                      'Suplidor principal',
-                      icon: Icons.storefront_outlined,
-                    ),
-                    items: [
-                      const DropdownMenuItem<String?>(
-                        value: null,
-                        child: Text('Sin suplidor'),
-                      ),
-                      for (final s in _suppliers)
-                        DropdownMenuItem<String?>(
-                          value: s.id,
-                          child: Text(
-                            s.commercialName,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                    ],
-                    onChanged: (value) => setState(() {
-                      _selectedSupplierId = value;
-                      _scheduleDraftSave();
-                    }),
-                  ),
-                  const SizedBox(height: 10),
                   Expanded(
-                    child: _cart.isEmpty
-                        ? _EmptyOrderState(
-                            onAddExternal: _openExternalProductDialog,
-                          )
-                        : ListView.separated(
-                            itemCount: _cart.length,
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(height: 6),
-                            itemBuilder: (context, index) => _CartItemTile(
-                              item: _cart[index],
-                              money: _money,
-                              qty: _qty,
-                              onEdit: () => _editCartItem(index),
-                              onDelete: () => setState(() {
-                                _cart = [..._cart]..removeAt(index);
-                                _scheduleDraftSave();
-                              }),
-                            ),
-                          ),
-                  ),
-                  const SizedBox(height: 10),
-                  _PurchaseExtrasSwitch(
-                    value: _showPurchaseExtras,
-                    hasData: _hasPurchaseExtras,
-                    onChanged: (value) => setState(() {
-                      _showPurchaseExtras = value;
-                      _scheduleDraftSave();
-                    }),
-                  ),
-                  if (_showPurchaseExtras) ...[
-                    const SizedBox(height: 8),
-                    LayoutBuilder(
-                      builder: (context, constraints) {
-                        final stack = constraints.maxWidth < 360;
-                        final fields = [
-                          _moneyField(_discountCtrl, 'Descuento'),
-                          _moneyField(_shippingCtrl, 'Transporte'),
-                          _moneyField(_additionalCtrl, 'Adicional'),
-                          _moneyField(_taxCtrl, 'Impuestos'),
-                        ];
-                        if (stack) {
-                          return Column(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
                             children: [
-                              for (final field in fields) ...[
-                                field,
-                                const SizedBox(height: 8),
-                              ],
+                              PurchaseIcon(
+                                Icons.receipt_long_outlined,
+                                color: theme.colorScheme.primary,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Orden de compra',
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              _StatusChip(label: '${_cart.length} items'),
+                              const SizedBox(width: 8),
+                              _PurchaseExtrasSwitch(
+                                value: _showPurchaseExtras,
+                                hasData: _hasPurchaseExtras,
+                                onChanged: (value) => setState(() {
+                                  _showPurchaseExtras = value;
+                                  _scheduleDraftSave();
+                                }),
+                              ),
                             ],
-                          );
-                        }
-                        return Column(
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(child: fields[0]),
-                                const SizedBox(width: 8),
-                                Expanded(child: fields[1]),
-                              ],
+                          ),
+                          const SizedBox(height: 12),
+                          DropdownButtonFormField<String?>(
+                            initialValue: _selectedSupplierId,
+                            isExpanded: true,
+                            decoration: _fieldDecoration(
+                              'Suplidor principal',
+                              icon: Icons.storefront_outlined,
+                            ),
+                            items: [
+                              const DropdownMenuItem<String?>(
+                                value: null,
+                                child: Text('Sin suplidor'),
+                              ),
+                              for (final s in _suppliers)
+                                DropdownMenuItem<String?>(
+                                  value: s.id,
+                                  child: Text(
+                                    s.commercialName,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                            ],
+                            onChanged: (value) => setState(() {
+                              _selectedSupplierId = value;
+                              _scheduleDraftSave();
+                            }),
+                          ),
+                          const SizedBox(height: 10),
+                          SizedBox(
+                            height: _cart.isEmpty
+                                ? 200
+                                : (MediaQuery.sizeOf(context).height * .3)
+                                      .clamp(160.0, 360.0),
+                            child: _cart.isEmpty
+                                ? _EmptyOrderState(
+                                    onAddExternal: _openExternalProductDialog,
+                                  )
+                                : ListView.separated(
+                                    itemCount: _cart.length,
+                                    separatorBuilder: (_, __) =>
+                                        const SizedBox(height: 6),
+                                    itemBuilder: (context, index) =>
+                                        _CartItemTile(
+                                          item: _cart[index],
+                                          money: _money,
+                                          qty: _qty,
+                                          onEdit: () => _editCartItem(index),
+                                          onDelete: () => setState(() {
+                                            _cart = [..._cart]..removeAt(index);
+                                            _scheduleDraftSave();
+                                          }),
+                                        ),
+                                  ),
+                          ),
+                          const SizedBox(height: 10),
+                          if (_showPurchaseExtras) ...[
+                            const SizedBox(height: 8),
+                            LayoutBuilder(
+                              builder: (context, constraints) {
+                                final stack = constraints.maxWidth < 360;
+                                final fields = [
+                                  _moneyField(_discountCtrl, 'Descuento'),
+                                  _moneyField(_shippingCtrl, 'Transporte'),
+                                  _moneyField(_additionalCtrl, 'Adicional'),
+                                  _moneyField(_taxCtrl, 'Impuestos'),
+                                ];
+                                if (stack) {
+                                  return Column(
+                                    children: [
+                                      for (final field in fields) ...[
+                                        field,
+                                        const SizedBox(height: 8),
+                                      ],
+                                    ],
+                                  );
+                                }
+                                return Column(
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Expanded(child: fields[0]),
+                                        const SizedBox(width: 8),
+                                        Expanded(child: fields[1]),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      children: [
+                                        Expanded(child: fields[2]),
+                                        const SizedBox(width: 8),
+                                        Expanded(child: fields[3]),
+                                      ],
+                                    ),
+                                  ],
+                                );
+                              },
                             ),
                             const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                Expanded(child: fields[2]),
-                                const SizedBox(width: 8),
-                                Expanded(child: fields[3]),
-                              ],
+                            TextField(
+                              controller: _instructionsCtrl,
+                              minLines: 1,
+                              maxLines: 2,
+                              decoration: _fieldDecoration(
+                                'Instrucciones o enlace para suplidor',
+                                icon: Icons.link_outlined,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            TextField(
+                              controller: _notesCtrl,
+                              minLines: 1,
+                              maxLines: 2,
+                              decoration: _fieldDecoration(
+                                'Observaciones internas',
+                                icon: Icons.notes_outlined,
+                              ),
                             ),
                           ],
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _instructionsCtrl,
-                      minLines: 1,
-                      maxLines: 2,
-                      decoration: _fieldDecoration(
-                        'Instrucciones o enlace para suplidor',
-                        icon: Icons.link_outlined,
+                          const SizedBox(height: 10),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _notesCtrl,
-                      minLines: 1,
-                      maxLines: 2,
-                      decoration: _fieldDecoration(
-                        'Observaciones internas',
-                        icon: Icons.notes_outlined,
-                      ),
-                    ),
-                  ],
+                  ),
                   const SizedBox(height: 10),
                   _TotalsPanel(
                     units: _draftUnitsLabel(_cart),
@@ -1274,12 +1329,12 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                   const SizedBox(height: 10),
                   LayoutBuilder(
                     builder: (context, constraints) {
-                      final stack = constraints.maxWidth < 380;
+                      final stack = constraints.maxWidth < 520;
                       final draft = OutlinedButton.icon(
                         onPressed: _cart.isEmpty || _saving
                             ? null
                             : () => _saveOrder(draft: true),
-                        icon: const Icon(Icons.save_outlined),
+                        icon: const PurchaseIcon(Icons.save_outlined),
                         label: const Text(
                           'Borrador',
                           overflow: TextOverflow.ellipsis,
@@ -1289,7 +1344,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                         onPressed: _cart.isEmpty || _saving
                             ? null
                             : _openDraftPdfPreview,
-                        icon: const Icon(Icons.picture_as_pdf_outlined),
+                        icon: const PurchaseIcon(Icons.picture_as_pdf_outlined),
                         label: const Text(
                           'PDF',
                           overflow: TextOverflow.ellipsis,
@@ -1306,21 +1361,34 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                                   strokeWidth: 2,
                                 ),
                               )
-                            : const Icon(Icons.picture_as_pdf_outlined),
+                            : const PurchaseIcon(Icons.picture_as_pdf_outlined),
                         label: const Text(
                           'Generar orden',
                           overflow: TextOverflow.ellipsis,
                         ),
                       );
                       if (stack) {
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                        return Row(
                           children: [
-                            draft,
-                            const SizedBox(height: 8),
-                            preview,
-                            const SizedBox(height: 8),
-                            generate,
+                            IconButton.outlined(
+                              tooltip: 'Guardar borrador',
+                              onPressed: _cart.isEmpty || _saving
+                                  ? null
+                                  : () => _saveOrder(draft: true),
+                              icon: const PurchaseIcon(Icons.save_outlined),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton.outlined(
+                              tooltip: 'PDF',
+                              onPressed: _cart.isEmpty || _saving
+                                  ? null
+                                  : _openDraftPdfPreview,
+                              icon: const PurchaseIcon(
+                                Icons.picture_as_pdf_outlined,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(child: generate),
                           ],
                         );
                       }
@@ -1345,7 +1413,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
   }
 
   Future<void> _confirmClearPurchase() async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showPurchaseDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Limpiar compra'),
@@ -1363,7 +1431,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
               foregroundColor: Theme.of(context).colorScheme.onError,
             ),
             onPressed: () => Navigator.pop(context, true),
-            icon: const Icon(Icons.delete_sweep_outlined),
+            icon: const PurchaseIcon(Icons.delete_sweep_outlined),
             label: const Text('Limpiar'),
           ),
         ],
@@ -1424,7 +1492,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                 'Categorías',
                 style: Theme.of(
                   context,
-                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900),
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 8),
               Expanded(
@@ -1453,7 +1521,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                   draftCategory = null;
                   draftSupplier = null;
                 }),
-                icon: const Icon(Icons.filter_alt_off_outlined),
+                icon: const PurchaseIcon(Icons.filter_alt_off_outlined),
                 label: const Text('Limpiar'),
               ),
               const SizedBox(height: 8),
@@ -1466,7 +1534,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                   });
                   Navigator.pop(context);
                 },
-                icon: const Icon(Icons.check_rounded),
+                icon: const PurchaseIcon(Icons.check_rounded),
                 label: const Text('Aplicar'),
               ),
             ],
@@ -1515,7 +1583,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                   setState(() => _statusFilter = draft);
                   Navigator.pop(context);
                 },
-                icon: const Icon(Icons.check_rounded),
+                icon: const PurchaseIcon(Icons.check_rounded),
                 label: const Text('Aplicar'),
               ),
             ],
@@ -1575,13 +1643,13 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                 _selectedInvoiceDetailId = null;
               });
             },
-            icon: const Icon(Icons.filter_alt_off_outlined),
+            icon: const PurchaseIcon(Icons.filter_alt_off_outlined),
             label: const Text('Limpiar'),
           ),
           const SizedBox(height: 8),
           FilledButton.icon(
             onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.check_rounded),
+            icon: const PurchaseIcon(Icons.check_rounded),
             label: const Text('Aplicar'),
           ),
         ],
@@ -1602,52 +1670,60 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
       barrierColor: Colors.black.withValues(alpha: .34),
       transitionDuration: const Duration(milliseconds: 220),
       pageBuilder: (context, animation, secondaryAnimation) {
-        return Align(
-          alignment: Alignment.centerRight,
-          child: Material(
-            color: Theme.of(context).colorScheme.surface,
-            child: SafeArea(
-              child: SizedBox(
-                width: width.clamp(300.0, 360.0),
-                height: double.infinity,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
+        return Theme(
+          data: purchaseVisualTheme(context),
+          child: Builder(
+            builder: (context) => Align(
+              alignment: Alignment.centerRight,
+              child: Material(
+                color: Theme.of(context).colorScheme.surface,
+                child: SafeArea(
+                  child: SizedBox(
+                    width: width < 480 ? width : 420.0,
+                    height: double.infinity,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Container(
-                            width: 38,
-                            height: 38,
-                            decoration: BoxDecoration(
-                              color: const Color(
-                                0xFF1957E6,
-                              ).withValues(alpha: .1),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Icon(icon, color: const Color(0xFF1957E6)),
+                          Row(
+                            children: [
+                              Container(
+                                width: 38,
+                                height: 38,
+                                decoration: BoxDecoration(
+                                  color: const Color(
+                                    0xFF1957E6,
+                                  ).withValues(alpha: .1),
+                                  borderRadius: BorderRadius.zero,
+                                ),
+                                child: PurchaseIcon(
+                                  icon,
+                                  color: const Color(0xFF1957E6),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.titleMedium
+                                      ?.copyWith(fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Cerrar',
+                                onPressed: () => Navigator.pop(context),
+                                icon: const PurchaseIcon(Icons.close_rounded),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.titleMedium
-                                  ?.copyWith(fontWeight: FontWeight.w900),
-                            ),
-                          ),
-                          IconButton(
-                            tooltip: 'Cerrar',
-                            onPressed: () => Navigator.pop(context),
-                            icon: const Icon(Icons.close_rounded),
-                          ),
+                          const SizedBox(height: 12),
+                          Expanded(child: child),
                         ],
                       ),
-                      const SizedBox(height: 12),
-                      Expanded(child: child),
-                    ],
+                    ),
                   ),
                 ),
               ),
@@ -1689,9 +1765,9 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
               children: [
                 Expanded(
                   child: Text(
-                    'Órdenes creadas',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w800,
+                    '${visible.length} órdenes',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
@@ -1744,7 +1820,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                         const SizedBox(height: 12),
                         FilledButton.icon(
                           onPressed: () => unawaited(_orderSearch.refresh()),
-                          icon: const Icon(Icons.refresh_rounded),
+                          icon: const PurchaseIcon(Icons.refresh_rounded),
                           label: const Text('Reintentar'),
                         ),
                       ],
@@ -1815,8 +1891,8 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                         builder: (context) {
                           final selectedOrder = selected;
                           return SizedBox(
-                            width: (MediaQuery.sizeOf(context).width * .38)
-                                .clamp(500.0, 680.0),
+                            width: (MediaQuery.sizeOf(context).width * .34)
+                                .clamp(340.0, 460.0),
                             child: _OrderDetailPanel(
                               order: selectedOrder,
                               money: _money,
@@ -1920,12 +1996,12 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
         elevation: 0,
         margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.zero,
           side: BorderSide(color: theme.dividerColor.withValues(alpha: .45)),
         ),
         child: InkWell(
           mouseCursor: SystemMouseCursors.click,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.zero,
           onTap: open,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(10, 8, 4, 8),
@@ -1936,7 +2012,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                   height: 50,
                   decoration: BoxDecoration(
                     color: const Color(0xFF1957E6),
-                    borderRadius: BorderRadius.circular(999),
+                    borderRadius: BorderRadius.zero,
                   ),
                 ),
                 const SizedBox(width: 9),
@@ -1950,7 +2026,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           fontSize: 13,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                       const SizedBox(height: 3),
@@ -1972,7 +2048,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                             _money(order.total),
                             style: const TextStyle(
                               fontSize: 12.5,
-                              fontWeight: FontWeight.w900,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ],
@@ -1984,7 +2060,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                   tooltip: 'Acciones',
                   onSelected: runAction,
                   itemBuilder: (_) => actions,
-                  icon: const Icon(Icons.more_vert_rounded, size: 20),
+                  icon: const PurchaseIcon(Icons.more_vert_rounded, size: 20),
                 ),
               ],
             ),
@@ -1997,69 +2073,31 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
       selectedTileColor: theme.colorScheme.primaryContainer.withValues(
         alpha: .35,
       ),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
       subtitle: Text(subtitle),
-      trailing: Wrap(
-        spacing: 4,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Text(
             _money(order.total),
-            style: const TextStyle(fontWeight: FontWeight.w800),
+            style: const TextStyle(fontWeight: FontWeight.w600),
           ),
           IconButton(
             tooltip: 'PDF',
-            icon: const Icon(Icons.picture_as_pdf_outlined),
+            icon: const PurchaseIcon(Icons.picture_as_pdf_outlined),
             onPressed: () => _openOrderPdfPreview(order),
           ),
-          IconButton(
-            tooltip: 'Aprobar',
-            icon: const Icon(Icons.verified_outlined),
-            onPressed: order.status == 'DRAFT'
-                ? () => _orderAction(
-                    () =>
-                        ref.read(purchasesRepositoryProvider).approve(order.id),
-                    'Orden aprobada.',
-                    permission: AppPermission.approvePurchases,
-                    reason: 'Aprobar orden de compra',
-                  )
-                : null,
+          PopupMenuButton<String>(
+            tooltip: 'Acciones de la orden',
+            onSelected: runAction,
+            itemBuilder: (_) => actions
+                .where(
+                  (entry) =>
+                      entry is! PopupMenuItem<String> || entry.value != 'pdf',
+                )
+                .toList(),
+            icon: const PurchaseIcon(Icons.more_vert_rounded),
           ),
-          IconButton(
-            tooltip: 'Enviada',
-            icon: const Icon(Icons.send_outlined),
-            onPressed: ['APPROVED', 'DRAFT'].contains(order.status)
-                ? () => _sendOrderPdfToSupplier(order)
-                : null,
-          ),
-          IconButton(
-            tooltip: 'Registrar recepción',
-            icon: const Icon(Icons.inventory_outlined),
-            onPressed:
-                [
-                  'SENT',
-                  'APPROVED',
-                  'PARTIALLY_RECEIVED',
-                ].contains(order.status)
-                ? () => _receive(order)
-                : null,
-          ),
-          IconButton(
-            tooltip: 'Duplicar',
-            icon: const Icon(Icons.copy_outlined),
-            onPressed: () => _orderAction(
-              () => ref.read(purchasesRepositoryProvider).duplicate(order.id),
-              'Orden duplicada.',
-              permission: AppPermission.createPurchases,
-              reason: 'Duplicar orden de compra',
-            ),
-          ),
-          if (canDelete)
-            IconButton(
-              tooltip: 'Eliminar',
-              color: Theme.of(context).colorScheme.error,
-              icon: const Icon(Icons.delete_outline_rounded),
-              onPressed: () => _confirmDeleteOrder(order),
-            ),
         ],
       ),
       onTap: open,
@@ -2081,27 +2119,35 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
         if (!isMobile)
           Padding(
             padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Suplidores',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-                FilledButton.icon(
-                  onPressed: () => _supplierDialog(),
-                  icon: const Icon(Icons.add_business_outlined),
-                  label: const Text('Crear suplidor'),
-                ),
-              ],
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                '${_suppliers.length} suplidores',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
             ),
           ),
         Expanded(
           child: _suppliers.isEmpty
-              ? const Center(child: Text('No hay suplidores.'))
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const PurchaseIcon(Icons.storefront_outlined, size: 44),
+                      const SizedBox(height: 12),
+                      const Text('No hay suplidores.'),
+                      const SizedBox(height: 16),
+                      FilledButton.icon(
+                        onPressed: () => _supplierDialog(),
+                        icon: const PurchaseIcon(
+                          Icons.add_business_outlined,
+                          size: 20,
+                        ),
+                        label: const Text('Nuevo suplidor'),
+                      ),
+                    ],
+                  ),
+                )
               : Row(
                   children: [
                     Expanded(
@@ -2118,7 +2164,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                                 vertical: 4,
                               ),
                               shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
+                                borderRadius: BorderRadius.zero,
                                 side: BorderSide(
                                   color: Theme.of(
                                     context,
@@ -2133,7 +2179,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                                   8,
                                   4,
                                 ),
-                                leading: Icon(
+                                leading: PurchaseIcon(
                                   s.isActive
                                       ? Icons.storefront_outlined
                                       : Icons.block_outlined,
@@ -2143,7 +2189,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
-                                    fontWeight: FontWeight.w900,
+                                    fontWeight: FontWeight.w600,
                                   ),
                                 ),
                                 subtitle: Text(
@@ -2153,7 +2199,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                 ),
-                                trailing: const Icon(
+                                trailing: const PurchaseIcon(
                                   Icons.chevron_right_rounded,
                                 ),
                                 onTap: () => _showSupplierDetail(s),
@@ -2166,7 +2212,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                                 .colorScheme
                                 .primaryContainer
                                 .withValues(alpha: .35),
-                            leading: Icon(
+                            leading: PurchaseIcon(
                               s.isActive
                                   ? Icons.storefront_outlined
                                   : Icons.block_outlined,
@@ -2174,7 +2220,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                             title: Text(
                               s.commercialName,
                               style: const TextStyle(
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
                             subtitle: Text(
@@ -2190,7 +2236,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                             trailing: Text(
                               _money(s.totalPurchased),
                               style: const TextStyle(
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
                             onTap: () {
@@ -2212,7 +2258,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                           final selectedSupplier = selected;
                           return SizedBox(
                             width: (MediaQuery.sizeOf(context).width * .35)
-                                .clamp(460.0, 640.0),
+                                .clamp(330.0, 520.0),
                             child: _SupplierDetailPanel(
                               supplier: selectedSupplier,
                               money: _money,
@@ -2305,8 +2351,8 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                     if (isWide)
                       SizedBox(
                         width: (MediaQuery.sizeOf(context).width * .44).clamp(
+                          380.0,
                           620.0,
-                          840.0,
                         ),
                         child: _PurchaseInvoiceDetailPanel(
                           invoice: selected,
@@ -2334,92 +2380,70 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     required bool isMobile,
     required int resultCount,
   }) {
-    final title = Text(
-      'Facturas de compra',
-      style: Theme.of(
-        context,
-      ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-    );
-    final search = TextField(
-      controller: _invoiceSearchCtrl,
-      decoration: _fieldDecoration('Buscar factura', icon: Icons.search),
-    );
-    final from = TextField(
-      controller: _invoiceFromCtrl,
-      keyboardType: TextInputType.datetime,
-      decoration: _fieldDecoration('Desde', icon: Icons.event_outlined),
-    );
-    final to = TextField(
-      controller: _invoiceToCtrl,
-      keyboardType: TextInputType.datetime,
-      decoration: _fieldDecoration('Hasta', icon: Icons.event_outlined),
-    );
-    final upload = FilledButton.icon(
-      onPressed: _uploadPurchaseInvoiceDialog,
-      icon: const Icon(Icons.upload_file_outlined),
-      label: const Text('Subir factura'),
-    );
-    final clear = IconButton.filledTonal(
+    final clear = IconButton(
       tooltip: 'Limpiar filtros',
-      onPressed: () {
-        setState(() {
-          _invoiceSupplierFilterId = null;
-          _invoiceSearchCtrl.clear();
-          _invoiceFromCtrl.clear();
-          _invoiceToCtrl.clear();
-          _selectedInvoiceDetailId = null;
-        });
-      },
-      icon: const Icon(Icons.filter_alt_off_outlined),
+      onPressed: () => setState(() {
+        _invoiceSupplierFilterId = null;
+        _invoiceSearchCtrl.clear();
+        _invoiceFromCtrl.clear();
+        _invoiceToCtrl.clear();
+        _selectedInvoiceDetailId = null;
+      }),
+      icon: const PurchaseIcon(Icons.filter_alt_off_outlined),
     );
-
     return Padding(
-      padding: EdgeInsets.all(isMobile ? 10 : 12),
-      child: isMobile
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                title,
-                const SizedBox(height: 8),
-                _invoiceSupplierFilter(),
-                const SizedBox(height: 8),
-                search,
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(child: from),
-                    const SizedBox(width: 8),
-                    Expanded(child: to),
-                  ],
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              SizedBox(
+                width: 300,
+                child: TextField(
+                  controller: _invoiceSearchCtrl,
+                  decoration: _fieldDecoration(
+                    'Buscar factura',
+                    icon: Icons.search,
+                  ),
                 ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(child: upload),
-                    const SizedBox(width: 8),
-                    clear,
-                  ],
+              ),
+              SizedBox(width: 240, child: _invoiceSupplierFilter()),
+              SizedBox(
+                width: 130,
+                child: TextField(
+                  controller: _invoiceFromCtrl,
+                  keyboardType: TextInputType.datetime,
+                  decoration: _fieldDecoration(
+                    'Desde',
+                    icon: Icons.event_outlined,
+                  ),
                 ),
-                const SizedBox(height: 6),
-                Text('$resultCount registros'),
-              ],
-            )
-          : Row(
-              children: [
-                Expanded(child: title),
-                SizedBox(width: 260, child: _invoiceSupplierFilter()),
-                const SizedBox(width: 10),
-                SizedBox(width: 260, child: search),
-                const SizedBox(width: 10),
-                SizedBox(width: 130, child: from),
-                const SizedBox(width: 8),
-                SizedBox(width: 130, child: to),
-                const SizedBox(width: 8),
-                clear,
-                const SizedBox(width: 8),
-                upload,
-              ],
-            ),
+              ),
+              SizedBox(
+                width: 130,
+                child: TextField(
+                  controller: _invoiceToCtrl,
+                  keyboardType: TextInputType.datetime,
+                  decoration: _fieldDecoration(
+                    'Hasta',
+                    icon: Icons.event_outlined,
+                  ),
+                ),
+              ),
+              clear,
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '$resultCount registros',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ),
     );
   }
 
@@ -2479,12 +2503,12 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
         elevation: 0,
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.zero,
           side: BorderSide(color: theme.dividerColor.withValues(alpha: .45)),
         ),
         child: InkWell(
           mouseCursor: SystemMouseCursors.click,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.zero,
           onTap: open,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(10, 8, 8, 8),
@@ -2495,9 +2519,9 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                   height: 38,
                   decoration: BoxDecoration(
                     color: theme.colorScheme.primaryContainer,
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.zero,
                   ),
-                  child: Icon(
+                  child: PurchaseIcon(
                     _invoiceIsImage(invoice)
                         ? Icons.image_outlined
                         : _invoiceIsPdf(invoice)
@@ -2517,7 +2541,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           fontSize: 13,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                       const SizedBox(height: 3),
@@ -2544,7 +2568,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                   ),
                 ),
                 const SizedBox(width: 6),
-                const Icon(Icons.chevron_right_rounded),
+                const PurchaseIcon(Icons.chevron_right_rounded),
               ],
             ),
           ),
@@ -2556,12 +2580,12 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
       selectedTileColor: theme.colorScheme.primaryContainer.withValues(
         alpha: .35,
       ),
-      leading: const Icon(Icons.description_outlined),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+      leading: const PurchaseIcon(Icons.description_outlined),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
       subtitle: Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
       trailing: Text(
         _dateLabel(invoice.invoiceDate),
-        style: const TextStyle(fontWeight: FontWeight.w800),
+        style: const TextStyle(fontWeight: FontWeight.w600),
       ),
       onTap: open,
     );
@@ -2572,22 +2596,23 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     return ListView.separated(
       padding: EdgeInsets.all(isMobile ? 10 : 12),
       itemCount: _recommendations.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      separatorBuilder: (_, __) =>
+          const Divider(height: 1, color: AppColors.border),
       itemBuilder: (context, index) {
         final r = _recommendations[index];
         return Card(
           elevation: 0,
           margin: EdgeInsets.zero,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-            side: BorderSide(color: Theme.of(context).dividerColor),
+            borderRadius: BorderRadius.zero,
+            side: BorderSide.none,
           ),
           child: isMobile
               ? ListTile(
                   dense: true,
                   contentPadding: const EdgeInsets.fromLTRB(10, 5, 8, 5),
                   leading: ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.zero,
                     child: SizedBox(
                       width: 44,
                       height: 44,
@@ -2597,7 +2622,9 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                         productName: r.product.nombre,
                         originalUrl: r.product.originalFotoUrl,
                         fit: BoxFit.cover,
-                        fallback: const Icon(Icons.inventory_2_outlined),
+                        fallback: const PurchaseIcon(
+                          Icons.inventory_2_outlined,
+                        ),
                       ),
                     ),
                   ),
@@ -2607,7 +2634,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 13,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                   subtitle: Text(
@@ -2625,11 +2652,8 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                       padding: EdgeInsets.zero,
                       onPressed: r.suggestedQuantity <= 0
                           ? null
-                          : () => _quickAddProduct(
-                              r.product,
-                              initialQty: r.suggestedQuantity,
-                            ),
-                      icon: const Icon(
+                          : () => _addRecommendation(r),
+                      icon: const PurchaseIcon(
                         Icons.add_shopping_cart_outlined,
                         size: 18,
                       ),
@@ -2646,12 +2670,12 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                       productName: r.product.nombre,
                       originalUrl: r.product.originalFotoUrl,
                       fit: BoxFit.cover,
-                      fallback: const Icon(Icons.inventory_2_outlined),
+                      fallback: const PurchaseIcon(Icons.inventory_2_outlined),
                     ),
                   ),
                   title: Text(
                     r.product.nombre,
-                    style: const TextStyle(fontWeight: FontWeight.w800),
+                    style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                   subtitle: Text(
                     '${r.reason} · Stock ${_recommendationQty(r.stock, r)} · Ordenado ${_recommendationQty(r.alreadyOrdered, r)} · Sugerido ${_recommendationQty(r.suggestedQuantity, r)}',
@@ -2659,11 +2683,8 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                   trailing: FilledButton.tonalIcon(
                     onPressed: r.suggestedQuantity <= 0
                         ? null
-                        : () => _quickAddProduct(
-                            r.product,
-                            initialQty: r.suggestedQuantity,
-                          ),
-                    icon: const Icon(Icons.add_shopping_cart_outlined),
+                        : () => _addRecommendation(r),
+                    icon: const PurchaseIcon(Icons.add_shopping_cart_outlined),
                     label: const Text('Agregar'),
                   ),
                 ),
@@ -2672,7 +2693,20 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     );
   }
 
-  void _quickAddProduct(ProductModel product, {double initialQty = 1}) {
+  Future<void> _addRecommendation(
+    PurchaseRecommendationModel recommendation,
+  ) async {
+    final added = _quickAddProduct(
+      recommendation.product,
+      initialQty: recommendation.suggestedQuantity,
+    );
+    if (!added) return;
+    _draftSaveTimer?.cancel();
+    await _saveDraft();
+    if (mounted) _snack('Producto agregado a Nueva compra.');
+  }
+
+  bool _quickAddProduct(ProductModel product, {double initialQty = 1}) {
     final unit = _unitForPurchaseProduct(product);
     final quantity = initialQty.clamp(.0001, double.infinity).toDouble();
     final quantityError = validateQuantityForUnit(
@@ -2682,7 +2716,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     );
     if (quantityError != null) {
       _snack(quantityError);
-      return;
+      return false;
     }
     final isUuid = RegExp(
       r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$',
@@ -2722,6 +2756,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
       }
       _scheduleDraftSave();
     });
+    return true;
   }
 
   Future<void> _openExternalProductDialog() async {
@@ -2730,7 +2765,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     final cost = TextEditingController();
     final description = TextEditingController();
     bool createOnReceipt = false;
-    final ok = await showDialog<bool>(
+    final ok = await showPurchaseDialog<bool>(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
@@ -2825,7 +2860,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     );
     final cost = TextEditingController(text: item.unitCost.toStringAsFixed(2));
     String? errorText;
-    final ok = await showDialog<bool>(
+    final ok = await showPurchaseDialog<bool>(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
@@ -3000,7 +3035,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
       reason: 'Eliminar orden de compra',
     );
     if (!allowed || !mounted) return;
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showPurchaseDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Eliminar orden de compra'),
@@ -3018,7 +3053,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
               foregroundColor: Theme.of(context).colorScheme.onError,
             ),
             onPressed: () => Navigator.pop(context, true),
-            icon: const Icon(Icons.delete_outline_rounded),
+            icon: const PurchaseIcon(Icons.delete_outline_rounded),
             label: const Text('Eliminar'),
           ),
         ],
@@ -3055,7 +3090,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     final inventoryEnabled =
         ref.read(companySettingsProvider).valueOrNull?.inventoryEnabled ?? true;
     if (!inventoryEnabled) {
-      final register = await showDialog<bool>(
+      final register = await showPurchaseDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('Control de inventario desactivado'),
@@ -3085,7 +3120,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
       );
       return;
     }
-    final update = await showDialog<bool>(
+    final update = await showPurchaseDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Registrar recepción'),
@@ -3178,14 +3213,13 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     final bytes = await buildPurchaseOrderPdf(order: order, company: company);
     final fileName = _purchaseOrderPdfFileName(order);
     if (!mounted) return;
-    await showDialog<void>(
+    await showPdfPreviewPanel<void>(
       context: context,
+      barrierLabel: 'Vista previa de la orden de compra',
       builder: (dialogContext) {
         var busy = false;
         String? notice;
         bool noticeIsError = false;
-        final media = MediaQuery.sizeOf(dialogContext);
-        final compact = media.width < 560;
         return StatefulBuilder(
           builder: (context, setDialogState) {
             void showNotice(String message, {bool isError = false}) {
@@ -3242,113 +3276,59 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
               }
             }
 
-            return Dialog(
-              backgroundColor: Colors.white,
-              surfaceTintColor: Colors.white,
-              insetPadding: EdgeInsets.symmetric(
-                horizontal: compact ? 6 : 20,
-                vertical: compact ? 6 : 16,
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: SizedBox(
-                width: compact ? media.width - 12 : media.width * .94,
-                height: compact ? media.height * .96 : media.height * .92,
-                child: Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 8, 8, 6),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.picture_as_pdf_outlined),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'PDF orden de compra · ${order.orderNumber}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ),
-                          if (busy)
-                            const Padding(
-                              padding: EdgeInsets.only(right: 10),
-                              child: SizedBox.square(
-                                dimension: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              ),
-                            ),
-                          PdfActionMenu(
-                            bytes: bytes,
-                            fileName: fileName,
-                            compact: compact,
-                            shareClientLabel: 'Compartir con suplidor',
-                            onShareWithClient: busy ? null : shareWithSupplier,
-                          ),
-                          IconButton(
-                            onPressed: () => Navigator.pop(context),
-                            icon: const Icon(Icons.close),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Divider(height: 1),
-                    if (notice != null)
-                      Container(
-                        width: double.infinity,
-                        margin: const EdgeInsets.fromLTRB(12, 10, 12, 6),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          color: noticeIsError
-                              ? const Color(0xFFFFEBEE)
-                              : const Color(0xFFE8F5E9),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: noticeIsError
-                                ? const Color(0xFFE57373)
-                                : const Color(0xFF81C784),
-                          ),
-                        ),
-                        child: Text(
-                          notice!,
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            color: noticeIsError
-                                ? const Color(0xFFB71C1C)
-                                : const Color(0xFF1B5E20),
-                          ),
-                        ),
-                      ),
-                    Expanded(
-                      child: ColoredBox(
-                        color: Colors.white,
-                        child: PdfPreview(
-                          canChangePageFormat: false,
-                          canChangeOrientation: false,
-                          canDebug: false,
-                          allowPrinting: false,
-                          allowSharing: false,
-                          maxPageWidth: compact ? 700 : 980,
-                          scrollViewDecoration: const BoxDecoration(
-                            color: Colors.white,
-                          ),
-                          pdfPreviewPageDecoration: const BoxDecoration(
-                            color: Colors.white,
-                            boxShadow: <BoxShadow>[],
-                          ),
-                          build: (_) async => bytes,
-                        ),
-                      ),
-                    ),
-                  ],
+            return Column(
+              children: [
+                PdfPreviewPanelHeader(
+                  title: 'PDF orden de compra · ${order.orderNumber}',
+                  onClose: () => Navigator.of(dialogContext).pop(),
                 ),
-              ),
+                if (busy) const LinearProgressIndicator(minHeight: 2),
+                if (notice != null)
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: noticeIsError
+                          ? const Color(0xFFFFEBEE)
+                          : const Color(0xFFE8F5E9),
+                      borderRadius: BorderRadius.zero,
+                      border: Border.all(
+                        color: noticeIsError
+                            ? const Color(0xFFE57373)
+                            : const Color(0xFF81C784),
+                      ),
+                    ),
+                    child: Text(
+                      notice!,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w500,
+                        color: noticeIsError
+                            ? const Color(0xFFB71C1C)
+                            : const Color(0xFF1B5E20),
+                      ),
+                    ),
+                  ),
+
+                Expanded(
+                  child: PdfPreviewStage(
+                    bytes: bytes,
+                    actions: [
+                      PdfActionMenu(
+                        bytes: bytes,
+                        fileName: fileName,
+                        circular: true,
+                        iconAsset: PdfPanelIcons.share,
+                        shareClientLabel: 'Compartir con suplidor',
+                        onShareWithClient: busy ? null : shareWithSupplier,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             );
           },
         );
@@ -3451,6 +3431,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
   }
 
   Future<void> _uploadPurchaseInvoiceDialog() async {
+    if (_saving) return;
     if (_suppliers.isEmpty) {
       _snack('Primero crea un suplidor para asociar la factura.');
       return;
@@ -3463,7 +3444,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     final numberCtrl = TextEditingController();
     final notesCtrl = TextEditingController();
 
-    final ok = await showDialog<bool>(
+    final ok = await showPurchaseDialog<bool>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) {
@@ -3533,10 +3514,10 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                           withData: true,
                         );
                         final file = result?.files.single;
-                        if (file == null) return;
+                        if (file == null || !context.mounted) return;
                         setDialogState(() => pickedFile = file);
                       },
-                      icon: const Icon(Icons.attach_file_outlined),
+                      icon: const PurchaseIcon(Icons.attach_file_outlined),
                       label: Text(
                         pickedFile == null
                             ? 'Seleccionar archivo'
@@ -3573,8 +3554,23 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                 child: const Text('Cancelar'),
               ),
               FilledButton.icon(
-                onPressed: () => Navigator.pop(context, true),
-                icon: const Icon(Icons.cloud_upload_outlined),
+                onPressed: () {
+                  if (supplierId == null ||
+                      pickedFile?.bytes?.isNotEmpty != true) {
+                    _snack(
+                      supplierId == null
+                          ? 'Selecciona un suplidor.'
+                          : 'Selecciona un archivo válido para la factura.',
+                    );
+                    return;
+                  }
+                  if (pickedFile!.size > 20 * 1024 * 1024) {
+                    _snack('El archivo debe tener un tamaño máximo de 20 MB.');
+                    return;
+                  }
+                  Navigator.pop(context, true);
+                },
+                icon: const PurchaseIcon(Icons.cloud_upload_outlined),
                 label: const Text('Guardar factura'),
               ),
             ],
@@ -3593,6 +3589,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
       _snack('Selecciona el archivo de la factura.');
       return;
     }
+    setState(() => _saving = true);
     try {
       final invoice = await ref
           .read(purchasesRepositoryProvider)
@@ -3602,6 +3599,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
             invoiceNumber: numberCtrl.text,
             notes: notesCtrl.text,
           );
+      if (!mounted) return;
       setState(() {
         _purchaseInvoices = [
           invoice,
@@ -3619,11 +3617,13 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
               'No se pudo guardar la factura de compra. Inténtalo nuevamente.',
         ),
       );
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
   void _showPurchaseInvoiceDetail(PurchaseInvoiceModel invoice) {
-    showModalBottomSheet<void>(
+    showPurchaseSheet<void>(
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
@@ -3658,7 +3658,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
   }
 
   Future<void> _confirmDeleteInvoice(PurchaseInvoiceModel invoice) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showPurchaseDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Eliminar factura'),
@@ -3676,7 +3676,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
               foregroundColor: Theme.of(context).colorScheme.onError,
             ),
             onPressed: () => Navigator.pop(context, true),
-            icon: const Icon(Icons.delete_outline_rounded),
+            icon: const PurchaseIcon(Icons.delete_outline_rounded),
             label: const Text('Eliminar'),
           ),
         ],
@@ -3716,7 +3716,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     final isMobile = MediaQuery.sizeOf(context).width < 720;
     bool? ok;
     if (isMobile) {
-      ok = await showModalBottomSheet<bool>(
+      ok = await showPurchaseSheet<bool>(
         context: context,
         isScrollControlled: true,
         useSafeArea: true,
@@ -3732,13 +3732,14 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
         ),
       );
     } else {
-      ok = await showDialog<bool>(
+      ok = await showPurchaseDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
           title: Text(supplier == null ? 'Crear suplidor' : 'Editar suplidor'),
           content: SizedBox(
             width: 460,
             child: SingleChildScrollView(
+              padding: const EdgeInsets.only(top: 8),
               child: _SupplierEditorFields(
                 name: name,
                 contact: contact,
@@ -3807,7 +3808,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
   }
 
   void _showOrderDetail(PurchaseOrderModel order, {bool canDelete = false}) {
-    showModalBottomSheet<void>(
+    showPurchaseSheet<void>(
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
@@ -3835,7 +3836,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
   }
 
   void _showSupplierDetail(SupplierModel supplier) {
-    showModalBottomSheet<void>(
+    showPurchaseSheet<void>(
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
@@ -3859,7 +3860,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
   }
 
   void _openCartSheet() {
-    showModalBottomSheet<void>(
+    showPurchaseSheet<void>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
@@ -3873,10 +3874,10 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
   InputDecoration _fieldDecoration(String label, {IconData? icon}) =>
       InputDecoration(
         labelText: label,
-        prefixIcon: icon == null ? null : Icon(icon, size: 18),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        prefixIcon: icon == null ? null : PurchaseIcon(icon, size: 18),
+        border: OutlineInputBorder(borderRadius: BorderRadius.zero),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.zero,
           borderSide: BorderSide(
             color: Theme.of(context).dividerColor.withValues(alpha: .55),
           ),
@@ -3895,9 +3896,12 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     decoration: _fieldDecoration(label),
   );
 
-  void _snack(String message) => ScaffoldMessenger.of(
+  void _snack(String message) => AppFeedback.showToast(
     context,
-  ).showSnackBar(SnackBar(content: Text(message)));
+    title: 'Compras',
+    body: message,
+    scope: 'Compras',
+  );
   String _money(double value) => formatRdCurrencyAccounting(value);
   String _qty(num value) =>
       value % 1 == 0 ? value.toStringAsFixed(0) : value.toStringAsFixed(2);
@@ -4134,9 +4138,9 @@ class _PurchaseInvoiceDetailPanel extends StatelessWidget {
                   height: 44,
                   decoration: BoxDecoration(
                     color: theme.colorScheme.primaryContainer,
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.zero,
                   ),
-                  child: Icon(
+                  child: PurchaseIcon(
                     Icons.description_outlined,
                     color: theme.colorScheme.onPrimaryContainer,
                   ),
@@ -4154,7 +4158,7 @@ class _PurchaseInvoiceDetailPanel extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           fontSize: 18,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                       Text(
@@ -4171,7 +4175,7 @@ class _PurchaseInvoiceDetailPanel extends StatelessWidget {
                     tooltip: 'Eliminar',
                     color: theme.colorScheme.error,
                     onPressed: onDelete,
-                    icon: const Icon(Icons.delete_outline_rounded),
+                    icon: const PurchaseIcon(Icons.delete_outline_rounded),
                   ),
               ],
             ),
@@ -4265,7 +4269,7 @@ class _PurchaseInvoiceDetailPanel extends StatelessWidget {
                 Expanded(
                   child: FilledButton.icon(
                     onPressed: onOpen,
-                    icon: const Icon(Icons.open_in_new_outlined),
+                    icon: const PurchaseIcon(Icons.open_in_new_outlined),
                     label: const Text('Abrir archivo'),
                   ),
                 ),
@@ -4275,7 +4279,7 @@ class _PurchaseInvoiceDetailPanel extends StatelessWidget {
                     tooltip: 'Eliminar',
                     color: theme.colorScheme.error,
                     onPressed: onDelete,
-                    icon: const Icon(Icons.delete_outline_rounded),
+                    icon: const PurchaseIcon(Icons.delete_outline_rounded),
                   ),
               ],
             ),
@@ -4299,17 +4303,17 @@ class _EmptyPurchaseInvoices extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.folder_copy_outlined, size: 46),
+            const PurchaseIcon(Icons.folder_copy_outlined, size: 46),
             const SizedBox(height: 12),
             const Text(
               'No hay facturas de compra guardadas.',
               textAlign: TextAlign.center,
-              style: TextStyle(fontWeight: FontWeight.w800),
+              style: TextStyle(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 12),
             FilledButton.icon(
               onPressed: onUpload,
-              icon: const Icon(Icons.upload_file_outlined),
+              icon: const PurchaseIcon(Icons.upload_file_outlined),
               label: const Text('Subir primera factura'),
             ),
           ],
@@ -4337,14 +4341,14 @@ class _InvoicePreview extends StatelessWidget {
     final theme = Theme.of(context);
     final url = invoice.fileUrl.trim();
     return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.zero,
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: theme.colorScheme.surfaceContainerHighest.withValues(
             alpha: .35,
           ),
           border: Border.all(color: theme.dividerColor.withValues(alpha: .7)),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.zero,
         ),
         child: url.isEmpty
             ? const Center(child: Text('Archivo no disponible'))
@@ -4403,13 +4407,13 @@ class _PreviewFallback extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 42),
+            PurchaseIcon(icon, size: 42),
             const SizedBox(height: 10),
             Text(message, textAlign: TextAlign.center),
             const SizedBox(height: 12),
             FilledButton.icon(
               onPressed: onOpen,
-              icon: const Icon(Icons.open_in_new_outlined),
+              icon: const PurchaseIcon(Icons.open_in_new_outlined),
               label: const Text('Abrir archivo'),
             ),
           ],
@@ -4436,13 +4440,13 @@ class _InfoPill extends StatelessWidget {
       constraints: const BoxConstraints(minWidth: 140),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.zero,
         border: Border.all(color: Theme.of(context).dividerColor),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 18),
+          PurchaseIcon(icon, size: 18),
           const SizedBox(width: 8),
           Flexible(
             child: Column(
@@ -4453,14 +4457,14 @@ class _InfoPill extends StatelessWidget {
                   style: const TextStyle(
                     color: AppColors.textSecondary,
                     fontSize: 11,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
                 Text(
                   value.isEmpty ? 'Sin fecha' : value,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w900),
+                  style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
               ],
             ),
@@ -4490,14 +4494,14 @@ class _DetailRow extends StatelessWidget {
               label,
               style: const TextStyle(
                 color: AppColors.textSecondary,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ),
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(fontWeight: FontWeight.w800),
+              style: const TextStyle(fontWeight: FontWeight.w600),
             ),
           ),
         ],
@@ -4567,7 +4571,7 @@ class _OrderDetailPanel extends ConsumerWidget {
                   children: [
                     Row(
                       children: [
-                        Icon(
+                        PurchaseIcon(
                           Icons.receipt_long_outlined,
                           color: theme.colorScheme.primary,
                         ),
@@ -4578,7 +4582,7 @@ class _OrderDetailPanel extends ConsumerWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w900,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ),
@@ -4590,38 +4594,51 @@ class _OrderDetailPanel extends ConsumerWidget {
                       selected.supplier?.commercialName ?? 'Sin suplidor',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w700),
+                      style: const TextStyle(fontWeight: FontWeight.w500),
                     ),
                     const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
+                    Row(
                       children: [
-                        OutlinedButton.icon(
+                        IconButton.outlined(
+                          tooltip: 'PDF',
                           onPressed: onPdf,
-                          icon: const Icon(Icons.picture_as_pdf_outlined),
-                          label: const Text('PDF'),
+                          icon: const PurchaseIcon(
+                            Icons.picture_as_pdf_outlined,
+                          ),
                         ),
-                        FilledButton.icon(
-                          onPressed: onSend,
-                          icon: const Icon(Icons.send_outlined),
-                          label: const Text('Enviar'),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: FilledButton.icon(
+                            onPressed: onSend,
+                            icon: const PurchaseIcon(Icons.send_outlined),
+                            label: const Text('Enviar'),
+                          ),
                         ),
-                        OutlinedButton.icon(
+                        const SizedBox(width: 8),
+                        IconButton.outlined(
+                          tooltip: 'Registrar recepción',
                           onPressed: onReceive,
-                          icon: const Icon(Icons.inventory_outlined),
-                          label: const Text('Recibir'),
+                          icon: const PurchaseIcon(Icons.inventory_outlined),
                         ),
-                        IconButton.filledTonal(
-                          onPressed: onDuplicate,
-                          tooltip: 'Duplicar',
-                          icon: const Icon(Icons.copy_outlined),
-                        ),
-                        IconButton.filledTonal(
-                          onPressed: onDelete,
-                          tooltip: 'Eliminar',
-                          icon: const Icon(Icons.delete_outline_rounded),
-                          color: theme.colorScheme.error,
+                        PopupMenuButton<String>(
+                          tooltip: 'Más acciones',
+                          icon: const PurchaseIcon(Icons.more_vert_rounded),
+                          onSelected: (action) {
+                            if (action == 'duplicate') onDuplicate?.call();
+                            if (action == 'delete') onDelete?.call();
+                          },
+                          itemBuilder: (_) => [
+                            PopupMenuItem(
+                              value: 'duplicate',
+                              enabled: onDuplicate != null,
+                              child: const Text('Duplicar'),
+                            ),
+                            PopupMenuItem(
+                              value: 'delete',
+                              enabled: onDelete != null,
+                              child: const Text('Eliminar'),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -4640,11 +4657,16 @@ class _OrderDetailPanel extends ConsumerWidget {
                         itemBuilder: (context, index) {
                           final item = selected.items[index];
                           return Container(
-                            padding: const EdgeInsets.all(10),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 4,
+                              vertical: 8,
+                            ),
                             decoration: BoxDecoration(
-                              color: theme.colorScheme.surfaceContainerHighest
-                                  .withValues(alpha: .45),
-                              borderRadius: BorderRadius.circular(10),
+                              color: AppColors.surface,
+                              border: const Border(
+                                bottom: BorderSide(color: AppColors.border),
+                              ),
+                              borderRadius: BorderRadius.zero,
                             ),
                             child: Row(
                               children: [
@@ -4655,10 +4677,11 @@ class _OrderDetailPanel extends ConsumerWidget {
                                     children: [
                                       Text(
                                         item.productName,
-                                        maxLines: 1,
+                                        maxLines: 2,
                                         overflow: TextOverflow.ellipsis,
                                         style: const TextStyle(
-                                          fontWeight: FontWeight.w800,
+                                          fontWeight: FontWeight.w500,
+                                          fontSize: 12,
                                         ),
                                       ),
                                       Text(
@@ -4701,7 +4724,7 @@ class _OrderDetailPanel extends ConsumerWidget {
                                 Text(
                                   money(item.subtotal),
                                   style: const TextStyle(
-                                    fontWeight: FontWeight.w900,
+                                    fontWeight: FontWeight.w600,
                                   ),
                                 ),
                               ],
@@ -4742,7 +4765,7 @@ class _PurchaseQtyChip extends StatelessWidget {
           TextSpan(text: '$label: '),
           TextSpan(
             text: value,
-            style: const TextStyle(fontWeight: FontWeight.w900),
+            style: const TextStyle(fontWeight: FontWeight.w600),
           ),
         ],
       ),
@@ -4788,7 +4811,7 @@ class _SupplierEditorSheet extends StatelessWidget {
                   IconButton(
                     tooltip: 'Cerrar',
                     onPressed: () => Navigator.pop(context, false),
-                    icon: const Icon(Icons.close_rounded),
+                    icon: const PurchaseIcon(Icons.close_rounded),
                   ),
                   Expanded(
                     child: Text(
@@ -4798,13 +4821,13 @@ class _SupplierEditorSheet extends StatelessWidget {
                       style: const TextStyle(
                         color: AppColors.textPrimary,
                         fontSize: 20,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
                   FilledButton.icon(
                     onPressed: () => Navigator.pop(context, true),
-                    icon: const Icon(Icons.check_rounded, size: 18),
+                    icon: const PurchaseIcon(Icons.check_rounded, size: 18),
                     label: const Text('Guardar'),
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.secondary,
@@ -4952,7 +4975,7 @@ class _SupplierTextField extends StatelessWidget {
         maxLines: maxLines,
         decoration: InputDecoration(
           labelText: label,
-          prefixIcon: Icon(icon),
+          prefixIcon: PurchaseIcon(icon),
           filled: true,
           fillColor: Colors.white,
           isDense: !mobile,
@@ -4961,11 +4984,11 @@ class _SupplierTextField extends StatelessWidget {
             vertical: mobile ? 16 : 13,
           ),
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(mobile ? 8 : 10),
+            borderRadius: BorderRadius.zero,
             borderSide: const BorderSide(color: AppColors.border),
           ),
           enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(mobile ? 8 : 10),
+            borderRadius: BorderRadius.zero,
             borderSide: const BorderSide(color: AppColors.border),
           ),
         ),
@@ -5010,63 +5033,75 @@ class _SupplierDetailPanel extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.storefront_outlined,
-                          color: theme.colorScheme.primary,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            selected.commercialName,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w900,
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                PurchaseIcon(
+                                  Icons.storefront_outlined,
+                                  color: theme.colorScheme.primary,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    selected.commercialName,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: theme.textTheme.titleMedium
+                                        ?.copyWith(fontWeight: FontWeight.w600),
+                                  ),
+                                ),
+                                _MiniChip(
+                                  label: selected.isActive
+                                      ? 'Activo'
+                                      : 'Inactivo',
+                                ),
+                              ],
                             ),
-                          ),
+                            const SizedBox(height: 12),
+                            _SupplierInfoLine(
+                              icon: Icons.person_outline,
+                              label: selected.contactName ?? 'Sin contacto',
+                            ),
+                            _SupplierInfoLine(
+                              icon: Icons.phone_outlined,
+                              label: selected.phone ?? 'Sin teléfono',
+                            ),
+                            _SupplierInfoLine(
+                              icon: Icons.chat_outlined,
+                              label: selected.whatsapp ?? 'Sin WhatsApp',
+                            ),
+                            _SupplierInfoLine(
+                              icon: Icons.mail_outline,
+                              label: selected.email ?? 'Sin correo',
+                            ),
+                            _SupplierInfoLine(
+                              icon: Icons.location_on_outlined,
+                              label: selected.address ?? 'Sin dirección',
+                            ),
+                            const SizedBox(height: 12),
+                            _DetailRow(
+                              label: 'Órdenes',
+                              value: '${selected.ordersCount}',
+                            ),
+                            _DetailRow(
+                              label: 'Total comprado',
+                              value: money(selected.totalPurchased),
+                            ),
+                          ],
                         ),
-                        _MiniChip(
-                          label: selected.isActive ? 'Activo' : 'Inactivo',
-                        ),
-                      ],
+                      ),
                     ),
                     const SizedBox(height: 12),
-                    _SupplierInfoLine(
-                      icon: Icons.person_outline,
-                      label: selected.contactName ?? 'Sin contacto',
-                    ),
-                    _SupplierInfoLine(
-                      icon: Icons.phone_outlined,
-                      label: selected.phone ?? 'Sin teléfono',
-                    ),
-                    _SupplierInfoLine(
-                      icon: Icons.chat_outlined,
-                      label: selected.whatsapp ?? 'Sin WhatsApp',
-                    ),
-                    _SupplierInfoLine(
-                      icon: Icons.mail_outline,
-                      label: selected.email ?? 'Sin correo',
-                    ),
-                    _SupplierInfoLine(
-                      icon: Icons.location_on_outlined,
-                      label: selected.address ?? 'Sin dirección',
-                    ),
-                    const SizedBox(height: 12),
-                    _TotalsPanel(
-                      units: '${selected.ordersCount}',
-                      products: 'compras',
-                      subtotal: money(selected.totalPurchased),
-                      total: money(selected.totalPurchased),
-                    ),
-                    const Spacer(),
                     Row(
                       children: [
                         Expanded(
                           child: FilledButton.icon(
                             onPressed: onEdit,
-                            icon: const Icon(Icons.edit_outlined),
+                            icon: const PurchaseIcon(Icons.edit_outlined),
                             label: const Text('Editar'),
                           ),
                         ),
@@ -5074,7 +5109,7 @@ class _SupplierDetailPanel extends StatelessWidget {
                         Expanded(
                           child: OutlinedButton.icon(
                             onPressed: onDeactivate,
-                            icon: const Icon(Icons.delete_outline),
+                            icon: const PurchaseIcon(Icons.delete_outline),
                             label: const Text('Desactivar'),
                           ),
                         ),
@@ -5100,7 +5135,11 @@ class _SupplierInfoLine extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         children: [
-          Icon(icon, size: 18, color: Theme.of(context).colorScheme.primary),
+          PurchaseIcon(
+            icon,
+            size: 18,
+            color: Theme.of(context).colorScheme.primary,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(label, maxLines: 2, overflow: TextOverflow.ellipsis),
@@ -5149,7 +5188,7 @@ class _InlinePurchaseError extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: theme.colorScheme.errorContainer.withValues(alpha: .35),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.zero,
         border: Border.all(
           color: theme.colorScheme.error.withValues(alpha: .25),
         ),
@@ -5158,20 +5197,23 @@ class _InlinePurchaseError extends StatelessWidget {
         padding: const EdgeInsets.all(12),
         child: Row(
           children: [
-            Icon(Icons.error_outline_rounded, color: theme.colorScheme.error),
+            PurchaseIcon(
+              Icons.error_outline_rounded,
+              color: theme.colorScheme.error,
+            ),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
                 message,
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.error,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ),
             TextButton.icon(
               onPressed: onRetry,
-              icon: const Icon(Icons.refresh_rounded, size: 18),
+              icon: const PurchaseIcon(Icons.refresh_rounded, size: 18),
               label: const Text('Reintentar'),
             ),
           ],
@@ -5208,76 +5250,29 @@ class _PurchaseToolbar extends StatelessWidget {
   Widget build(BuildContext context) {
     final compact = MediaQuery.sizeOf(context).width < 680;
     final theme = Theme.of(context);
-    final search = Row(
-      children: [
-        SizedBox(
-          width: 44,
-          height: 42,
-          child: FilledButton(
-            style: FilledButton.styleFrom(
-              padding: EdgeInsets.zero,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            onPressed: () => onSearchChanged(searchController.text),
-            child: const Icon(Icons.search),
-          ),
+    final search = SizedBox(
+      height: 42,
+      child: TextField(
+        controller: searchController,
+        onChanged: onSearchChanged,
+        onSubmitted: onSearchChanged,
+        decoration: const InputDecoration(
+          hintText: 'Buscar producto por nombre o código...',
+          prefixIcon: PurchaseIcon(Icons.search, size: 18),
+          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: SizedBox(
-            height: 42,
-            child: TextField(
-              controller: searchController,
-              onChanged: onSearchChanged,
-              decoration: InputDecoration(
-                hintText: 'Buscar producto por nombre o código...',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(6),
-                  borderSide: BorderSide(
-                    color: theme.dividerColor.withValues(alpha: .45),
-                  ),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(6),
-                  borderSide: BorderSide(
-                    color: theme.dividerColor.withValues(alpha: .45),
-                  ),
-                ),
-                isDense: true,
-                filled: true,
-                fillColor: theme.colorScheme.surface,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 12,
-                ),
-                suffixIcon: searchController.text.isEmpty
-                    ? null
-                    : IconButton(
-                        tooltip: 'Limpiar búsqueda',
-                        onPressed: () {
-                          searchController.clear();
-                          onSearchChanged('');
-                        },
-                        icon: const Icon(Icons.close, size: 18),
-                      ),
-              ),
-            ),
-          ),
-        ),
-      ],
+      ),
     );
     final externalButton = OutlinedButton.icon(
       onPressed: onAddExternal,
-      icon: const Icon(Icons.add_box_outlined, size: 17),
+      icon: const PurchaseIcon(Icons.add_box_outlined, size: 17),
       label: const Text('Nuevo producto', overflow: TextOverflow.ellipsis),
     );
     final orderButton = onOpenOrder == null
         ? null
         : FilledButton.icon(
             onPressed: onOpenOrder,
-            icon: const Icon(Icons.receipt_long_outlined, size: 17),
+            icon: const PurchaseIcon(Icons.receipt_long_outlined, size: 17),
             label: Text(
               itemCount == 0 ? 'Detalle' : '$itemCount · $total',
               overflow: TextOverflow.ellipsis,
@@ -5311,7 +5306,7 @@ class _PurchaseToolbar extends StatelessWidget {
           return ChoiceChip(
             selected: selected,
             showCheckmark: false,
-            avatar: Icon(
+            avatar: PurchaseIcon(
               category == null
                   ? Icons.apps_outlined
                   : Icons.inventory_2_outlined,
@@ -5327,7 +5322,7 @@ class _PurchaseToolbar extends StatelessWidget {
             ),
             labelStyle: TextStyle(
               fontSize: 10,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w600,
               color: selected
                   ? theme.colorScheme.onPrimary
                   : theme.colorScheme.onSurface,
@@ -5335,9 +5330,7 @@ class _PurchaseToolbar extends StatelessWidget {
             selectedColor: theme.colorScheme.primary,
             backgroundColor: theme.colorScheme.surface,
             side: BorderSide(color: theme.dividerColor.withValues(alpha: .5)),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(7),
-            ),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
             onSelected: (_) => onCategoryChanged(category),
           );
         },
@@ -5390,16 +5383,16 @@ class _MobileOrderSummary extends StatelessWidget {
     final theme = Theme.of(context);
     return Material(
       color: theme.colorScheme.primaryContainer.withValues(alpha: .55),
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.zero,
       child: InkWell(
         mouseCursor: SystemMouseCursors.click,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.zero,
         onTap: onPressed,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           child: Row(
             children: [
-              Icon(
+              PurchaseIcon(
                 Icons.receipt_long_outlined,
                 color: theme.colorScheme.primary,
               ),
@@ -5409,10 +5402,10 @@ class _MobileOrderSummary extends StatelessWidget {
                   '$itemCount productos · $units',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w700),
+                  style: const TextStyle(fontWeight: FontWeight.w500),
                 ),
               ),
-              Text(total, style: const TextStyle(fontWeight: FontWeight.w900)),
+              Text(total, style: const TextStyle(fontWeight: FontWeight.w600)),
             ],
           ),
         ),
@@ -5437,212 +5430,90 @@ class _PurchaseProductCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final stock = product.stock ?? 0;
-    final inStock = stock > 0;
+    final inStock = (product.stock ?? 0) > 0;
     return Material(
-      color: Colors.transparent,
+      color: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        side: BorderSide(color: AppColors.border),
+      ),
       child: InkWell(
-        mouseCursor: SystemMouseCursors.click,
-        borderRadius: BorderRadius.circular(8),
         onTap: onTap,
-        child: Ink(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: theme.colorScheme.primary.withValues(alpha: .16),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: .08),
-                blurRadius: 5,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                Container(
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Color(0xFFEAF2F7),
-                        Color(0xFFC7D2D8),
-                        Color(0xFF24292D),
-                      ],
-                      stops: [0, .48, 1],
-                    ),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 22, 16, 34),
+        mouseCursor: SystemMouseCursors.click,
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Center(
                   child: ProductNetworkImage(
                     imageUrl: product.displayFotoUrl ?? '',
                     productId: product.id,
                     productName: product.nombre,
                     originalUrl: product.originalFotoUrl,
                     fit: BoxFit.contain,
-                    fallback: Icon(
+                    fallback: const PurchaseIcon(
                       Icons.inventory_2_outlined,
                       size: 28,
-                      color: Colors.black.withValues(alpha: .45),
+                      color: AppColors.textMuted,
                     ),
                   ),
                 ),
-                const Positioned.fill(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Color(0x00000000),
-                          Color(0x22000000),
-                          Color(0xDD000000),
-                        ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                product.nombre,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 12,
+                  height: 1.2,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                product.categoriaLabel,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 10,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 5),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      money(product.costo),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
-                ),
-                Positioned(
-                  left: 5,
-                  top: 5,
-                  child: _StockBadge(
-                    label: inStock ? formatStockLabel(product) : 'Sin stock',
-                    danger: !inStock,
+                  PurchaseIcon(
+                    Icons.add,
+                    size: 20,
+                    color: theme.colorScheme.primary,
                   ),
+                ],
+              ),
+              const SizedBox(height: 3),
+              Text(
+                inStock ? formatStockLabel(product) : 'Sin stock',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 10,
+                  color: inStock ? AppColors.primary : AppColors.error,
                 ),
-                Positioned(
-                  right: 5,
-                  top: 5,
-                  child: _PriceBadge(label: money(product.costo)),
-                ),
-                Positioned(
-                  left: 7,
-                  right: 7,
-                  bottom: 7,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        product.nombre.toUpperCase(),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          height: 1.02,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 5,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: .18),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          product.categoriaLabel.toUpperCase(),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 8,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Positioned(
-                  right: 6,
-                  bottom: 6,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primary,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: const Padding(
-                      padding: EdgeInsets.all(3),
-                      child: Icon(Icons.add, size: 13, color: Colors.white),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _StockBadge extends StatelessWidget {
-  const _StockBadge({required this.label, this.danger = false});
-
-  final String label;
-  final bool danger;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: danger ? AppColors.error : AppColors.secondary,
-        borderRadius: BorderRadius.circular(999),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: .18),
-            blurRadius: 5,
-            offset: const Offset(0, 1),
-          ),
-        ],
-      ),
-      child: Text(
-        label,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 9,
-          fontWeight: FontWeight.w900,
-        ),
-      ),
-    );
-  }
-}
-
-class _PriceBadge extends StatelessWidget {
-  const _PriceBadge({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: .66),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        label,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 9,
-          fontWeight: FontWeight.w900,
         ),
       ),
     );
@@ -5685,33 +5556,24 @@ class _CartItemTile extends ConsumerWidget {
       includeUnitForUnit: true,
     );
     return Material(
-      color: compact
-          ? theme.colorScheme.surface
-          : theme.colorScheme.surfaceContainerHighest.withValues(alpha: .5),
-      borderRadius: BorderRadius.circular(compact ? 0 : 10),
+      color: AppColors.surface,
       child: InkWell(
-        mouseCursor: SystemMouseCursors.click,
-        borderRadius: BorderRadius.circular(compact ? 0 : 10),
         onTap: onEdit,
         child: Padding(
-          padding: EdgeInsets.symmetric(
-            horizontal: compact ? 2 : 8,
-            vertical: compact ? 5 : 8,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
           child: Row(
             children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(compact ? 6 : 8),
-                child: SizedBox(
-                  width: compact ? 36 : 42,
-                  height: compact ? 36 : 42,
-                  child: ProductNetworkImage(
-                    imageUrl: item.image ?? '',
-                    productId: item.productId ?? item.productName,
-                    productName: item.productName,
-                    originalUrl: item.image,
-                    fit: BoxFit.cover,
-                    fallback: const Icon(Icons.inventory_2_outlined),
+              SizedBox.square(
+                dimension: 36,
+                child: ProductNetworkImage(
+                  imageUrl: item.image ?? '',
+                  productId: item.productId ?? item.productName,
+                  productName: item.productName,
+                  originalUrl: item.image,
+                  fit: BoxFit.contain,
+                  fallback: const PurchaseIcon(
+                    Icons.inventory_2_outlined,
+                    size: 20,
                   ),
                 ),
               ),
@@ -5724,67 +5586,54 @@ class _CartItemTile extends ConsumerWidget {
                       item.productName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: compact ? 12 : null,
-                        fontWeight: FontWeight.w800,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 3),
                     Text(
-                      '$itemQuantity x ${money(item.unitCost)}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      '$itemQuantity × ${money(item.unitCost)}',
                       style: theme.textTheme.bodySmall?.copyWith(
-                        fontSize: compact ? 10.5 : null,
+                        fontSize: 11,
+                        color: AppColors.textSecondary,
                       ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(width: 8),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    money(item.subtotal),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: compact ? 12 : null,
-                      fontWeight: FontWeight.w900,
-                    ),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 110),
+                child: Text(
+                  money(item.subtotal),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
                   ),
-                  SizedBox(
-                    width: 62,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        SizedBox(
-                          width: 28,
-                          height: 28,
-                          child: IconButton(
-                            padding: EdgeInsets.zero,
-                            tooltip: 'Editar',
-                            iconSize: 16,
-                            icon: const Icon(Icons.edit_outlined),
-                            onPressed: onEdit,
-                          ),
-                        ),
-                        SizedBox(
-                          width: 28,
-                          height: 28,
-                          child: IconButton(
-                            padding: EdgeInsets.zero,
-                            tooltip: 'Eliminar',
-                            iconSize: 16,
-                            icon: const Icon(Icons.close),
-                            onPressed: onDelete,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+                ),
+              ),
+              IconButton(
+                tooltip: 'Editar',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints.tightFor(
+                  width: 32,
+                  height: 36,
+                ),
+                icon: const PurchaseIcon(Icons.edit_outlined, size: 16),
+                onPressed: onEdit,
+              ),
+              IconButton(
+                tooltip: 'Eliminar',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints.tightFor(
+                  width: 32,
+                  height: 36,
+                ),
+                icon: const PurchaseIcon(Icons.close, size: 14),
+                onPressed: onDelete,
               ),
             ],
           ),
@@ -5803,9 +5652,7 @@ class _PurchaseDesktopFrame extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final width = (constraints.maxWidth - 40)
-            .clamp(860.0, 1420.0)
-            .toDouble();
+        final width = (constraints.maxWidth - 32).clamp(0.0, 1420.0).toDouble();
         return Center(
           child: SizedBox(
             width: width,
@@ -5815,7 +5662,7 @@ class _PurchaseDesktopFrame extends StatelessWidget {
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.surface,
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.zero,
                   border: Border.all(color: AppColors.border),
                   boxShadow: [
                     BoxShadow(
@@ -5825,10 +5672,7 @@ class _PurchaseDesktopFrame extends StatelessWidget {
                     ),
                   ],
                 ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: child,
-                ),
+                child: ClipRRect(borderRadius: BorderRadius.zero, child: child),
               ),
             ),
           ),
@@ -5858,16 +5702,16 @@ class _DrawerOptionTile extends StatelessWidget {
       color: selected
           ? const Color(0xFF1957E6).withValues(alpha: .1)
           : theme.colorScheme.surfaceContainerHighest.withValues(alpha: .34),
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.zero,
       child: InkWell(
         mouseCursor: SystemMouseCursors.click,
         onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.zero,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
           child: Row(
             children: [
-              Icon(
+              PurchaseIcon(
                 icon,
                 size: 19,
                 color: selected
@@ -5881,13 +5725,13 @@ class _DrawerOptionTile extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
                     color: selected ? const Color(0xFF1957E6) : null,
                   ),
                 ),
               ),
               if (selected)
-                const Icon(
+                const PurchaseIcon(
                   Icons.check_circle_rounded,
                   color: Color(0xFF1957E6),
                   size: 18,
@@ -5915,15 +5759,12 @@ class _TotalsPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: theme.colorScheme.primaryContainer.withValues(alpha: .32),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: theme.colorScheme.primary.withValues(alpha: .12),
-        ),
+        color: AppColors.surfaceSubtle,
+        borderRadius: BorderRadius.zero,
+        border: Border.all(color: AppColors.border),
       ),
       child: Column(
         children: [
@@ -5946,7 +5787,9 @@ class _TotalsPanel extends StatelessWidget {
               child: Text(
                 label,
                 style: TextStyle(
-                  fontWeight: strong ? FontWeight.w800 : FontWeight.w500,
+                  fontWeight: strong ? FontWeight.w600 : FontWeight.w400,
+                  fontSize: strong ? 17 : 12,
+                  color: strong ? AppColors.primary : AppColors.textSecondary,
                 ),
               ),
             ),
@@ -5955,7 +5798,9 @@ class _TotalsPanel extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontWeight: strong ? FontWeight.w900 : FontWeight.w700,
+                fontWeight: strong ? FontWeight.w600 : FontWeight.w500,
+                fontSize: strong ? 17 : 12,
+                color: strong ? AppColors.primary : AppColors.textPrimary,
               ),
             ),
           ],
@@ -5976,53 +5821,16 @@ class _PurchaseExtrasSwitch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Material(
-      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: .28),
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        mouseCursor: SystemMouseCursors.click,
-        borderRadius: BorderRadius.circular(12),
-        onTap: () => onChanged(!value),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: theme.dividerColor.withValues(alpha: .45),
-            ),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                Icons.tune_outlined,
-                size: 19,
-                color: value
-                    ? theme.colorScheme.primary
-                    : theme.colorScheme.onSurfaceVariant,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Opciones adicionales',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-              if (hasData && !value) ...[
-                const SizedBox(width: 8),
-                const _MiniChip(label: 'aplicadas'),
-              ],
-              Switch.adaptive(
-                value: value,
-                onChanged: onChanged,
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-            ],
-          ),
+    return Tooltip(
+      message: hasData && !value
+          ? 'Opciones adicionales · hay valores aplicados'
+          : 'Opciones adicionales',
+      child: Semantics(
+        label: 'Opciones adicionales',
+        child: Switch.adaptive(
+          value: value,
+          onChanged: onChanged,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
         ),
       ),
     );
@@ -6043,7 +5851,7 @@ class _EmptyOrderState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
+            PurchaseIcon(
               Icons.add_shopping_cart_outlined,
               size: 42,
               color: theme.colorScheme.primary,
@@ -6053,13 +5861,13 @@ class _EmptyOrderState extends StatelessWidget {
               'Agrega productos para iniciar',
               textAlign: TextAlign.center,
               style: theme.textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w600,
               ),
             ),
             const SizedBox(height: 8),
             OutlinedButton.icon(
               onPressed: onAddExternal,
-              icon: const Icon(Icons.add_box_outlined),
+              icon: const PurchaseIcon(Icons.add_box_outlined),
               label: const Text('Producto externo'),
             ),
           ],
@@ -6090,14 +5898,14 @@ class _MiniChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.zero,
       ),
       child: Text(
         label,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: theme.textTheme.labelSmall?.copyWith(
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w500,
         ),
       ),
     );

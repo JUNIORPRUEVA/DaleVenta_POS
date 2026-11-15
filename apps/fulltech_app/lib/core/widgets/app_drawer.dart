@@ -1133,15 +1133,18 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
     );
   }
 
-
-  List<AppNavigationItem> pickItems(List<String> routes) {
-    return [
-      for (final route in routes)
-        if (pick(route) case final item?) item,
-    ];
+  final facturacionItem = pick(Routes.cotizaciones);
+  if (facturacionItem != null) {
+    groups.add(
+      _DrawerMenuGroup(
+        title: facturacionItem.title,
+        icon: AppIcons.sales,
+        items: [facturacionItem],
+        openOnHover: false,
+      ),
+    );
   }
-
-  final ventasItems = pickItems([Routes.cotizaciones, Routes.ventasLista]);
+  final historialVentasItem = pick(Routes.ventasLista);
   final catalogItem = pick(Routes.catalogo);
   final stockAdjustmentItem = pick(Routes.catalogoStock);
   final categoriesItem = pick(Routes.catalogoCategorias);
@@ -1174,11 +1177,33 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
             )
           : null);
   final creditosItem = pick(Routes.ventasCreditos);
-  final clientItems = <AppNavigationItem>[
-    if (clientItem != null) clientItem,
-    if (cotizacionesItem != null) cotizacionesItem,
-    if (creditosItem != null) creditosItem,
+  AppNavigationItem titled(AppNavigationItem item, String title) =>
+      AppNavigationItem(
+        icon: item.icon,
+        appIcon: item.appIcon,
+        title: title,
+        route: item.route,
+        showIndicator: item.showIndicator,
+        enabled: item.enabled,
+      );
+  final salesHistoryItems = <AppNavigationItem>[
+    if (historialVentasItem != null)
+      titled(historialVentasItem, 'Historial de ventas'),
+    if (creditosItem != null) titled(creditosItem, 'Historial de créditos'),
+    if (cotizacionesItem != null)
+      titled(cotizacionesItem, 'Historial de cotizaciones'),
   ];
+  if (salesHistoryItems.isNotEmpty) {
+    groups.add(
+      _DrawerMenuGroup(
+        title: 'Ventas',
+        icon: AppIcons.receipt,
+        items: salesHistoryItems,
+        openOnHover: false,
+      ),
+    );
+  }
+  final clientItems = <AppNavigationItem>[if (clientItem != null) clientItem];
   final purchasesItem = pick(Routes.compras);
   final reportsItem = pick(Routes.ventas);
 
@@ -1370,17 +1395,6 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
       ),
     );
 
-    if (ventasItems.isNotEmpty) {
-      groups.add(
-        _DrawerMenuGroup(
-          title: 'Ventas',
-          icon: AppIcons.sales,
-          assetIcon: 'assets/iconos/menu-ventas.png',
-          items: ventasItems,
-          openOnHover: false,
-        ),
-      );
-    }
     if (clientItems.isNotEmpty) {
       groups.add(
         _DrawerMenuGroup(
@@ -1434,17 +1448,6 @@ List<_DrawerMenuGroup> _buildDrawerGroups(
     return groups;
   }
 
-  if (ventasItems.isNotEmpty) {
-    groups.add(
-      _DrawerMenuGroup(
-        title: 'Ventas',
-        icon: AppIcons.sales,
-        assetIcon: 'assets/iconos/menu-ventas.png',
-        items: ventasItems,
-        openOnHover: false,
-      ),
-    );
-  }
   if (clientItems.isNotEmpty) {
     groups.add(
       _DrawerMenuGroup(
@@ -1528,6 +1531,10 @@ class _DrawerMenuGroup {
   bool containsActiveRoute(String location) {
     bool active(AppNavigationItem item) {
       if (!item.enabled) return false;
+      if (item.route == Routes.cotizaciones) {
+        return (Uri.tryParse(location)?.path ?? location) ==
+            Routes.cotizaciones;
+      }
       return isNavigationRouteActive(location, item.route);
     }
 

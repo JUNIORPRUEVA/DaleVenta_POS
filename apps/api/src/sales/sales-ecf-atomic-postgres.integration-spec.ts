@@ -36,7 +36,7 @@ local("atomic electronic checkout on owned PostgreSQL, with no external emission
     await db.ecfDosaCompanyCredential.create({ data: { companyId, rnc: "101000001", environment: "production", status: "ACTIVE", source: "WEBHOOK", keyVersion: 1,
       ciphertext: "synthetic-never-opened", iv: "synthetic", authTag: "synthetic", fingerprint: "a".repeat(64), present: { apiKeyProduccion: true } } });
     for (const documentType of ["E31", "E32"]) {
-      await db.ecfDgiiAuthorizedSequence.create({ data: { companyId, environment: "PRODUCTION", documentType, authorizationNumber: "SYNTHETIC", rangeFrom: 1, rangeTo: 10, approvedQuantity: 10, declarationVersion: "local-test" } });
+      await db.ecfDgiiAuthorizedSequence.create({ data: { companyId, environment: "PRODUCTION", documentType, authorizationNumber: "SYNTHETIC", rangeFrom: 1, rangeTo: 10, approvedQuantity: 10, declarationVersion: "local-test", expiresAt: documentType === "E31" ? new Date("2027-12-31T23:59:59.999Z") : null } });
       await db.ecfSequence.create({ data: { companyId, environment: "PRODUCTION", documentType, prefix: documentType, startNumber: 1, nextNumber: 1, endNumber: capacity } });
     }
     const warehouse = await db.warehouse.create({ data: { companyId, name: "Synthetic warehouse", code: "W1", isDefault: true } });
@@ -101,6 +101,26 @@ local("atomic electronic checkout on owned PostgreSQL, with no external emission
     try { await expect(sales.create(f.user, f.dto)).rejects.toThrow("ECF_EMISSION_CONTRACT_BLOCKED"); }
     finally { mapping.mockRestore(); }
     await expectUntouched(f);
+  });
+  it("uses the own declared expiry without a checkout date and leaves the legacy range's metadata intact", async () => {
+    const f = await fixture();
+    const { sequenceDueDate, ...withoutDate } = f.dto;
+    const sale = await sales.create(f.user, withoutDate);
+    expect(sale.ncfExpirationDate?.toISOString()).toBe("2027-12-31T23:59:59.999Z");
+    const document = await db.ecfElectronicDocument.findFirstOrThrow({where:{companyId:f.companyId,sourceId:sale.id}});
+    expect((document.payloadSummary as any).emission.payload.idDoc.sequenceDueDate).toBe(sequenceDueDate);
+    const range = await db.ecfSequence.findFirstOrThrow({where:{companyId:f.companyId,documentType:"E31",environment:"PRODUCTION"}});
+    expect(range.validUntil).toBeNull();expect(range.startNumber).toBe(1);expect(range.endNumber).toBe(10);expect(range.nextNumber).toBe(2);
+  });
+  it("rejects a client date different from its own authorization before any business effect", async () => {
+    const f = await fixture();
+    await expect(sales.create(f.user,{...f.dto,sequenceDueDate:"2030-12-31"})).rejects.toThrow("coincidir");
+    await expectUntouched(f);
+  });
+  it.each([null,new Date("2000-01-01")])("blocks missing/expired declared E31 dates (%s) without allocating", async expiresAt => {
+    const f = await fixture();
+    await db.ecfDgiiAuthorizedSequence.updateMany({where:{companyId:f.companyId,environment:"PRODUCTION",documentType:"E31"},data:{expiresAt}});
+    await expect(sales.create(f.user,f.dto)).rejects.toThrow();await expectUntouched(f);
   });
   it("concurrent checkouts cannot leave an unprepared sale when the final number is consumed", async () => {
     const f = await fixture(1);

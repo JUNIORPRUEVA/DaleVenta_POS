@@ -117,8 +117,33 @@ engineering trials can close readiness without changing their fiscal status;
 commercial invoices and uncertain/pending results remain blocking. This action emits no invoice;
 production numbering must then be registered separately for that company.
 
+The customer records the real E31 authorization expiry once with that company's
+numbering. It is mandatory for E31, inherited by newly registered/renewed ranges
+and used automatically in electronic checkout and fiscal documents. An omitted,
+expired or contradictory date cannot authorize E31. Existing ranges, consumed
+numbers and historical documents are not rewritten. E32/E34 retain their existing
+optional expiry where applicable. A revoked or expired assistant enrollment
+cannot be replaced by automatic enrollment; explicit administrative decisions
+remain authoritative.
+
 ## Important Business Rules Evidenced
 
+- Fiscal preparation offers optional managed assistance for a one-time US$150
+  payment, as requested by the owner. The discreet invitation opens WhatsApp
+  with a prepared inquiry using the existing assistant SupportConfig contact;
+  it does not send messages, collect payment or start certification itself.
+  It appears only before postulation, alongside the authorized assistant entry.
+- Empresa separates its principal company data from module activation. Name,
+  optional RNC, phone and address are visible by default, together with the
+  optional legal representative name/ID. Optional logo upload/change is directly
+  available in the company data header. The top "Ver más" disclosure contains
+  full logo management and additional contact, fiscal contact, representative and banking
+  fields. Collapsing does not clear those fields; saving preserves additional
+  existing bank accounts. Company setup optionality does not bypass the existing
+  fiscal identity requirements when enabling certification/emission.
+- Company module controls use compact rectangular switches and responsive
+  columns. Inventory confirmation, configuration permissions, server-confirmed
+  e-CF activation and ordinary-sale consent keep their existing behavior.
 - Empresa activates the electronic invoicing module with one switch. Enabling
   it also enables company taxes in the same transaction, using the existing tax
   service to preserve a configured default tax or create the initial ITBIS. Disabling

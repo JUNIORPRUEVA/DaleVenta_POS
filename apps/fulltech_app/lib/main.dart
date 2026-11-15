@@ -23,6 +23,7 @@ import 'core/auth/app_bootstrap_status.dart';
 import 'core/auth/app_role.dart';
 import 'core/auth/auth_provider.dart';
 import 'core/auth/auth_session_events.dart';
+import 'core/routing/routes.dart';
 import 'core/auth/session_handoff_bootstrap.dart';
 import 'core/company/company_settings_repository.dart';
 import 'core/debug/app_error_reporter.dart';
@@ -458,7 +459,14 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
             // semitransparente. Debajo de ellos el aviso quedaba ilegible
             // (verificado en Windows). Sigue siendo una tarjeta de esquina: no
             // captura clics fuera de su caja ni bloquea el modal.
-            const AppErrorOverlay(),
+            ListenableBuilder(
+              listenable: router.routeInformationProvider,
+              builder: (context, _) => AppErrorOverlay(
+                login:
+                    router.routeInformationProvider.value.uri.path ==
+                    Routes.login,
+              ),
+            ),
           ],
         );
       },

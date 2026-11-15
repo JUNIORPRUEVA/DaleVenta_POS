@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/routing/routes.dart';
+import '../../../core/theme/app_colors.dart';
 import '../data/ecf_repository.dart';
 import '../ecf_models.dart';
 import '../ecf_status_presentation.dart';
@@ -14,6 +15,9 @@ import 'ecf_document_print_action.dart';
 
 /// Tamaño de página de la bandeja.
 const int kEcfTrayPageSize = 25;
+const _fiscalControlShape = RoundedRectangleBorder(
+  borderRadius: BorderRadius.all(Radius.circular(6)),
+);
 
 /// Bandeja de comprobantes electrónicos.
 ///
@@ -342,6 +346,7 @@ class _CountersRow extends StatelessWidget {
       runSpacing: 6,
       children: [
         FilterChip(
+          shape: _fiscalControlShape,
           label: Text(_labeled('Todos', counters.total)),
           visualDensity: VisualDensity.compact,
           materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -358,7 +363,7 @@ class _CountersRow extends StatelessWidget {
           labelStyle: TextStyle(
             fontSize: 12.5,
             fontWeight: FontWeight.w600,
-            color: selected == null ? const Color(0xFF334155) : Colors.white,
+            color: selected == null ? Colors.white : const Color(0xFF334155),
           ),
           onSelected: (_) => onSelected(null),
         ),
@@ -368,6 +373,7 @@ class _CountersRow extends StatelessWidget {
               builder: (context) {
                 final isSelected = selected == group;
                 return FilterChip(
+                  shape: _fiscalControlShape,
                   avatar: Icon(
                     group.icon,
                     size: 15,
@@ -418,6 +424,7 @@ class _TypeFilter extends StatelessWidget {
       spacing: 6,
       children: [
         ChoiceChip(
+          shape: _fiscalControlShape,
           label: const Text('Todos los tipos'),
           visualDensity: VisualDensity.compact,
           materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -434,7 +441,7 @@ class _TypeFilter extends StatelessWidget {
           labelStyle: TextStyle(
             fontSize: 12.5,
             fontWeight: FontWeight.w600,
-            color: value == null ? const Color(0xFF334155) : Colors.white,
+            color: value == null ? Colors.white : const Color(0xFF334155),
           ),
           onSelected: (_) => onChanged(null),
         ),
@@ -443,6 +450,7 @@ class _TypeFilter extends StatelessWidget {
             builder: (context) {
               final isSelected = value == type;
               return ChoiceChip(
+                shape: _fiscalControlShape,
                 label: Text(type),
                 visualDensity: VisualDensity.compact,
                 materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -625,19 +633,24 @@ class _DocumentTile extends StatelessWidget {
     final error = document.safeErrorMessage?.trim();
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: const EdgeInsets.only(bottom: 6),
+      color: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(Radius.circular(6)),
+        side: BorderSide(color: AppColors.border),
+      ),
       child: InkWell(
         mouseCursor: SystemMouseCursors.click,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(6),
         onTap: () => showEcfDocumentDetailSheet(context, document.id),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
+          padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              CircleAvatar(
-                backgroundColor: status.color(scheme).withValues(alpha: 0.14),
-                child: Icon(status.icon, color: status.color(scheme), size: 20),
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Icon(status.icon, color: status.color(scheme), size: 18),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -661,9 +674,9 @@ class _DocumentTile extends StatelessWidget {
                         const Icon(Icons.chevron_right, size: 20),
                       ],
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 4),
                     EcfStatusBadge(presentation: status),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 4),
                     Text(
                       meta.join(' · '),
                       style: theme.textTheme.bodySmall?.copyWith(
@@ -708,7 +721,7 @@ class EcfStatusBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(4),
         border: Border.all(color: color.withValues(alpha: 0.35)),
       ),
       child: Row(
@@ -761,7 +774,21 @@ class _SearchField extends StatelessWidget {
                   onPressed: onCleared,
                 ),
         ),
-        border: const OutlineInputBorder(),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 10,
+        ),
+        border: const OutlineInputBorder(
+          borderRadius: BorderRadius.all(Radius.circular(6)),
+        ),
+        enabledBorder: const OutlineInputBorder(
+          borderRadius: BorderRadius.all(Radius.circular(6)),
+          borderSide: BorderSide(color: AppColors.border),
+        ),
+        focusedBorder: const OutlineInputBorder(
+          borderRadius: BorderRadius.all(Radius.circular(6)),
+          borderSide: BorderSide(color: AppColors.primary),
+        ),
       ),
     );
   }
@@ -813,22 +840,27 @@ class _ErrorCard extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: scheme.errorContainer,
-        borderRadius: BorderRadius.circular(16),
+        color: AppColors.surface,
+        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(6),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Text(message, style: TextStyle(color: scheme.onErrorContainer)),
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton(
-              onPressed: onRetry,
-              child: const Text('Reintentar'),
+          Icon(Icons.cloud_off_outlined, size: 18, color: scheme.error),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(color: AppColors.textPrimary),
             ),
+          ),
+          const SizedBox(width: 8),
+          TextButton(
+            style: TextButton.styleFrom(shape: _fiscalControlShape),
+            onPressed: onRetry,
+            child: const Text('Reintentar'),
           ),
         ],
       ),

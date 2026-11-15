@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 import '../../features/account/account_menu_screens.dart';
 import '../../features/auth/presentation/landing_screen.dart';
 import '../../features/auth/presentation/login_screen.dart';
-import '../../features/auth/presentation/register_screen.dart';
 import '../../features/auth/presentation/forgot_password_screen.dart';
 import '../../features/home/home_shell.dart';
 import '../../features/user/profile_screen.dart';
@@ -121,7 +120,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: Routes.register,
-        builder: (context, state) => const RegisterScreen(),
+        redirect: (context, state) => Routes.login,
       ),
       GoRoute(
         path: Routes.home,
@@ -416,7 +415,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       final isPasswordRecoveryRoute =
           path == Routes.forgotPassword || path == Routes.resetPassword;
 
-      if (registrationDisabled && path == Routes.register) {
+      if (path == Routes.register) {
         return Routes.login;
       }
 

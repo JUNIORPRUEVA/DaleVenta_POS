@@ -1266,10 +1266,10 @@ void main() {
       );
     }
 
-    testWidgets('radio moderado: chips y panel no son "pill"', (tester) async {
+    testWidgets('filtros cuadrados: chips y panel usan el radio solicitado', (tester) async {
       await pumpSelector(tester, const Size(390, 844));
 
-      // Chip: radio 10 (rango 8-12 pedido), nunca el 999 del theme global.
+      // La revisión visual actual solicita controles cuadrados.
       final chipMaterial = tester.widget<Material>(
         find
             .ancestor(of: find.text('Hoy'), matching: find.byType(Material))
@@ -1278,7 +1278,7 @@ void main() {
       final chipShape = chipMaterial.shape! as RoundedRectangleBorder;
       final chipRadius = (chipShape.borderRadius as BorderRadius).topLeft.x;
       expect(chipRadius, kReportsFilterRadius);
-      expect(chipRadius, inInclusiveRange(8, 12));
+      expect(chipRadius, 0);
 
       // Panel de filtros: mismo radio moderado.
       final surfaceDecoration =
@@ -1296,7 +1296,7 @@ void main() {
       final panelRadius =
           (surfaceDecoration.borderRadius! as BorderRadius).topLeft.x;
       expect(panelRadius, kReportsFilterRadius);
-      expect(panelRadius, inInclusiveRange(8, 12));
+      expect(panelRadius, 0);
     });
 
     testWidgets('desktop >=900 muestra periodo y categoria en una fila', (
@@ -1376,7 +1376,7 @@ void main() {
       expect(find.text('Todas las categorías'), findsOneWidget);
       expect(find.text('Accesorios'), findsNothing);
 
-      await tester.tap(find.byType(DropdownButton<String?>));
+      await tester.tap(find.byType(OutlinedButton));
       await tester.pumpAndSettle();
 
       expect(find.text('Celulares'), findsWidgets);

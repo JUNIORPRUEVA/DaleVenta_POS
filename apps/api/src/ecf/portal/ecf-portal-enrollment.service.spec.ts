@@ -80,6 +80,7 @@ function makePrismaFake(seed?: {
     $queryRaw: async () => [{ ok: seed?.autoRuleMet === true }],
     __rows: enrollments,
   };
+  prisma.$transaction = async (run: (tx: any) => Promise<unknown>) => run(prisma);
 
   return prisma;
 }
@@ -384,6 +385,18 @@ describe("EcfPortalEnrollmentService.revoke", () => {
 });
 
 describe("EcfPortalEnrollmentService.ensureAutoEnrollment", () => {
+  it.each([
+    {status:"REVOKED",revokedAt:new Date()},
+    {status:"ACTIVE",expiresAt:new Date("2000-01-01")},
+  ])("does not automatically replace a revoked or expired enrollment (%s)", async row => {
+    process.env.ECF_PORTAL_AUTO_ENROLL_ENABLED="true";
+    const prisma=makePrismaFake({autoRuleMet:true,enrollments:[{companyId:"company-a",...row}]});
+    const service=new EcfPortalEnrollmentService(prisma);
+    await expect(service.ensureAutoEnrollment("company-a")).resolves.toBe(false);
+    expect(prisma.__rows).toHaveLength(1);
+    await expect(service.grant({companyId:"company-a",source:"AUTO_ELIGIBLE",reason:"Automatic retry",actorUserId:null})).resolves.toMatchObject({ok:false});
+    expect(prisma.__rows).toHaveLength(1);
+  });
   it("con la bandera apagada no inscribe a nadie (interruptor de emergencia)", async () => {
     process.env.ECF_PORTAL_AUTO_ENROLL_ENABLED = "false";
     const prisma = makePrismaFake({ autoRuleMet: true });

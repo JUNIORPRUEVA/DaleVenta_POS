@@ -42,6 +42,7 @@ export class EcfEmissionService {
   async prepare(user: TenantUser, input: {
     document: EcfFiscalDocument; metadata: EcfIssuanceMetadata;
     sourceType?: "SALE" | "COTIZACION" | "MANUAL"; sourceId?: string; clientRequestId?: string;
+    expectedSequenceExpiry?: string;
   }, transaction?: Prisma.TransactionClient) {
     const companyId = requireTenant(user);
     const environment = await numberingEnvironment(transaction ?? this.prisma, companyId);
@@ -57,7 +58,7 @@ export class EcfEmissionService {
     const operationKey =
       input.clientRequestId ??
       (input.sourceId ? `${input.sourceType ?? "MANUAL"}:${input.sourceId}` : undefined);
-    const encf = await this.resolveEncf(user, companyId, input.document.type, input.metadata.encf, operationKey, environment, transaction);
+    const encf = await this.resolveEncf(user, companyId, input.document.type, input.metadata.encf, operationKey, environment, transaction, input.expectedSequenceExpiry);
     const metadata = { ...input.metadata, encf };
     const mapping = mapEcfToAlanubeDom(input.document, metadata);
     if (mapping.schemaValidation?.ok !== true) throw new ConflictException("ECF_EMISSION_CONTRACT_BLOCKED");
@@ -90,11 +91,11 @@ export class EcfEmissionService {
   // otherwise the server allocates from the company range. The allocation is keyed
   // by the operation so a retry reuses the number it already consumed.
   private async resolveEncf(user: TenantUser, companyId: string, documentType: EcfDocumentType,
-    provided: string | undefined, operationKey?: string, environment?: "SANDBOX" | "PRODUCTION", transaction?: Prisma.TransactionClient) {
+    provided: string | undefined, operationKey?: string, environment?: "SANDBOX" | "PRODUCTION", transaction?: Prisma.TransactionClient, expectedSequenceExpiry?: string) {
     if (provided) return provided;
     const sequences = new EcfSequenceService(this.prisma);
     try {
-      return (await sequences.allocate(user, documentType, { operationKey, environment, tx: transaction })).encf;
+      return (await sequences.allocate(user, documentType, { operationKey, environment, tx: transaction, expectedSequenceExpiry })).encf;
     } catch (error) {
       if (!transaction && error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002" && operationKey) {
         const recorded = await sequences.alreadyAllocated(companyId, operationKey);

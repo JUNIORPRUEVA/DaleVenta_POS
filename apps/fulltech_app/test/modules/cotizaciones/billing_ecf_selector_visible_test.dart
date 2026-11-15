@@ -268,10 +268,12 @@ void main() {
     expect(find.byType(SalesDetailShortcut), findsNWidgets(2));
 
     expect(
-      find.text('COMPROBANTE ELECTRÓNICO'),
+      find.byType(EcfPosFiscalSelector).hitTestable(),
       findsOneWidget,
       reason: 'el selector debe estar visible en el carrito',
     );
+    expect(tester.widget<EcfPosFiscalSelector>(find.byType(EcfPosFiscalSelector)).modes,
+      containsAll([EcfPosFiscalMode.e31, EcfPosFiscalMode.e32]));
     expect(
       find.textContaining('Comprobante electrónico no disponible'),
       findsNothing,

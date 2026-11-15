@@ -2,7 +2,7 @@ import { INestApplication, ValidationPipe } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import type { Prisma } from "@prisma/client";
 import { execFileSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -20,6 +20,8 @@ import { DosaCredentialVault } from "./dosa-credential-vault.service";
 import { fingerprint } from "../../documents/ecf-document-idempotency.service";
 import { EcfEmissionService } from "../../documents/ecf-emission.service";
 import { validE31WithItbis } from "../../fiscal-core/ecf-fixtures";
+import { ECF_DOSA_SESSION_CLIENT, type DosaSessionClientPort } from "./dosa-certification-session.service";
+import { PLATFORM_STAFF_ENV } from "../../platform/platform-staff.guard";
 
 /**
  * EMISIÓN DOSA MULTIEMPRESA CONTRA UN SERVIDOR HTTP REAL LOCAL.
@@ -244,12 +246,22 @@ uat("Emisión DOSA sobre HTTP local real — cinco empresas", () => {
   }
 
   async function bootApp() {
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
-    app = moduleRef.createNestApplication();
+    const client: DosaSessionClientPort = {
+      describeReadiness: () => ({ ready: process.env.DOSA_CERTIFICATION_SESSIONS_ENABLED === "true", blockingReasons: [] }),
+      createSession: async ({ rncEmisor }) => ({ ok: true, status: 201, session: {
+        url: `https://dosasystem.test/sesion/${rncEmisor}`, path: `/sesion/${rncEmisor}`,
+        token: `synthetic-session-${rncEmisor}`, expiresAt: new Date(Date.now() + 3600000).toISOString(),
+        postulacionId: `synthetic-postulation-${rncEmisor}`, prueba: false,
+      } }),
+    };
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(ECF_DOSA_SESSION_CLIENT).useValue(client).compile();
+    app = moduleRef.createNestApplication({ rawBody: true });
     app.useGlobalPipes(
       new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
     );
-    await app.init();
+    // Concurrent requests share a stable local listener until app.close().
+    await app.listen(0, "127.0.0.1");
     prisma = app.get(PrismaService);
   }
 
@@ -283,6 +295,10 @@ uat("Emisión DOSA sobre HTTP local real — cinco empresas", () => {
     setEnv("DOSA_BASE_URL", baseUrl);
     setEnv("DOSA_EMISSION_TIMEOUT_MS", String(TIMEOUT_MS));
     setEnv("DOSA_WEBHOOK_ENABLED", "false");
+    setEnv("DOSA_WEBHOOK_SIGNATURE_STRATEGY", "HMAC_SHA256_TIMESTAMPED");
+    setEnv("DOSA_WEBHOOK_SECRET", "synthetic-self-service-webhook-secret");
+    setEnv("DOSA_WEBHOOK_TIMESTAMP_UNIT", "seconds");
+    setEnv("DOSA_SESSION_URL_KEYS", `1:${Buffer.alloc(32, 9).toString("base64")}`);
     setEnv("ECF_PORTAL_PILOT_COMPANY_IDS", "");
     setEnv("ECF_PORTAL_AUTO_ENROLL_ENABLED", "false");
 
@@ -365,6 +381,7 @@ uat("Emisión DOSA sobre HTTP local real — cinco empresas", () => {
         rangeTo: 50,
         approvedQuantity: 50,
         declarationAccepted: true,
+        ...(documentType === "E31" ? { expiresAt: "2028-12-31" } : {}),
       });
     expect(declared.status).toBe(201);
     const res = await http()
@@ -453,7 +470,7 @@ uat("Emisión DOSA sobre HTTP local real — cinco empresas", () => {
       .set("Authorization", `Bearer ${tenant.token}`)
       .send({
         originCashSessionId: session.id,
-        ...(electronicType ? { fiscalVoucherType: electronicType, sequenceDueDate: "2028-12-31" } : {}),
+        ...(electronicType ? { fiscalVoucherType: electronicType } : {}),
         paymentMethod: "cash",
         paymentCashAmount: 118,
         customerId: client.body.id,
@@ -483,9 +500,6 @@ uat("Emisión DOSA sobre HTTP local real — cinco empresas", () => {
         documentType: "E31",
         paymentType: 1,
         incomeType: 1,
-        sequenceDueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-          .toISOString()
-          .slice(0, 10),
       });
     if (res.status !== 201 || res.body?.ok !== true) {
       throw new Error(`prepare rechazado: HTTP ${res.status} ${JSON.stringify(res.body)}`);
@@ -579,6 +593,96 @@ uat("Emisión DOSA sobre HTTP local real — cinco empresas", () => {
   }
 
   // --------------------------------------------------------------------- casos
+
+  it("two new companies self-onboard through customer routes, signed provider completion and own production numbering", async () => {
+    // Simulates DOSA's hosted certificate/password assistant and its signed
+    // completion event. No certificate/private key or production credential is real.
+    // No platform grant, certification status update or manual credential promotion.
+    setEnv("ECF_PORTAL_AUTO_ENROLL_ENABLED", "true");
+    setEnv(PLATFORM_STAFF_ENV, "");
+    setEnv("DOSA_CERTIFICATION_SESSIONS_ENABLED", "true");
+    setEnv("DOSA_WEBHOOK_ENABLED", "true");
+    setEnv("DOSA_PRODUCTION_EMISSION_ENABLED", "true");
+    setEnv("DOSA_CONFIRMED_DGII_OUTCOMES_ENABLED", "true");
+    // Runtime client configuration is captured on local application startup.
+    await app.close(); await bootApp();
+    requests.length = 0;
+    try {
+      const tenants = [await registerTenant("self-a", "1"), await registerTenant("self-b", "1")];
+      const docs: { tenant: Tenant; documentId: string; expiry: string; key: string }[] = [];
+      for (const [index, tenant] of tenants.entries()) {
+        const auth = { Authorization: `Bearer ${tenant.token}` };
+        await enableEcf(tenant);
+        await http().patch("/settings").set(auth).send({ ecfContactEmail: `fiscal-${index}@example.test` }).expect(200);
+        await http().post("/ecf/production/enable").set(auth).send({ expectedCompanyId: tenant.companyId }).expect(403);
+        const initial = await http().get("/ecf/capabilities").set(auth).expect(200);
+        expect(initial.body.posReady).toBe(false);
+        expect(initial.body.productionEnabled).toBe(false);
+        const eligibility = await http().get("/ecf/certification-portal/eligibility").set(auth).expect(200);
+        expect(eligibility.body).toMatchObject({ eligible: true, reason: "AUTO_ELIGIBLE", companyId: tenant.companyId });
+        await http().post("/ecf/dosa/certification-intent").set(auth).send({ rnc: tenant.rnc }).expect(200);
+        const ticket = await http().post("/ecf/certification-portal/tickets").set(auth).expect(201);
+        await http().post("/ecf/certification-portal/sessions").send({ ticket: ticket.body.ticket, companyId: tenants[1-index].companyId }).expect(403);
+        const portal = await http().post("/ecf/certification-portal/sessions").send({ ticket: ticket.body.ticket }).expect(201);
+        expect(portal.body.context.company.id).toBe(tenant.companyId);
+        await http().post("/ecf/certification-portal/sessions").send({ ticket: ticket.body.ticket }).expect(409);
+        const opened = await http().post("/ecf/dosa/certification-session").set(auth).send({}).expect(200);
+        expect(opened.body).toMatchObject({ ok: true, companyId: tenant.companyId, fiscalAuthorizationGranted: false });
+        const repeated = await http().post("/ecf/dosa/certification-session").set(auth).send({}).expect(200);
+        expect(repeated.body.reused).toBe(true);
+        const key = `sk_prod_synthetic_self_${index}`;
+        const body = JSON.stringify({ postulacion_id: opened.body.providerPostulationId, rnc: tenant.rnc,
+          razon_social: `Synthetic self-service ${index}`, correo: `fiscal-${index}@example.test`,
+          ambiente: "Produccion", estado_certificacion: "finalizado", credenciales_pendientes: false,
+          disponibles_desde: new Date().toISOString(),
+          credenciales: { api_key_produccion: key, api_key_test: `sk_test_synthetic_self_${index}`, api_secret: `synthetic-self-${index}` } });
+        const t = String(Math.floor(Date.now()/1000));
+        const signature = `t=${t},v1=${createHmac("sha256", "synthetic-self-service-webhook-secret").update(`${t}.${body}`).digest("hex")}`;
+        await http().post("/webhook/dosa").set("Content-Type", "application/json").set("x-dosa-signature", "t=1,v1=invalid").send(body).expect(401);
+        const finished = await http().post("/webhook/dosa").set("Content-Type", "application/json").set("x-dosa-signature", signature).send(body).expect(200);
+        expect(finished.body.accepted).toBe(true);expect(JSON.stringify(finished.body)).not.toContain(key);
+        const duplicate = await http().post("/webhook/dosa").set("Content-Type", "application/json").set("x-dosa-signature", signature).send(body).expect(200);
+        expect(duplicate.body.duplicate).toBe(true);
+        await http().post("/ecf/dgii/authorization").set(auth).send({ source: "MANUAL_OPERATOR_DECLARATION" }).expect(201);
+        const derived = await http().post("/ecf/dosa/activation/attempt").set(auth).send({}).expect(200);
+        expect(derived.body.certificationStatus).toBe("PRODUCTION_READY");
+        expect(derived.body.companyId).toBe(tenant.companyId);
+        await http().post("/ecf/production/enable").set(auth).send({ expectedCompanyId: tenants[1-index].companyId }).expect(409);
+        await http().post("/ecf/production/enable").set(auth).send({ expectedCompanyId: tenant.companyId }).expect(201);
+        const withoutNumbers = await http().get("/ecf/capabilities").set(auth).expect(200);
+        expect(withoutNumbers.body).toMatchObject({ environment: "PRODUCTION", productionEnabled: true, posReady: false });
+        const expiry = `${2031+index}-12-31`;
+        await http().post("/ecf/dgii/authorized-sequences").set(auth).send({ expectedEnvironment: "PRODUCTION", documentType: "E31",
+          authorizationNumber: `SYNTH-SELF-${index}`, rangeFrom: 1, rangeTo: 50, approvedQuantity: 50, expiresAt: expiry, declarationAccepted: true }).expect(201);
+        await http().post("/ecf/sequences").set(auth).send({ expectedEnvironment: "PRODUCTION", documentType: "E31", startNumber: 1, endNumber: 50 }).expect(201);
+        const available = await http().get("/ecf/capabilities").set(auth).expect(200);
+        expect(available.body).toMatchObject({ posReady: true, e31SequenceDueDate: expiry });
+        const saleId = await sell(tenant, "131000001", "E31"); // no date entered at checkout
+        const sale = await prisma.sale.findFirstOrThrow({ where: { companyId: tenant.companyId, id: saleId } });
+        expect(sale.ncfExpirationDate?.toISOString().slice(0,10)).toBe(expiry);
+        const document = await prisma.ecfElectronicDocument.findFirstOrThrow({ where: { companyId: tenant.companyId, environment: "PRODUCTION", sourceId: saleId } });
+        expect((document.payloadSummary as any).emission.payload.idDoc.sequenceDueDate).toBe(expiry);
+        docs.push({ tenant, documentId: document.id, expiry, key });
+      }
+      await Promise.all(docs.map(async ({tenant,documentId}) => { const result=await dispatch(tenant,documentId);expect(result.body).toMatchObject({ok:true}); }));
+      expect(requests).toHaveLength(2);
+      for (const {tenant,documentId,expiry,key} of docs) {
+        const sent=requests.find(r=>JSON.parse(r.body).encabezado.emisor.RNCEmisor===tenant.rnc)!;
+        expect(sent.headers["x-api-key"]).toBe(key);
+        expect(JSON.parse(sent.body).encabezado.idDoc.fechavencimientosecuencia).toBe(`31-12-${expiry.slice(0,4)}`);
+        const printed=await http().get(`/ecf/documents/${documentId}/print`).set("Authorization",`Bearer ${tenant.token}`).expect(200);
+        expect(printed.body.document).toMatchObject({environment:"PRODUCTION",issuerRnc:tenant.rnc,expiresAt:expiry});
+        expect(printed.body.document.qrUrl).toContain("/ecf/ConsultaTimbre");
+        const other=tenants.find(t=>t.companyId!==tenant.companyId)!;
+        await http().get(`/ecf/documents/${documentId}/print`).set("Authorization",`Bearer ${other.token}`).expect(404);
+        expect(await prisma.ecfSequenceAuditLog.count({where:{companyId:tenant.companyId,action:"ALLOCATED"}})).toBe(1);
+      }
+    } finally {
+      setEnv("ECF_PORTAL_AUTO_ENROLL_ENABLED","false");setEnv("DOSA_CERTIFICATION_SESSIONS_ENABLED","false");
+      setEnv("DOSA_WEBHOOK_ENABLED","false");setEnv("DOSA_PRODUCTION_EMISSION_ENABLED","false");setEnv("DOSA_CONFIRMED_DGII_OUTCOMES_ENABLED","false");
+      await app.close(); await bootApp();
+    }
+  });
 
   it("certified companies explicitly enable production with their own credentials and prepare commercial E31", async () => {
     const tenant=await registerTenant("production-enable","1");await enableEcf(tenant);

@@ -2338,6 +2338,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       );
     }
     return EcfPosFiscalSelector(
+      embedded: true,
       modes: modes,
       selected: _ecfModeForCheckout(),
       missingBuyer:
@@ -6513,20 +6514,21 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         copiedMessage: 'No se pudo abrir WhatsApp. Enlace de factura copiado.',
       );
       if (!launchContext.mounted) return;
-      ScaffoldMessenger.maybeOf(launchContext)?.showSnackBar(
-        const SnackBar(content: Text('WhatsApp abierto con la factura.')),
+      AppFeedback.showToast(
+        launchContext,
+        title: 'Factura',
+        body: 'WhatsApp abierto con la factura.',
       );
     } catch (e) {
       if (!launchContext.mounted) return;
-      ScaffoldMessenger.maybeOf(launchContext)?.showSnackBar(
-        SnackBar(
-          content: Text(
-            userSafeErrorMessage(
-              e,
-              fallback:
-                  'No se pudo preparar la factura para WhatsApp. Inténtalo nuevamente.',
-            ),
-          ),
+      AppFeedback.showToast(
+        launchContext,
+        title: 'Factura',
+        kind: AppFeedbackKind.error,
+        body: userSafeErrorMessage(
+          e,
+          fallback:
+              'No se pudo preparar la factura para WhatsApp. Inténtalo nuevamente.',
         ),
       );
     }
@@ -7226,9 +7228,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         .read(unifiedTicketPrinterProvider)
         .reprintSale(sale: sale, items: sale.items);
     if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(result.message)));
+    AppFeedback.showToast(context, title: 'Impresión', body: result.message);
   }
 
   void _showRecentSaleDetails(SaleModel sale) {
@@ -7393,7 +7393,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
   /// Confirma el comprobante elegido en el cobro, ya con la venta por cerrar.
   ///
-  /// El vencimiento E31 se confirma antes de crear la venta. Normal no pide
+  /// El vencimiento E31 viene de la autorización de la empresa. Normal no pide
   /// datos fiscales ni genera una operación e-CF.
   Future<bool> _confirmEcfModeForSale(EcfPosFiscalMode mode) async {
     if (mode.requiresBuyer &&
@@ -7409,7 +7409,11 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       return false;
     }
     if (mode == EcfPosFiscalMode.e31 &&
+        (_ecfCaps?.e31SequenceDueDate ?? '').isNotEmpty) {
+      setState(() => _ecfSequenceDueDate = _ecfCaps!.e31SequenceDueDate);
+    } else if (mode == EcfPosFiscalMode.e31 &&
         (_ecfSequenceDueDate ?? '').trim().isEmpty) {
+      // Compatibilidad con servidores anteriores que aún no proyectan la fecha.
       final dueDate = await _askEcfSequenceDueDate();
       if (dueDate == null || !mounted) return false;
       setState(() => _ecfSequenceDueDate = dueDate);
@@ -7876,11 +7880,10 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       brandMenu: true,
       preferDrawerLeading: true,
       actions: [
-        const SizedBox(width: 8),
         const CashTurnMenuButton(refined: true),
-        const SizedBox(width: 8),
+        const SizedBox(width: 2),
         const SyncStatusMenuButton(iconOnly: true),
-        const SizedBox(width: 8),
+        const SizedBox(width: 2),
         if (showAiBanner)
           IconButton(
             tooltip: 'Cerrar comentario IA',
@@ -10705,9 +10708,13 @@ class _CompanyAccountMenu extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final activation = ref.watch(activationControllerProvider).valueOrNull;
-    final canResumeActivation = activation != null &&
+    final canResumeActivation =
+        activation != null &&
         activationPendingSteps(activation) > 0 &&
-        hasUserPermission(ref.watch(authStateProvider).user, AppPermission.manageSettings);
+        hasUserPermission(
+          ref.watch(authStateProvider).user,
+          AppPermission.manageSettings,
+        );
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: PopupMenuButton<String>(
@@ -10810,15 +10817,21 @@ class _CompanyAccountMenu extends ConsumerWidget {
             padding: EdgeInsets.zero,
             child: _CompanySettingsSubmenu(
               showPrinter: !kIsWeb,
-              onActivation: canResumeActivation ? () {
-                final panel = ref.read(activationPanelOpenProvider.notifier);
-                final controller = ref.read(activationControllerProvider.notifier);
-                _activateMenuItem(menuContext, () {
-                  if (!context.mounted) return;
-                  panel.state = true;
-                  unawaited(controller.reopen());
-                });
-              } : null,
+              onActivation: canResumeActivation
+                  ? () {
+                      final panel = ref.read(
+                        activationPanelOpenProvider.notifier,
+                      );
+                      final controller = ref.read(
+                        activationControllerProvider.notifier,
+                      );
+                      _activateMenuItem(menuContext, () {
+                        if (!context.mounted) return;
+                        panel.state = true;
+                        unawaited(controller.reopen());
+                      });
+                    }
+                  : null,
               onApps: () => _activateProtectedPanel(
                 context,
                 ref,
@@ -15491,11 +15504,7 @@ class _ExpressionEvaluator {
 }
 
 class _BillingPngIcon extends StatelessWidget {
-  const _BillingPngIcon({
-    required this.asset,
-    required this.size,
-    this.color,
-  });
+  const _BillingPngIcon({required this.asset, required this.size, this.color});
 
   final String asset;
   final double size;
@@ -15802,6 +15811,7 @@ class DesktopSalesDetailPanel extends StatelessWidget {
           children: [
             SalesDetailHeader(
               clientSelector: SalesClientSelector(
+                framed: false,
                 hasClient: hasClient,
                 name: selectedClientName,
                 phone: clientPhone,
@@ -15819,15 +15829,11 @@ class DesktopSalesDetailPanel extends StatelessWidget {
               priceListSelector: priceListSelector is SizedBox
                   ? null
                   : priceListSelector,
+              fiscalSelector: ecfSelector,
             ),
             // El comprobante vive arriba, junto al cliente: es un dato de la
             // venta, no del importe. Se muestra siempre que la empresa facture
             // electrónicamente para que se vea desde el primer momento.
-            if (ecfSelector != null)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
-                child: ecfSelector,
-              ),
             Expanded(
               child: items.isEmpty
                   ? Center(
@@ -15993,60 +15999,64 @@ class DesktopSalesDetailPanel extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 3),
-              if (hasItems) Container(
-                width: double.infinity,
-                margin: EdgeInsets.zero,
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  border: Border(
-                    top: BorderSide(color: _billingBorderColor),
-                    bottom: BorderSide(color: _billingBorderColor),
+              if (hasItems)
+                Container(
+                  width: double.infinity,
+                  margin: EdgeInsets.zero,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 2,
                   ),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFEAF1FF),
-                            borderRadius: BorderRadius.circular(3),
-                          ),
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text(
-                              itemCountText,
-                              style: const TextStyle(
-                                color: Color(0xFF1957E6),
-                                fontWeight: FontWeight.w900,
-                                fontSize: 11,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    border: Border(
+                      top: BorderSide(color: _billingBorderColor),
+                      bottom: BorderSide(color: _billingBorderColor),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEAF1FF),
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                itemCountText,
+                                style: const TextStyle(
+                                  color: Color(0xFF1957E6),
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 11,
+                                ),
                               ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                    TextButton.icon(
-                      onPressed: onClear,
-                      icon: const Icon(Icons.close, size: 16),
-                      label: const Text('Cancelar venta'),
-                      style: TextButton.styleFrom(
-                        foregroundColor: const Color(0xFF1957E6),
-                        textStyle: const TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 12,
+                      TextButton.icon(
+                        onPressed: onClear,
+                        icon: const Icon(Icons.close, size: 16),
+                        label: const Text('Cancelar venta'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: const Color(0xFF1957E6),
+                          textStyle: const TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 12,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
             ],
           ],
         ),

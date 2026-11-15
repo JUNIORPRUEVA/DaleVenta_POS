@@ -41,6 +41,7 @@ import '../../../core/widgets/app_drawer.dart';
 import '../../../core/widgets/custom_app_bar.dart';
 import '../../../core/widgets/fulltech_dialog.dart';
 import '../../../core/widgets/fulltech_page_header.dart';
+import '../../../core/widgets/provided_action_icon.dart';
 import '../../../core/widgets/product_network_image.dart';
 import '../../catalogo/application/catalog_controller.dart';
 import '../../catalogo/application/product_search_controller.dart';
@@ -2003,7 +2004,10 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
                   if (initialTabIndex == 0)
                     _CatalogHeaderActionButton(
                       onPressed: _exportCatalog,
-                      icon: const Icon(Icons.download_rounded, size: 18),
+                      icon: const ProvidedActionIcon(
+                        ProvidedAction.download,
+                        size: 18,
+                      ),
                       label: 'Exportar',
                     ),
                   if (initialTabIndex == 0) const SizedBox(width: 10),
@@ -2012,12 +2016,18 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
                       onPressed: canEditProducts
                           ? () => _openProductEditor()
                           : null,
-                      icon: const Icon(Icons.add_rounded, size: 18),
+                      icon: const ProvidedActionIcon(
+                        ProvidedAction.add,
+                        size: 18,
+                      ),
                       label: 'Nuevo producto',
                       filled: true,
                     ),
                   if (initialTabIndex == 3)
                     FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        shape: const RoundedRectangleBorder(),
+                      ),
                       onPressed: canEditProducts
                           ? () => _categoriesKey.currentState?.openNewCategory()
                           : null,
@@ -2032,7 +2042,7 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
                       tooltip: 'Filtrar recuento',
                       onPressed: () =>
                           _inventoryKey.currentState?.openMobileFilters(),
-                      icon: const Icon(Icons.filter_alt_outlined),
+                      icon: const ProvidedActionIcon(ProvidedAction.filter),
                     ),
                   IconButton(
                     tooltip: 'Actualizar',
@@ -2043,7 +2053,11 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
                             height: 18,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Icon(Icons.refresh_rounded),
+                        : ProvidedActionIcon(
+                            initialTabIndex == 1
+                                ? ProvidedAction.reload
+                                : ProvidedAction.refresh,
+                          ),
                   ),
                   const SizedBox(width: 8),
                 ],
@@ -2070,7 +2084,7 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(18),
                 ),
-                child: const Icon(Icons.add_rounded),
+                child: const ProvidedActionIcon(ProvidedAction.add),
               )
             : null,
       ),
@@ -2228,7 +2242,7 @@ class _InventoryMobileSearchField extends StatelessWidget {
             suffixIcon: IconButton(
               tooltip: 'Cerrar',
               onPressed: onClose,
-              icon: const Icon(Icons.close_rounded, size: 18),
+              icon: const ProvidedActionIcon(ProvidedAction.close, size: 18),
             ),
             filled: true,
             fillColor: Colors.white,
@@ -2306,7 +2320,7 @@ Future<T?> _showInventoryFilterDrawer<T>(
   required Widget child,
 }) {
   final width = MediaQuery.sizeOf(context).width;
-  final panelWidth = (width * 0.88).clamp(300.0, 370.0).toDouble();
+  final panelWidth = width < 480 ? width : 420.0;
   return showGeneralDialog<T>(
     context: context,
     barrierDismissible: true,
@@ -2350,43 +2364,52 @@ class _InventoryFilterShell extends StatelessWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context) {
-    return SafeArea(
+  Widget build(BuildContext context) => Theme(
+    data: _categoryVisualTheme(context),
+    child: SafeArea(
       left: false,
       child: Material(
-        color: Colors.white,
+        color: AppColors.surface,
         shape: const RoundedRectangleBorder(
           side: BorderSide(color: AppColors.border),
         ),
         child: Column(
           children: [
             Container(
-              width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(18, 18, 12, 16),
+              padding: const EdgeInsets.fromLTRB(18, 16, 10, 16),
               decoration: const BoxDecoration(
-                color: AppColors.primary,
-                border: Border(bottom: BorderSide(color: Color(0xFF1649C7))),
+                border: Border(bottom: BorderSide(color: AppColors.border)),
               ),
               child: Row(
                 children: [
+                  const ProvidedActionIcon(
+                    ProvidedAction.filter,
+                    size: 22,
+                    color: AppColors.primary,
+                  ),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          title,
+                          subtitle == 'Conteo'
+                              ? 'Filtros de inventario'
+                              : title,
                           style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w900,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textPrimary,
                           ),
                         ),
+                        const SizedBox(height: 3),
                         Text(
-                          subtitle,
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.82),
+                          subtitle == 'Conteo'
+                              ? 'Categoría y estado de stock'
+                              : subtitle,
+                          style: const TextStyle(
                             fontSize: 12,
-                            fontWeight: FontWeight.w700,
+                            color: AppColors.textSecondary,
                           ),
                         ),
                       ],
@@ -2395,29 +2418,20 @@ class _InventoryFilterShell extends StatelessWidget {
                   IconButton(
                     tooltip: 'Cerrar',
                     onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.close_rounded),
-                    color: Colors.white,
+                    icon: const ProvidedActionIcon(
+                      ProvidedAction.close,
+                      size: 16,
+                    ),
                   ),
                 ],
               ),
             ),
-            Expanded(
-              child: DecoratedBox(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [Color(0xFFF6FAFF), Colors.white],
-                  ),
-                ),
-                child: child,
-              ),
-            ),
+            Expanded(child: child),
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
 }
 
 class _CatalogFilterDraft {
@@ -2604,64 +2618,86 @@ class _StockMobileFilterPanelState extends State<_StockMobileFilterPanel> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(18, 18, 18, 24),
-      children: [
-        _FilterBlockTitle('Categoría'),
-        DropdownButtonFormField<String>(
-          initialValue: _category,
-          isExpanded: true,
-          items: [
-            const DropdownMenuItem(
-              value: 'Todas las categorías',
-              child: Text('Todas las categorías'),
-            ),
-            for (final category in widget.categories)
-              DropdownMenuItem(value: category, child: Text(category)),
-          ],
-          onChanged: (value) {
-            if (value != null) setState(() => _category = value);
-          },
-          decoration: _inventoryTextInputDecoration('Categoría'),
-        ),
-        const SizedBox(height: 18),
-        _FilterBlockTitle('Estado de stock'),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
+  Widget build(BuildContext context) => Column(
+    children: [
+      Expanded(
+        child: ListView(
+          padding: const EdgeInsets.all(18),
           children: [
-            for (final filter in _StockFilter.values)
-              ChoiceChip(
-                label: Text(filter.label),
-                selected: _stockFilter == filter,
-                onSelected: (_) => setState(() => _stockFilter = filter),
-              ),
+            _FilterBlockTitle('Categoría'),
+            DropdownButtonFormField<String>(
+              initialValue: _category,
+              isExpanded: true,
+              items: [
+                const DropdownMenuItem(
+                  value: 'Todas las categorías',
+                  child: Text('Todas las categorías'),
+                ),
+                for (final category in widget.categories)
+                  DropdownMenuItem(
+                    value: category,
+                    child: Text(category, overflow: TextOverflow.ellipsis),
+                  ),
+              ],
+              onChanged: (value) {
+                if (value != null) setState(() => _category = value);
+              },
+              decoration: _inventoryTextInputDecoration('Categoría'),
+            ),
+            const SizedBox(height: 20),
+            _FilterBlockTitle('Estado de stock'),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final filter in _StockFilter.values)
+                  ChoiceChip(
+                    label: Text(filter.label),
+                    selected: _stockFilter == filter,
+                    onSelected: (_) => setState(() => _stockFilter = filter),
+                  ),
+              ],
+            ),
           ],
         ),
-        const SizedBox(height: 24),
-        OutlinedButton.icon(
-          onPressed: () => Navigator.of(context).pop(
-            const _StockFilterDraft(
-              category: 'Todas las categorías',
-              stockFilter: _StockFilter.all,
-              clearSearch: true,
+      ),
+      Container(
+        padding: const EdgeInsets.all(16),
+        decoration: const BoxDecoration(
+          border: Border(top: BorderSide(color: AppColors.border)),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () => Navigator.of(context).pop(
+                  const _StockFilterDraft(
+                    category: 'Todas las categorías',
+                    stockFilter: _StockFilter.all,
+                    clearSearch: true,
+                  ),
+                ),
+                child: const Text('Limpiar todo'),
+              ),
             ),
-          ),
-          icon: const Icon(Icons.cleaning_services_outlined, size: 17),
-          label: const Text('Limpiar todo'),
+            const SizedBox(width: 10),
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: () => Navigator.of(context).pop(
+                  _StockFilterDraft(
+                    category: _category,
+                    stockFilter: _stockFilter,
+                  ),
+                ),
+                icon: const Icon(Icons.check, size: 18),
+                label: const Text('Aplicar'),
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: 10),
-        FilledButton.icon(
-          onPressed: () => Navigator.of(context).pop(
-            _StockFilterDraft(category: _category, stockFilter: _stockFilter),
-          ),
-          icon: const Icon(Icons.check_rounded, size: 17),
-          label: const Text('Aplicar filtros'),
-        ),
-      ],
-    );
-  }
+      ),
+    ],
+  );
 }
 
 class _CategoriesMobileFilterPanel extends StatelessWidget {
@@ -3176,18 +3212,24 @@ class _CatalogTabState extends State<CatalogTab> {
             }
             return Padding(
               padding: padding,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  toolbar,
-                  const SizedBox(height: 12),
-                  Expanded(
-                    child: RefreshIndicator(
-                      onRefresh: widget.onRefresh,
-                      child: ListView(children: contentChildren),
-                    ),
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1440),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      toolbar,
+                      const SizedBox(height: 12),
+                      Expanded(
+                        child: RefreshIndicator(
+                          onRefresh: widget.onRefresh,
+                          child: ListView(children: contentChildren),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             );
           },
@@ -3243,12 +3285,22 @@ class _CatalogToolbar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mobile = MediaQuery.sizeOf(context).width < 640;
+    final availableWidth = MediaQuery.sizeOf(context).width - 56;
+    final controlsWidth =
+        140 * (MediaQuery.textScalerOf(context).scale(12) / 12) +
+        (showWarehouseControls ? 266 : 0) +
+        (selectedCount > 1 ? 200 : 0);
     final searchWidth = mobile
         ? double.infinity
-        : (MediaQuery.sizeOf(context).width * 0.46).clamp(560.0, 760.0);
+        : (availableWidth - controlsWidth).clamp(220.0, 760.0);
     final hasFilters = selectedCategory != null || onlyLowStock || onlyOutStock;
-    return ProductsSurface(
-      padding: EdgeInsets.all(mobile ? 10 : 12),
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.border),
+      ),
+      padding: const EdgeInsets.all(10),
       child: Wrap(
         spacing: 8,
         runSpacing: 10,
@@ -3260,7 +3312,10 @@ class _CatalogToolbar extends StatelessWidget {
               controller: controller,
               onChanged: onSearchChanged,
               decoration: InputDecoration(
-                prefixIcon: const Icon(Icons.search_rounded, size: 18),
+                prefixIcon: const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: ProvidedActionIcon(ProvidedAction.search, size: 18),
+                ),
                 hintText: 'Buscar por nombre, código o categoría',
                 filled: true,
                 fillColor: Colors.white,
@@ -3463,7 +3518,8 @@ class _CatalogToolbarButton extends StatelessWidget {
     final shape = RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(7),
     );
-    final textStyle = const TextStyle(
+    final textStyle = TextStyle(
+      fontFamily: Theme.of(context).textTheme.labelMedium?.fontFamily,
       fontSize: 13,
       fontWeight: FontWeight.w800,
       letterSpacing: 0,
@@ -3738,14 +3794,19 @@ class _CatalogTable extends StatelessWidget {
       context,
       products,
     );
-    return ProductsSurface(
-      padding: EdgeInsets.zero,
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.border),
+      ),
       child: LayoutBuilder(
         builder: (context, constraints) {
           return SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: SizedBox(
-              width: constraints.maxWidth,
+              width: constraints.maxWidth < 1060 ? 1060 : constraints.maxWidth,
               child: DataTable(
                 showCheckboxColumn: true,
                 columnSpacing: 18,
@@ -3754,11 +3815,19 @@ class _CatalogTable extends StatelessWidget {
                 onSelectAll: products.isEmpty
                     ? null
                     : (value) => onSelectAll(value ?? false),
-                dataRowMinHeight: 46,
-                dataRowMaxHeight: 54,
-                headingRowHeight: 42,
-                headingTextStyle: const TextStyle(
-                  fontWeight: FontWeight.w900,
+                dataRowMinHeight: 48,
+                dataRowMaxHeight:
+                    56 *
+                    (MediaQuery.textScalerOf(context).scale(12) / 12).clamp(
+                      1.0,
+                      2.0,
+                    ),
+                headingRowHeight: 40,
+                headingTextStyle: TextStyle(
+                  fontFamily: Theme.of(
+                    context,
+                  ).textTheme.labelMedium?.fontFamily,
+                  fontWeight: FontWeight.w700,
                   color: _textSecondary,
                   fontSize: 12,
                 ),
@@ -3812,7 +3881,9 @@ class _CatalogTable extends StatelessWidget {
                                 onPressed: canEditProducts
                                     ? () => onEdit(product)
                                     : null,
-                                icon: const Icon(Icons.edit_outlined),
+                                icon: const ProvidedActionIcon(
+                                  ProvidedAction.edit,
+                                ),
                               ),
                               if (_canAdjustPhysicalStock(
                                 product,
@@ -3840,7 +3911,9 @@ class _CatalogTable extends StatelessWidget {
                                 onPressed: canEditProducts
                                     ? () => onDelete(product)
                                     : null,
-                                icon: const Icon(Icons.delete_outline),
+                                icon: const ProvidedActionIcon(
+                                  ProvidedAction.delete,
+                                ),
                               ),
                             ],
                           ),
@@ -3908,9 +3981,13 @@ class _CompactCatalogList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mobile = MediaQuery.sizeOf(context).width < 640;
-    return ProductsSurface(
-      padding: EdgeInsets.all(mobile ? 3 : 16),
-      radius: mobile ? 8 : 14,
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.border),
+      ),
+      padding: EdgeInsets.all(mobile ? 3 : 10),
       child: Column(
         children: [
           for (final product in products)
@@ -4078,7 +4155,7 @@ class _InventoryTabState extends State<InventoryTab> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      if (mobile)
+                      if (mobile && constraints.maxWidth < 360)
                         _InventoryMobileOverview(
                           totalCost: totalCost,
                           totalRevenue: totalRevenue,
@@ -4221,7 +4298,7 @@ class _InventoryMobileOverview extends StatelessWidget {
             children: [
               const Text(
                 'Resumen de inventario',
-                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
               ),
               const SizedBox(height: 12),
               _InventoryBar(
@@ -4325,7 +4402,7 @@ class _InventoryBar extends StatelessWidget {
                   label,
                   style: const TextStyle(
                     color: _textSecondary,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w500,
                     fontSize: 12,
                   ),
                 ),
@@ -4333,7 +4410,7 @@ class _InventoryBar extends StatelessWidget {
               Text(
                 available ? formatRdCurrencyAccounting(value) : 'No disponible',
                 style: const TextStyle(
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w600,
                   fontSize: 12,
                 ),
               ),
@@ -4389,7 +4466,7 @@ class _InventoryStatPill extends StatelessWidget {
                   value,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w900),
+                  style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
                 Text(
                   label,
@@ -5820,141 +5897,148 @@ class _CategoriesTabState extends ConsumerState<CategoriesTab> {
       (sum, value) => sum + value,
     );
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final mobile = constraints.maxWidth < 640;
-        return RefreshIndicator(
-          onRefresh: widget.onRefresh,
-          child: ListView(
-            padding: productsResponsivePagePadding(constraints),
-            children: [
-              if (mobile)
-                if (categoryState.error != null)
-                  _InlineWarning(message: categoryState.error!)
-                else if (rows.isEmpty)
-                  const ProductsEmptyState(
-                    icon: Icons.category_outlined,
-                    title: 'Sin categorías',
-                    message: 'Crea tu primera categoría con nombre e imagen.',
-                  )
-                else
-                  for (final category in rows)
-                    _CategoryManagementCard(
-                      width: double.infinity,
-                      category: category,
-                      productCount: _productCounts[category.name] ?? 0,
-                      managed: !category.id.startsWith('derived-'),
-                      onEdit: () => _openEditor(category: category),
-                      onDelete: () => _deleteCategory(category),
-                      onOpenDetail: () => _openCategoryDetail(category),
-                    )
-              else
-                ProductsSurface(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Expanded(
-                            child: _SectionHeader(
-                              title: 'Categorías',
-                              subtitle: 'Administra familias, fotos y catálogo',
-                            ),
-                          ),
-                          FilledButton.icon(
-                            onPressed: categoryState.saving
-                                ? null
-                                : () => _openEditor(),
-                            icon: const Icon(Icons.add_rounded),
-                            label: const Text('Nueva categoría'),
-                          ),
-                        ],
+    return Theme(
+      data: _categoryVisualTheme(context),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final mobile = constraints.maxWidth < 640;
+          return RefreshIndicator(
+            onRefresh: widget.onRefresh,
+            child: ListView(
+              padding: productsResponsivePagePadding(constraints),
+              children: [
+                Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1240),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        border: Border.all(color: AppColors.border),
                       ),
-                      const SizedBox(height: 14),
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        crossAxisAlignment: WrapCrossAlignment.center,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          SizedBox(
-                            width: 320,
-                            child: TextField(
-                              onChanged: (value) =>
-                                  setState(() => _query = value),
-                              decoration: const InputDecoration(
-                                prefixIcon: Icon(Icons.search_rounded),
-                                hintText: 'Buscar categoría',
-                                border: OutlineInputBorder(),
-                                isDense: true,
-                                filled: true,
-                                fillColor: Colors.white,
+                          if (!mobile)
+                            Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Wrap(
+                                spacing: 12,
+                                runSpacing: 8,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: [
+                                  SizedBox(
+                                    width: (constraints.maxWidth - 80).clamp(
+                                      200.0,
+                                      360.0,
+                                    ),
+                                    child: TextField(
+                                      onChanged: (value) =>
+                                          setState(() => _query = value),
+                                      decoration: const InputDecoration(
+                                        prefixIcon: Padding(
+                                          padding: EdgeInsets.all(12),
+                                          child: ProvidedActionIcon(
+                                            ProvidedAction.search,
+                                            size: 18,
+                                          ),
+                                        ),
+                                        hintText: 'Buscar categoría',
+                                        isDense: true,
+                                      ),
+                                    ),
+                                  ),
+                                  _CategorySummaryChip(
+                                    label:
+                                        '${categoryState.items.length} creadas',
+                                    icon: Icons.edit_note_rounded,
+                                  ),
+                                  _CategorySummaryChip(
+                                    label: '${rows.length} visibles',
+                                    icon: Icons.category_outlined,
+                                  ),
+                                  _CategorySummaryChip(
+                                    label: '$totalProducts productos',
+                                    icon: Icons.inventory_2_outlined,
+                                  ),
+                                ],
                               ),
                             ),
-                          ),
-                          _CategorySummaryChip(
-                            label: '${categoryState.items.length} creadas',
-                            icon: Icons.edit_note_rounded,
-                          ),
-                          _CategorySummaryChip(
-                            label: '${rows.length} visibles',
-                            icon: Icons.category_outlined,
-                          ),
-                          _CategorySummaryChip(
-                            label: '$totalProducts productos',
-                            icon: Icons.inventory_2_outlined,
-                          ),
+                          if (categoryState.error != null)
+                            Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: _InlineWarning(
+                                message: categoryState.error!,
+                              ),
+                            ),
+                          if (rows.isEmpty)
+                            const ProductsEmptyState(
+                              icon: Icons.category_outlined,
+                              title: 'Sin categorías',
+                              message:
+                                  'Crea tu primera categoría con nombre e imagen.',
+                            )
+                          else
+                            for (final category in rows)
+                              _CategoryManagementCard(
+                                width: double.infinity,
+                                category: category,
+                                productCount:
+                                    _productCounts[category.name] ?? 0,
+                                managed: !category.id.startsWith('derived-'),
+                                onEdit: () => _openEditor(category: category),
+                                onDelete: () => _deleteCategory(category),
+                                onOpenDetail: () =>
+                                    _openCategoryDetail(category),
+                              ),
                         ],
                       ),
-                      if (categoryState.error != null) ...[
-                        const SizedBox(height: 12),
-                        _InlineWarning(message: categoryState.error!),
-                      ],
-                      const SizedBox(height: 16),
-                      if (rows.isEmpty)
-                        const ProductsEmptyState(
-                          icon: Icons.category_outlined,
-                          title: 'Sin categorías',
-                          message:
-                              'Crea tu primera categoría con nombre e imagen.',
-                        )
-                      else
-                        LayoutBuilder(
-                          builder: (context, inner) {
-                            final compact = inner.maxWidth < 760;
-                            return Wrap(
-                              spacing: 12,
-                              runSpacing: 12,
-                              children: [
-                                for (final category in rows)
-                                  _CategoryManagementCard(
-                                    width: compact
-                                        ? inner.maxWidth
-                                        : ((inner.maxWidth - 12) / 2)
-                                              .clamp(360.0, 560.0)
-                                              .toDouble(),
-                                    category: category,
-                                    productCount:
-                                        _productCounts[category.name] ?? 0,
-                                    managed: !category.id.startsWith(
-                                      'derived-',
-                                    ),
-                                    onEdit: () =>
-                                        _openEditor(category: category),
-                                    onDelete: () => _deleteCategory(category),
-                                  ),
-                              ],
-                            );
-                          },
-                        ),
-                    ],
+                    ),
                   ),
                 ),
-            ],
-          ),
-        );
-      },
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
+}
+
+ThemeData _categoryVisualTheme(BuildContext context) {
+  final theme = Theme.of(context);
+  const shape = RoundedRectangleBorder();
+  const border = OutlineInputBorder(
+    borderRadius: BorderRadius.zero,
+    borderSide: BorderSide(color: AppColors.border),
+  );
+  return theme.copyWith(
+    filledButtonTheme: FilledButtonThemeData(
+      style: (theme.filledButtonTheme.style ?? const ButtonStyle()).copyWith(
+        shape: const WidgetStatePropertyAll(shape),
+        minimumSize: const WidgetStatePropertyAll(Size(40, 40)),
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: (theme.outlinedButtonTheme.style ?? const ButtonStyle()).copyWith(
+        shape: const WidgetStatePropertyAll(shape),
+        minimumSize: const WidgetStatePropertyAll(Size(40, 40)),
+      ),
+    ),
+    iconButtonTheme: const IconButtonThemeData(
+      style: ButtonStyle(shape: WidgetStatePropertyAll(shape)),
+    ),
+    inputDecorationTheme: theme.inputDecorationTheme.copyWith(
+      border: border,
+      enabledBorder: border,
+      focusedBorder: border.copyWith(
+        borderSide: const BorderSide(color: AppColors.primary),
+      ),
+      filled: true,
+      fillColor: AppColors.surface,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+    ),
+    chipTheme: theme.chipTheme.copyWith(shape: shape),
+  );
 }
 
 class _CategorySummaryChip extends StatelessWidget {
@@ -6001,109 +6085,79 @@ class _CategoryManagementCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final imageBytes = _decodeCategoryImage(category.imageBase64);
     final mobile = MediaQuery.sizeOf(context).width < 640;
-    final content = Row(
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(mobile ? 9 : 10),
-          child: Container(
-            width: mobile ? 44 : 74,
-            height: mobile ? 44 : 58,
-            color: const Color(0xFFF8FAFC),
-            child: imageBytes == null
-                ? const Icon(
-                    Icons.category_outlined,
-                    size: 24,
-                    color: Color(0xFF94A3B8),
-                  )
-                : Image.memory(imageBytes, fit: BoxFit.contain),
-          ),
-        ),
-        SizedBox(width: mobile ? 10 : 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                category.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                  height: 1.12,
-                  color: Color(0xFF1E293B),
-                ),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                '$productCount productos · ${managed ? 'Administrada' : 'Detectada'}',
-                style: const TextStyle(
-                  color: Color(0xFF94A3B8),
-                  fontWeight: FontWeight.w400,
-                  fontSize: 10,
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(width: 8),
-        if (mobile)
-          _ProductActionsMenu(onEdit: onEdit, onDelete: onDelete)
-        else ...[
-          OutlinedButton.icon(
-            onPressed: onEdit,
-            icon: const Icon(Icons.edit_outlined, size: 16),
-            label: const Text('Editar'),
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size(92, 36),
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-            ),
-          ),
-          IconButton(
-            tooltip: 'Eliminar',
-            onPressed: onDelete,
-            icon: const Icon(Icons.delete_outline_rounded),
-            color: FullTechDialogTokens.errorColor,
-          ),
-        ],
-      ],
-    );
-
     return SizedBox(
       width: width,
       child: Material(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(mobile ? 8 : 14),
+        color: AppColors.surface,
         child: InkWell(
-          mouseCursor: SystemMouseCursors.click,
           onTap: mobile ? onOpenDetail : null,
-          borderRadius: BorderRadius.circular(mobile ? 8 : 14),
           child: Container(
-            constraints: BoxConstraints(minHeight: mobile ? 74 : 0),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(mobile ? 8 : 14),
-              border: Border.all(color: const Color(0xFFE8EEF5), width: 0.8),
-              boxShadow: mobile
-                  ? [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.02),
-                        blurRadius: 5,
-                        offset: const Offset(0, 1),
+            constraints: const BoxConstraints(minHeight: 64),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: const BoxDecoration(
+              border: Border(top: BorderSide(color: AppColors.border)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceSubtle,
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: imageBytes == null
+                      ? const Icon(
+                          Icons.category_outlined,
+                          size: 20,
+                          color: AppColors.textMuted,
+                        )
+                      : Image.memory(imageBytes, fit: BoxFit.contain),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        category.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
-                    ]
-                  : [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.04),
-                        blurRadius: 14,
-                        offset: const Offset(0, 6),
+                      const SizedBox(height: 3),
+                      Text(
+                        '$productCount productos · ${managed ? 'Administrada' : 'Detectada'}',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textSecondary,
+                        ),
                       ),
                     ],
+                  ),
+                ),
+                if (mobile)
+                  _ProductActionsMenu(onEdit: onEdit, onDelete: onDelete)
+                else ...[
+                  IconButton(
+                    tooltip: 'Editar categoría',
+                    onPressed: onEdit,
+                    icon: const ProvidedActionIcon(ProvidedAction.edit),
+                    color: AppColors.primary,
+                  ),
+                  IconButton(
+                    tooltip: 'Eliminar categoría',
+                    onPressed: onDelete,
+                    icon: const ProvidedActionIcon(ProvidedAction.delete),
+                    color: AppColors.textSecondary,
+                  ),
+                ],
+              ],
             ),
-            padding: EdgeInsets.symmetric(
-              horizontal: mobile ? 8 : 12,
-              vertical: mobile ? 6 : 12,
-            ),
-            child: content,
           ),
         ),
       ),
@@ -6417,122 +6471,136 @@ class _CategoryEditorDialogState extends State<_CategoryEditorDialog> {
     final previewBytes =
         _imageBytes ??
         (_clearImage ? null : _decodeCategoryImage(_imageBase64));
-    return FullTechDialog(
-      title: widget.category == null ? 'Nueva categoría' : 'Editar categoría',
-      maxWidth: 460,
-      onClose: () => Navigator.of(context).pop(),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (_error != null) ...[
-            _FormErrorBanner(message: _error!),
-            const SizedBox(height: 12),
-          ],
-          TextField(
-            controller: _nameCtrl,
-            autofocus: true,
-            decoration: const InputDecoration(
-              labelText: 'Nombre de la categoría',
-              border: OutlineInputBorder(),
-            ),
-            textInputAction: TextInputAction.done,
-            onSubmitted: (_) => _submit(),
-          ),
-          const SizedBox(height: 14),
-          Container(
-            height: 170,
-            decoration: BoxDecoration(
-              color: _lightBlueHover,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: _borderSoft),
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: _pickedImagePath != null
-                ? buildMobileProductImagePreview(
-                    path: _pickedImagePath!,
-                    fit: BoxFit.cover,
-                    width: double.infinity,
-                    height: double.infinity,
-                    cacheWidth: 512,
-                    cacheHeight: 512,
-                  )
-                : previewBytes == null
-                ? const Icon(
-                    Icons.image_outlined,
-                    size: 48,
-                    color: _textSecondary,
-                  )
-                : Image.memory(
-                    previewBytes,
-                    fit: BoxFit.cover,
-                    cacheWidth: 512,
-                    cacheHeight: 512,
-                  ),
-          ),
-          const SizedBox(height: 10),
-          Row(
+    return Theme(
+      data: _categoryVisualTheme(context),
+      child: FullTechDialog(
+        title: widget.category == null ? 'Nueva categoría' : 'Editar categoría',
+        maxWidth: 460,
+        borderRadius: 0,
+        showCloseButton: true,
+        padding: const EdgeInsets.all(20),
+        onClose: () => Navigator.of(context).pop(),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _picking ? null : _pickImage,
-                  icon: _picking
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.upload_file_rounded),
-                  label: Text(
-                    _picking
-                        ? 'Seleccionando...'
-                        : (_imageName ?? 'Seleccionar foto'),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+              if (_error != null) ...[
+                _FormErrorBanner(message: _error!),
+                const SizedBox(height: 12),
+              ],
+              TextField(
+                controller: _nameCtrl,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: 'Nombre de la categoría',
                 ),
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => _submit(),
               ),
-              const SizedBox(width: 8),
-              IconButton(
-                tooltip: 'Quitar foto',
-                onPressed: previewBytes == null && _pickedImagePath == null
-                    ? null
-                    : () {
-                        final pending = _pickedImagePath;
-                        setState(() {
-                          _imageBytes = null;
-                          _imageBase64 = null;
-                          _imageName = null;
-                          _pickedImagePath = null;
-                          _clearImage = true;
-                        });
-                        if (pending != null) {
-                          unawaited(deleteMobileProductImageTemp(pending));
-                        }
-                      },
-                icon: const Icon(Icons.delete_outline_rounded),
+              const SizedBox(height: 16),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Container(
+                    key: const ValueKey('category-image-preview'),
+                    width: 72,
+                    height: 72,
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceSubtle,
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: _pickedImagePath != null
+                        ? buildMobileProductImagePreview(
+                            path: _pickedImagePath!,
+                            fit: BoxFit.contain,
+                            width: 60,
+                            height: 60,
+                            cacheWidth: 256,
+                            cacheHeight: 256,
+                          )
+                        : previewBytes == null
+                        ? const Icon(
+                            Icons.image_outlined,
+                            size: 26,
+                            color: AppColors.textMuted,
+                          )
+                        : Image.memory(
+                            previewBytes,
+                            fit: BoxFit.contain,
+                            cacheWidth: 256,
+                            cacheHeight: 256,
+                          ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _picking ? null : _pickImage,
+                      icon: _picking
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.upload_file_rounded, size: 18),
+                      label: Text(
+                        _picking
+                            ? 'Seleccionando...'
+                            : (_imageName ?? 'Elegir foto'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  IconButton(
+                    tooltip: 'Quitar foto',
+                    onPressed: previewBytes == null && _pickedImagePath == null
+                        ? null
+                        : () {
+                            final pending = _pickedImagePath;
+                            setState(() {
+                              _imageBytes = null;
+                              _imageBase64 = null;
+                              _imageName = null;
+                              _pickedImagePath = null;
+                              _clearImage = true;
+                            });
+                            if (pending != null) {
+                              unawaited(deleteMobileProductImageTemp(pending));
+                            }
+                          },
+                    icon: const ProvidedActionIcon(
+                      ProvidedAction.delete,
+                      size: 18,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('Cancelar'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: _submit,
+                      child: Text(
+                        widget.category == null ? 'Crear' : 'Guardar',
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              Expanded(
-                child: DialogSecondaryButton(
-                  label: 'Cancelar',
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: DialogPrimaryButton(
-                  label: widget.category == null ? 'Crear' : 'Guardar',
-                  onPressed: _submit,
-                ),
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -6556,20 +6624,29 @@ class KpiCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
     final mobile = width < 640;
-    final cardWidth = mobile ? double.infinity : 214.0;
+    final columns = mobile
+        ? 2
+        : width < 900
+        ? 3
+        : 5;
+    final contentWidth = (width - (mobile ? 24 : 56)).clamp(0.0, 1240.0);
+    final cardWidth = ((contentWidth - (columns - 1) * 12) / columns).clamp(
+      0.0,
+      214.0,
+    );
     return SizedBox(
       width: cardWidth,
-      height: 118,
+      height: width < 1280 ? 104 : 118,
       child: ProductsSurface(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
                 Container(
-                  width: 34,
-                  height: 34,
+                  width: 28,
+                  height: 28,
                   decoration: BoxDecoration(
                     color: color.withValues(alpha: 0.11),
                     shape: BoxShape.circle,
@@ -6592,7 +6669,7 @@ class KpiCard extends StatelessWidget {
               style: const TextStyle(
                 color: _textSecondary,
                 fontSize: 12,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
               ),
             ),
             const SizedBox(height: 3),
@@ -6604,7 +6681,7 @@ class KpiCard extends StatelessWidget {
                 style: TextStyle(
                   color: color,
                   fontSize: 22,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
@@ -6655,28 +6732,21 @@ class CompactProductCard extends StatelessWidget {
       padding: EdgeInsets.symmetric(vertical: mobile ? 2.5 : 5),
       child: Material(
         color: selected ? _lightBlueHover : Colors.white,
-        borderRadius: BorderRadius.circular(mobile ? 8 : 12),
+        borderRadius: BorderRadius.circular(8),
         child: InkWell(
           mouseCursor: SystemMouseCursors.click,
           onTap: mobile ? onTap : null,
-          borderRadius: BorderRadius.circular(mobile ? 8 : 12),
+          borderRadius: BorderRadius.circular(8),
           child: Container(
-            constraints: BoxConstraints(minHeight: mobile ? 74 : 0),
+            constraints: BoxConstraints(minHeight: mobile ? 74 : 64),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(mobile ? 8 : 12),
+              borderRadius: BorderRadius.circular(8),
               border: Border.all(
                 color: selected
                     ? const Color(0xFFBFDBFE)
                     : const Color(0xFFE8EEF5),
-                width: 0.8,
+                width: 1,
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.02),
-                  blurRadius: 5,
-                  offset: const Offset(0, 1),
-                ),
-              ],
             ),
             padding: EdgeInsets.symmetric(
               horizontal: mobile ? 8 : 0,
@@ -6768,7 +6838,7 @@ class CompactProductCard extends StatelessWidget {
                           IconButton(
                             tooltip: 'Editar',
                             onPressed: onEdit,
-                            icon: const Icon(Icons.edit_outlined),
+                            icon: const ProvidedActionIcon(ProvidedAction.edit),
                           ),
                         if (onStock != null)
                           TextButton(
@@ -6778,7 +6848,9 @@ class CompactProductCard extends StatelessWidget {
                         if (onDelete != null)
                           IconButton(
                             onPressed: onDelete,
-                            icon: const Icon(Icons.delete_outline),
+                            icon: const ProvidedActionIcon(
+                              ProvidedAction.delete,
+                            ),
                           ),
                       ],
                     ),
@@ -6831,7 +6903,7 @@ class _ProductActionsMenu extends StatelessWidget {
               value: 'edit',
               child: ListTile(
                 dense: true,
-                leading: Icon(Icons.edit_outlined),
+                leading: ProvidedActionIcon(ProvidedAction.edit),
                 title: Text('Editar'),
               ),
             ),
@@ -6849,7 +6921,7 @@ class _ProductActionsMenu extends StatelessWidget {
               value: 'delete',
               child: ListTile(
                 dense: true,
-                leading: Icon(Icons.delete_outline_rounded),
+                leading: ProvidedActionIcon(ProvidedAction.delete),
                 title: Text('Eliminar'),
               ),
             ),
@@ -7298,7 +7370,7 @@ class _InventoryBreakdown extends StatelessWidget {
         children: [
           const Text(
             'Inversión por categoría',
-            style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
           ),
           const SizedBox(height: 10),
           for (final row in rows.take(12))
@@ -7311,7 +7383,7 @@ class _InventoryBreakdown extends StatelessWidget {
                 showCostMetrics
                     ? formatRdCurrencyAccounting(row.value.value)
                     : 'No disponible',
-                style: const TextStyle(fontWeight: FontWeight.w900),
+                style: const TextStyle(fontWeight: FontWeight.w600),
               ),
             ),
         ],
@@ -7332,7 +7404,7 @@ class _ProductNameCell extends StatelessWidget {
         ProductThumbnail(product: product, size: 36),
         const SizedBox(width: 10),
         SizedBox(
-          width: 230,
+          width: (MediaQuery.sizeOf(context).width * .25).clamp(180.0, 480.0),
           child: Text(
             product.nombre,
             maxLines: 1,
@@ -7667,36 +7739,6 @@ class _CompactMetric extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.title, required this.subtitle});
-
-  final String title;
-  final String subtitle;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w900,
-                  fontSize: 18,
-                ),
-              ),
-              Text(subtitle, style: const TextStyle(color: _textSecondary)),
-            ],
-          ),
-        ),
-      ],
     );
   }
 }

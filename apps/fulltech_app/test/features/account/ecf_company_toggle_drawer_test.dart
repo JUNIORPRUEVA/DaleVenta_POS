@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:ui' as ui;
+import 'package:daleventa_pos/core/widgets/compact_square_switch.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:daleventa_pos/core/theme/app_theme.dart';
@@ -434,7 +435,7 @@ Finder _ecfSwitch() {
     (widget) => widget is Text && widget.data == 'Activar módulo de facturación electrónica',
   );
   final row = find.ancestor(of: label, matching: find.byType(Row));
-  return find.descendant(of: row.first, matching: find.byType(Switch));
+  return find.descendant(of: row.first, matching: find.byType(CompactSquareSwitch));
 }
 
 Finder _drawerText(String text) =>
@@ -493,7 +494,7 @@ _EcfBackendState _backendWith({bool companyA = false}) => _EcfBackendState(
 Finder _allowSwitch() {
   final label = find.text('Vender sin comprobante');
   final row = find.ancestor(of: label, matching: find.byType(Row));
-  return find.descendant(of: row.first, matching: find.byType(Switch));
+  return find.descendant(of: row.first, matching: find.byType(CompactSquareSwitch));
 }
 
 Future<void> _captureQa(WidgetTester tester, String name) async {
@@ -608,7 +609,7 @@ void main() {
 
         // El interruptor se monta en la pantalla real y arranca apagado.
         expect(find.text(_ecfSectionTitle), findsOneWidget);
-        expect(tester.widget<Switch>(_ecfSwitch()).value, isFalse);
+        expect(tester.widget<CompactSquareSwitch>(_ecfSwitch()).value, isFalse);
 
         // Antes de activarlo la empresa no tiene el módulo en el menú.
         await _openDrawer(tester);
@@ -624,7 +625,7 @@ void main() {
         expect(harness.backend.patchCalls, [true]);
         expect(harness.backend.patchCompanies, ['company-a']);
         // El estado mostrado es el confirmado por el backend.
-        expect(tester.widget<Switch>(_ecfSwitch()).value, isTrue);
+        expect(tester.widget<CompactSquareSwitch>(_ecfSwitch()).value, isTrue);
         expect(find.text(_ecfErrorText), findsNothing);
 
         // La activación confirmada añade la entrada propia del módulo.
@@ -663,7 +664,7 @@ void main() {
           tester,
           backend: _backendWith(companyA: true),
         );
-        expect(tester.widget<Switch>(_ecfSwitch()).value, isTrue);
+        expect(tester.widget<CompactSquareSwitch>(_ecfSwitch()).value, isTrue);
 
         await _openDrawer(tester);
         await _scrollDrawerToBottom(tester);
@@ -674,7 +675,7 @@ void main() {
         await _turnEcfOff(tester);
 
         expect(harness.backend.patchCalls, [false]);
-        expect(tester.widget<Switch>(_ecfSwitch()).value, isFalse);
+        expect(tester.widget<CompactSquareSwitch>(_ecfSwitch()).value, isFalse);
 
         await _openDrawer(tester);
         await _scrollDrawerToBottom(tester);
@@ -694,7 +695,7 @@ void main() {
       await _turnEcfOff(tester, confirm: false);
 
       expect(harness.backend.patchCalls, isEmpty);
-      expect(tester.widget<Switch>(_ecfSwitch()).value, isTrue);
+      expect(tester.widget<CompactSquareSwitch>(_ecfSwitch()).value, isTrue);
     });
 
     testWidgets(
@@ -710,7 +711,7 @@ void main() {
         // Se intentó una vez y el servidor confirmado sigue apagado.
         expect(harness.backend.patchCalls, [true]);
         expect(harness.backend.enabledByCompany['company-a'], isFalse);
-        expect(tester.widget<Switch>(_ecfSwitch()).value, isFalse);
+        expect(tester.widget<CompactSquareSwitch>(_ecfSwitch()).value, isFalse);
         expect(find.text(_ecfErrorText), findsOneWidget);
 
         // El interruptor sigue apagado y, por tanto, el módulo sigue oculto.
@@ -738,7 +739,7 @@ void main() {
         role: 'CAJERO',
       );
 
-      final switchWidget = tester.widget<Switch>(_ecfSwitch());
+      final switchWidget = tester.widget<CompactSquareSwitch>(_ecfSwitch());
       expect(switchWidget.value, isFalse);
       expect(switchWidget.onChanged, isNull);
       expect(
@@ -754,7 +755,7 @@ void main() {
       await _settleToggle(tester);
 
       expect(harness.backend.patchCalls, isEmpty);
-      expect(tester.widget<Switch>(_ecfSwitch()).value, isFalse);
+      expect(tester.widget<CompactSquareSwitch>(_ecfSwitch()).value, isFalse);
     });
 
     testWidgets('el módulo apagado solo ofrece su interruptor', (tester) async {
@@ -787,7 +788,7 @@ void main() {
 
         // El interruptor refleja la empresa NUEVA, no la anterior.
         expect(find.text(_ecfSectionTitle), findsOneWidget);
-        expect(tester.widget<Switch>(_ecfSwitch()).value, isFalse);
+        expect(tester.widget<CompactSquareSwitch>(_ecfSwitch()).value, isFalse);
 
         await _scrollDrawerToBottom(tester);
         // La empresa nueva no tiene e-CF: el módulo no se hereda de la anterior.
@@ -833,7 +834,7 @@ void main() {
         expect(find.text('Activar módulo de facturación electrónica'), findsOneWidget);
         expect(find.text('Vender sin comprobante'), findsOneWidget);
         // El valor mostrado es el del servidor: apagado por defecto.
-        expect(tester.widget<Switch>(_allowSwitch()).value, isFalse);
+        expect(tester.widget<CompactSquareSwitch>(_allowSwitch()).value, isFalse);
       },
     );
 
@@ -859,7 +860,7 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(harness.backend.allowPatchCalls, [true]);
-        expect(tester.widget<Switch>(_allowSwitch()).value, isTrue);
+        expect(tester.widget<CompactSquareSwitch>(_allowSwitch()).value, isTrue);
         // Nada de peticiones fuera del repositorio e-CF configurado.
         expect(harness.httpCalls, isEmpty);
       },
@@ -876,15 +877,15 @@ void main() {
       backend.allowByCompany['company-b'] = false;
 
       final harness = await _pumpSettings(tester, backend: backend);
-      expect(tester.widget<Switch>(_allowSwitch()).value, isTrue);
+      expect(tester.widget<CompactSquareSwitch>(_allowSwitch()).value, isTrue);
 
       harness.auth.switchCompany('company-b');
       await tester.pump();
       await tester.pumpAndSettle();
 
       // El control se relee para la empresa nueva: no hereda el «sí» anterior.
-      expect(tester.widget<Switch>(_allowSwitch()).value, isFalse);
-      expect(tester.widget<Switch>(_ecfSwitch()).value, isTrue);
+      expect(tester.widget<CompactSquareSwitch>(_allowSwitch()).value, isFalse);
+      expect(tester.widget<CompactSquareSwitch>(_ecfSwitch()).value, isTrue);
       expect(backend.allowByCompany['company-a'], isTrue);
     });
   });

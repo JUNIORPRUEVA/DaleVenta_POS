@@ -64,7 +64,7 @@ void main() {
     final input = tester.widget<TextField>(find.byType(TextField));
     expect(input.decoration!.focusedBorder, InputBorder.none);
     expect(
-      tester.widget<ImageIcon>(find.byType(ImageIcon)).image,
+      tester.widget<Image>(find.byType(Image)).image,
       const AssetImage(SalesClientSelector.createIconAsset),
     );
     await tester.tap(find.byTooltip('Crear cliente'));

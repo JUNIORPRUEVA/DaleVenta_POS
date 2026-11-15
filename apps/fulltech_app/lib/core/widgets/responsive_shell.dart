@@ -62,7 +62,11 @@ class DesktopShellActionItem {
 }
 
 class DesktopShellRouteActions {
-  const DesktopShellRouteActions({required this.route, required this.actions, this.onBack});
+  const DesktopShellRouteActions({
+    required this.route,
+    required this.actions,
+    this.onBack,
+  });
 
   final String route;
   final List<DesktopShellActionItem> actions;
@@ -237,10 +241,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     // Piloto: elegibilidad confirmada por el backend y servida con la misma
     // configuración que el shell ya observa, sin peticiones adicionales.
     final ecfPilotEligible =
-        ref
-            .watch(companySettingsProvider)
-            .valueOrNull
-            ?.ecfPilotEligible ??
+        ref.watch(companySettingsProvider).valueOrNull?.ecfPilotEligible ??
         false;
     final sections = buildAppNavigationSections(
       user,
@@ -267,8 +268,8 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     // al iniciar sesión, según el rol—; los niveles internos vuelven al nivel
     // anterior. Antes, el módulo e-CF y Configuración enviaban a
     // `/configuracion`, que en escritorio redirige a otra pantalla.
-    final VoidCallback? shellBack = routeActions?.route == location &&
-            routeActions?.onBack != null
+    final VoidCallback? shellBack =
+        routeActions?.route == location && routeActions?.onBack != null
         ? routeActions!.onBack
         : location == Routes.ecf || location == Routes.configuracion
         ? () => context.go(Routes.home)
@@ -911,11 +912,15 @@ List<_SidebarMenuGroup> _buildDesktopSidebarGroups(
         if (routeToItem.containsKey(Routes.cotizaciones))
           menuItem(
             Routes.cotizaciones,
-            'Facturación',
+            'Facturar',
             Icons.shopping_cart_checkout_outlined,
           ),
         if (routeToItem.containsKey(Routes.ventasLista))
-          menuItem(Routes.ventasLista, 'Lista de ventas', Icons.receipt_long),
+          menuItem(
+            Routes.ventasLista,
+            'Historial de ventas',
+            Icons.receipt_long,
+          ),
       ],
     ),
     _SidebarMenuGroup(
@@ -963,7 +968,7 @@ List<_SidebarMenuGroup> _buildDesktopSidebarGroups(
         if (routeToItem.containsKey(Routes.ventasCreditos))
           menuItem(
             Routes.ventasCreditos,
-            'Créditos',
+            'Historial de créditos',
             Icons.credit_score_outlined,
           ),
         if (routeToItem.containsKey(Routes.compras))
@@ -1053,8 +1058,7 @@ class DesktopSidebar extends ConsumerStatefulWidget {
 
 class _DesktopSidebarState extends ConsumerState<DesktopSidebar> {
   String? _openGroupKey;
-  bool _salesExpanded = false;
-  bool _clientsExpanded = false;
+  bool _salesHistoryExpanded = false;
   bool _adminExpanded = false;
   bool _cashExpanded = false;
 
@@ -1133,14 +1137,10 @@ class _DesktopSidebarState extends ConsumerState<DesktopSidebar> {
   void _syncSubmenusWithRoute() {
     final path =
         Uri.tryParse(widget.currentLocation)?.path ?? widget.currentLocation;
-    if (path.startsWith(Routes.cotizaciones) ||
-        path.startsWith(Routes.ventasLista)) {
-      _salesExpanded = true;
-    }
-    if (path.startsWith(Routes.clientes) ||
+    if (path.startsWith(Routes.ventasLista) ||
         path.startsWith(Routes.cotizacionesHistorial) ||
         path.startsWith(Routes.ventasCreditos)) {
-      _clientsExpanded = true;
+      _salesHistoryExpanded = true;
     }
     if (path.startsWith(Routes.cajaRegistrarIngreso) ||
         path.startsWith(Routes.cajaRegistrarSalida) ||
@@ -1218,12 +1218,12 @@ class _DesktopSidebarState extends ConsumerState<DesktopSidebar> {
 
     final facturacion = nav(
       Routes.cotizaciones,
-      'Facturación',
+      'Facturar',
       Icons.storefront_outlined,
     );
     final listaVentas = nav(
       Routes.ventasLista,
-      'Lista de ventas',
+      'Historial de ventas',
       Icons.receipt_long_outlined,
     );
     final inventario = nav(
@@ -1235,19 +1235,19 @@ class _DesktopSidebarState extends ConsumerState<DesktopSidebar> {
     final cotizaciones =
         nav(
           Routes.cotizacionesHistorial,
-          'Cotizaciones',
+          'Historial de cotizaciones',
           Icons.edit_note_outlined,
         ) ??
         (facturacion == null
             ? null
             : const AppNavigationItem(
                 icon: Icons.edit_note_outlined,
-                title: 'Cotizaciones',
+                title: 'Historial de cotizaciones',
                 route: Routes.cotizacionesHistorial,
               ));
     final creditosVentas = nav(
       Routes.ventasCreditos,
-      'Créditos',
+      'Historial de créditos',
       Icons.credit_score_outlined,
     );
     final reportes = nav(Routes.ventas, 'Reportes', Icons.bar_chart_rounded);
@@ -1287,14 +1287,13 @@ class _DesktopSidebarState extends ConsumerState<DesktopSidebar> {
       'Usuario',
       Icons.manage_accounts_outlined,
     );
-    final clientRoutes = {
-      if (clientes != null) clientes.route,
-      if (cotizaciones != null) cotizaciones.route,
-      if (creditosVentas != null) creditosVentas.route,
-    };
-    final ventasRoutes = {
-      if (facturacion != null) facturacion.route,
-      if (listaVentas != null) listaVentas.route,
+    final salesHistoryItems = <AppNavigationItem>[
+      if (listaVentas != null) listaVentas,
+      if (creditosVentas != null) creditosVentas,
+      if (cotizaciones != null) cotizaciones,
+    ];
+    final salesHistoryRoutes = {
+      for (final item in salesHistoryItems) item.route,
     };
     final cashRoutes = {
       if (cashIngreso != null) cashIngreso.route,
@@ -1388,14 +1387,26 @@ class _DesktopSidebarState extends ConsumerState<DesktopSidebar> {
                             color: mutedText,
                             scale: scale,
                           ),
-                          if (ventasRoutes.isNotEmpty) ...[
+                          for (final item in [facturacion].nonNulls)
+                            _PremiumSidebarNavItem(
+                              item: item,
+                              collapsed: visualCollapsed,
+                              currentLocation: widget.currentLocation,
+                              textColor: textColor,
+                              activeColor: activeColor,
+                              hoverColor: hoverColor,
+                              baseColor: baseColor,
+                              scale: scale,
+                              onTap: () => _navigateItem(item),
+                            ),
+                          if (salesHistoryRoutes.isNotEmpty) ...[
                             _PremiumSidebarNavItem(
                               item: const AppNavigationItem(
-                                icon: Icons.point_of_sale_outlined,
+                                icon: Icons.receipt_long_outlined,
                                 title: 'Ventas',
-                                route: '__sales__',
+                                route: '__sales_history__',
                               ),
-                              activeRoutes: ventasRoutes,
+                              activeRoutes: salesHistoryRoutes,
                               collapsed: visualCollapsed,
                               currentLocation: widget.currentLocation,
                               textColor: textColor,
@@ -1405,7 +1416,7 @@ class _DesktopSidebarState extends ConsumerState<DesktopSidebar> {
                               scale: scale,
                               showSubmenuBadge: true,
                               trailing: AnimatedRotation(
-                                turns: _salesExpanded ? 0.25 : 0,
+                                turns: _salesHistoryExpanded ? 0.25 : 0,
                                 duration: const Duration(milliseconds: 220),
                                 curve: Curves.easeOutCubic,
                                 child: Icon(
@@ -1417,20 +1428,23 @@ class _DesktopSidebarState extends ConsumerState<DesktopSidebar> {
                               onTap: () {
                                 if (visualCollapsed) {
                                   _toggleSidebar();
-                                  setState(() => _salesExpanded = true);
+                                  setState(() => _salesHistoryExpanded = true);
                                 } else {
                                   setState(
-                                    () => _salesExpanded = !_salesExpanded,
+                                    () => _salesHistoryExpanded =
+                                        !_salesHistoryExpanded,
                                   );
                                 }
                               },
                             ),
                             _PremiumSidebarSubmenu(
-                              visible: !visualCollapsed && _salesExpanded,
+                              visible:
+                                  !visualCollapsed && _salesHistoryExpanded,
                               children: [
-                                if (facturacion != null)
+                                for (final item in salesHistoryItems)
                                   _PremiumSidebarNavItem(
-                                    item: facturacion,
+                                    item: item,
+                                    labelLines: 2,
                                     collapsed: false,
                                     lowEmphasis: true,
                                     currentLocation: widget.currentLocation,
@@ -1439,20 +1453,7 @@ class _DesktopSidebarState extends ConsumerState<DesktopSidebar> {
                                     hoverColor: hoverColor,
                                     baseColor: baseColor,
                                     scale: scale,
-                                    onTap: () => _navigateItem(facturacion),
-                                  ),
-                                if (listaVentas != null)
-                                  _PremiumSidebarNavItem(
-                                    item: listaVentas,
-                                    collapsed: false,
-                                    lowEmphasis: true,
-                                    currentLocation: widget.currentLocation,
-                                    textColor: textColor,
-                                    activeColor: activeColor,
-                                    hoverColor: hoverColor,
-                                    baseColor: baseColor,
-                                    scale: scale,
-                                    onTap: () => _navigateItem(listaVentas),
+                                    onTap: () => _navigateItem(item),
                                   ),
                               ],
                             ),
@@ -1563,14 +1564,9 @@ class _DesktopSidebarState extends ConsumerState<DesktopSidebar> {
                                 ],
                               ),
                             ),
-                          if (clientRoutes.isNotEmpty) ...[
+                          if (clientes != null)
                             _PremiumSidebarNavItem(
-                              item: const AppNavigationItem(
-                                icon: Icons.groups_outlined,
-                                title: 'Cliente',
-                                route: '__clients__',
-                              ),
-                              activeRoutes: clientRoutes,
+                              item: clientes,
                               collapsed: visualCollapsed,
                               currentLocation: widget.currentLocation,
                               textColor: textColor,
@@ -1578,73 +1574,8 @@ class _DesktopSidebarState extends ConsumerState<DesktopSidebar> {
                               hoverColor: hoverColor,
                               baseColor: baseColor,
                               scale: scale,
-                              showSubmenuBadge: true,
-                              trailing: AnimatedRotation(
-                                turns: _clientsExpanded ? 0.25 : 0,
-                                duration: const Duration(milliseconds: 220),
-                                curve: Curves.easeOutCubic,
-                                child: Icon(
-                                  Icons.chevron_right_rounded,
-                                  size: 16,
-                                  color: textColor.withValues(alpha: 0.58),
-                                ),
-                              ),
-                              onTap: () {
-                                if (visualCollapsed) {
-                                  _toggleSidebar();
-                                  setState(() => _clientsExpanded = true);
-                                } else {
-                                  setState(
-                                    () => _clientsExpanded = !_clientsExpanded,
-                                  );
-                                }
-                              },
+                              onTap: () => _navigateItem(clientes),
                             ),
-                            _PremiumSidebarSubmenu(
-                              visible: !visualCollapsed && _clientsExpanded,
-                              children: [
-                                if (clientes != null)
-                                  _PremiumSidebarNavItem(
-                                    item: clientes,
-                                    collapsed: false,
-                                    lowEmphasis: true,
-                                    currentLocation: widget.currentLocation,
-                                    textColor: textColor,
-                                    activeColor: activeColor,
-                                    hoverColor: hoverColor,
-                                    baseColor: baseColor,
-                                    scale: scale,
-                                    onTap: () => _navigateItem(clientes),
-                                  ),
-                                if (cotizaciones != null)
-                                  _PremiumSidebarNavItem(
-                                    item: cotizaciones,
-                                    collapsed: false,
-                                    lowEmphasis: true,
-                                    currentLocation: widget.currentLocation,
-                                    textColor: textColor,
-                                    activeColor: activeColor,
-                                    hoverColor: hoverColor,
-                                    baseColor: baseColor,
-                                    scale: scale,
-                                    onTap: () => _navigateItem(cotizaciones),
-                                  ),
-                                if (creditosVentas != null)
-                                  _PremiumSidebarNavItem(
-                                    item: creditosVentas,
-                                    collapsed: false,
-                                    lowEmphasis: true,
-                                    currentLocation: widget.currentLocation,
-                                    textColor: textColor,
-                                    activeColor: activeColor,
-                                    hoverColor: hoverColor,
-                                    baseColor: baseColor,
-                                    scale: scale,
-                                    onTap: () => _navigateItem(creditosVentas),
-                                  ),
-                              ],
-                            ),
-                          ],
                           if (inventario != null)
                             _PremiumSidebarNavItem(
                               item: inventario,
@@ -2283,6 +2214,7 @@ class _PremiumSidebarNavItem extends StatefulWidget {
     this.lowEmphasis = false,
     this.showSubmenuBadge = false,
     this.trailing,
+    this.labelLines = 1,
   });
 
   final AppNavigationItem item;
@@ -2298,6 +2230,7 @@ class _PremiumSidebarNavItem extends StatefulWidget {
   final bool lowEmphasis;
   final bool showSubmenuBadge;
   final Widget? trailing;
+  final int labelLines;
 
   @override
   State<_PremiumSidebarNavItem> createState() => _PremiumSidebarNavItemState();
@@ -2312,7 +2245,9 @@ class _PremiumSidebarNavItemState extends State<_PremiumSidebarNavItem> {
     final route = widget.item.route;
     final ownRoute =
         !route.startsWith('__') &&
-        (path == route || path.startsWith('$route/'));
+        (route == Routes.cotizaciones
+            ? path == route
+            : (path == route || path.startsWith('$route/')));
     final childRoute =
         widget.activeRoutes?.any((r) => path == r || path.startsWith('$r/')) ??
         false;
@@ -2323,7 +2258,9 @@ class _PremiumSidebarNavItemState extends State<_PremiumSidebarNavItem> {
   Widget build(BuildContext context) {
     final collapsed = widget.collapsed;
     final active = _active;
-    final rowHeight = collapsed
+    final rowHeight = !collapsed && widget.labelLines > 1
+        ? (48 * widget.scale).clamp(48.0, 64.0)
+        : collapsed
         ? (42 * widget.scale).clamp(40.0, 46.0)
         : (38 * widget.scale).clamp(35.0, 42.0);
     final radius = BorderRadius.circular((9 * widget.scale).clamp(7.0, 9.0));
@@ -2416,7 +2353,7 @@ class _PremiumSidebarNavItemState extends State<_PremiumSidebarNavItem> {
                 Expanded(
                   child: Text(
                     widget.item.title,
-                    maxLines: 1,
+                    maxLines: widget.labelLines,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: fg,

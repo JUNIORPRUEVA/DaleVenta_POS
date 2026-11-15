@@ -69,6 +69,7 @@ uat("persistencia íntegra del comprobante preparado on PostgreSQL", () => {
         rangeTo: 10_000,
         approvedQuantity: 10_000,
         declarationVersion: "v1",
+        expiresAt: new Date("2026-12-31T23:59:59.999Z"),
         declaredByUserId: userId,
       },
     });

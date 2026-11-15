@@ -14,47 +14,65 @@ import '../auth/presentation/pwa_install_prompt.dart';
 class AppsDownloadsPanel extends StatelessWidget {
   const AppsDownloadsPanel({super.key});
 
-  static const double _maxPanelWidth = 900;
+  static const double maxPanelWidth = 560;
 
   @override
-  Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    final panelWidth = screenWidth < 760
-        ? screenWidth
-        : (screenWidth * 0.76).clamp(600.0, _maxPanelWidth);
-
-    return Align(
-      alignment: Alignment.centerRight,
-      child: Material(
-        color: AppColors.background,
-        child: Container(
-          width: panelWidth,
-          height: double.infinity,
-          decoration: const BoxDecoration(
-            border: Border(left: BorderSide(color: AppColors.border)),
-            boxShadow: [
-              BoxShadow(
-                color: Color(0x1F0F172A),
-                blurRadius: 24,
-                offset: Offset(-8, 0),
-              ),
-            ],
-          ),
-          child: SafeArea(
-            left: false,
-            child: Column(
-              children: [
-                _PanelHeader(onClose: () => Navigator.of(context).maybePop()),
-                const Expanded(
-                  child: _AppsDownloadsList(padding: EdgeInsets.all(14)),
+  Widget build(BuildContext context) => SafeArea(
+    child: Padding(
+      padding: const EdgeInsets.all(12),
+      child: LayoutBuilder(
+        builder: (context, constraints) => Align(
+          alignment: Alignment.topRight,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: maxPanelWidth,
+              maxHeight: constraints.maxHeight,
+            ),
+            child: Material(
+              key: const ValueKey('apps-downloads-surface'),
+              color: AppColors.surface,
+              elevation: 8,
+              shadowColor: AppColors.shadow,
+              borderRadius: BorderRadius.circular(16),
+              clipBehavior: Clip.antiAlias,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _PanelHeader(
+                      onClose: () => Navigator.of(context).maybePop(),
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: AppsDownloadCards(),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+                      decoration: const BoxDecoration(
+                        color: AppColors.surfaceSubtle,
+                        border: Border(
+                          top: BorderSide(color: AppColors.border),
+                        ),
+                      ),
+                      child: Text(
+                        'Una sola cuenta en todos tus dispositivos.\n'
+                        'Inicia sesión con el mismo correo y contraseña.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: AppColors.textSecondary,
+                          height: 1.45,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
 }
 
 /// Contenido reutilizable de «Aplicaciones y descargas» para la ruta `/apps`.
@@ -213,7 +231,7 @@ class AppsDownloadCard extends StatelessWidget {
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final wide = constraints.maxWidth >= 520;
+          final wide = constraints.maxWidth >= 480;
           final info = Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -232,22 +250,22 @@ class AppsDownloadCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        Flexible(
-                          child: Text(
-                            channel.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: AppColors.textPrimary,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 0,
-                            ),
+                        Text(
+                          channel.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppColors.textPrimary,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0,
                           ),
                         ),
-                        const SizedBox(width: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 6,

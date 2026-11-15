@@ -7,6 +7,8 @@ class ProductConfig {
   static const productName = 'DaleVentas / FullPOS Cloud';
   static const productionApiBaseUrl =
       'https://daleventapos-backend.gcdndd.easypanel.host';
+  static const productionRegistrationUrl =
+      'https://fullposcloud.fulltechrd.com/registro';
   static const productionApiHost = 'daleventapos-backend.gcdndd.easypanel.host';
   static const productionAppBaseUrl =
       'https://daleventapos-pwa.gcdndd.easypanel.host';

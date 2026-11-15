@@ -19,6 +19,7 @@ import 'package:daleventa_pos/features/ecf/ui/ecf_dgii_habilitation_page.dart';
 import 'package:daleventa_pos/features/ecf/ui/ecf_dgii_application_wizard.dart';
 import 'package:daleventa_pos/features/ecf/ui/ecf_fiscal_data_page.dart';
 import 'package:daleventa_pos/features/ecf/ui/flow/ecf_preparation_step.dart';
+import 'package:daleventa_pos/features/ecf/ui/flow/ecf_sequence_range_section.dart';
 import 'package:daleventa_pos/core/widgets/responsive_shell.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -280,6 +281,8 @@ Widget _harness({
   bool platformStaff = false,
   bool posReady = true,
   bool canActivateProduction = false,
+  String environment = 'SANDBOX',
+  bool productionEnabled = false,
 }) {
   return ProviderScope(
     // `pumpWidget` ACTUALIZA el árbol existente en vez de recrearlo, y el
@@ -290,7 +293,9 @@ Widget _harness({
     overrides: [
       ecfRepositoryProvider.overrideWithValue(_ActivationOnlyEcfRepository()),
       ecfCapabilitiesProvider.overrideWith((ref) async => EcfCapabilities.fromJson({
-        'enabled': true, 'posReady': posReady, 'environment': 'SANDBOX',
+        'enabled': true, 'posReady': posReady, 'environment': environment,
+        'productionEnabled': productionEnabled,
+        'certificationStatus': view?.certificationStatus ?? 'NOT_STARTED',
         'canActivateProduction': canActivateProduction,
         'posAvailableTypes': posReady ? ['E31'] : <String>[],
       })),
@@ -774,7 +779,8 @@ void main() {
       technical: false,
     );
     expect(find.text('Antes de empezar'), findsOneWidget);
-    expect(find.text('Vídeo no disponible'), findsOneWidget);
+    expect(find.text('Vídeo no disponible'), findsNothing);
+    expect(find.byKey(const ValueKey('ecf_habilitacion_video_placeholder')), findsOneWidget);
     expect(find.text('Abrir portal de la DGII'), findsOneWidget);
 
     // Preparación con DOSA: el certificado no se pide en FullPOS.
@@ -832,7 +838,7 @@ void main() {
       view: _view(state: 'APPROVED', certificationStatus: 'PRODUCTION_READY',
         authorizationSource: 'MANUAL_OPERATOR_DECLARATION', progress: _certificateResolvedProgress())),
       step: null, technical: false);
-    expect(find.text('Revisa la facturación'), findsOneWidget);
+    expect(find.text('Completa la habilitación'), findsOneWidget);
     expect(find.text('¡Felicidades!'), findsNothing);
     expect(find.byKey(const ValueKey('ecf_completed_go_sales')), findsNothing);
     expect(tester.takeException(), isNull);
@@ -845,7 +851,20 @@ void main() {
       step: null, technical: false);
     expect(find.text('Habilitar producción'), findsOneWidget);
     expect(find.byType(EcfPreparationStep), findsNothing);
+    expect(find.byType(EcfSequenceRangeSection), findsNothing);
+    expect(find.text('Numeración de pruebas (TEST)'), findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('la empresa habilitada registra numeración productiva en el mismo recorrido', (tester) async {
+    await _pumpPage(tester, _harness(user:_adminUser(),posReady:false,
+      environment:'PRODUCTION',productionEnabled:true,
+      view:_view(state:'APPROVED',certificationStatus:'PRODUCTION_READY',
+        authorizationSource:'MANUAL_OPERATOR_DECLARATION',progress:_certificateResolvedProgress())),
+      step:null,technical:false);
+    expect(find.byType(EcfSequenceRangeSection),findsOneWidget);
+    expect(find.text('Habilitar producción'),findsNothing);
+    expect(tester.takeException(),isNull);
   });
 
   testWidgets('trámite terminado: felicitaciones y salto a ventas', (

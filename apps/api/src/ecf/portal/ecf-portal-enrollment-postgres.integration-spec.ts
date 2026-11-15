@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 
 import { EcfPortalEnrollmentService } from "./ecf-portal-enrollment.service";
 import { EcfCertificationPortalService } from "./ecf-certification-portal.service";
+import { isEcfEphemeralTestTarget } from "../ecf-local-target";
 
 /**
  * Autorización del asistente e-CF POR EMPRESA sobre PostgreSQL REAL.
@@ -30,6 +31,7 @@ real("Autorización del portal e-CF — PostgreSQL real", () => {
   let service: EcfPortalEnrollmentService;
 
   beforeAll(async () => {
+    if (!isEcfEphemeralTestTarget() || process.env.ALANUBE_ENABLE_REAL_CALLS !== "false") throw Error("OWNED_EPHEMERAL_DATABASE_REQUIRED");
     prisma = new PrismaClient();
     service = new EcfPortalEnrollmentService(prisma as never);
     await cleanupAll();
@@ -58,6 +60,29 @@ real("Autorización del portal e-CF — PostgreSQL real", () => {
   async function cleanupAll() {
     await prisma.$executeRaw`DELETE FROM "ecf_portal_enrollments" WHERE "company_id" = ANY(${COMPANIES}::uuid[])`;
   }
+
+  it("automatic ticket requests cannot resurrect a revoked company, even concurrently", async () => {
+    const oldFlag=process.env.ECF_PORTAL_AUTO_ENROLL_ENABLED;
+    process.env.ECF_PORTAL_AUTO_ENROLL_ENABLED="true";
+    try {
+      await prisma.ecfCompanyConfiguration.upsert({where:{companyId:COMPANY_A},
+        create:{companyId:COMPANY_A,enabled:true,provider:"DOSA"},update:{enabled:true}});
+      await prisma.appConfig.upsert({where:{companyId:COMPANY_A},
+        create:{id:randomUUID(),companyId:COMPANY_A,companyName:"Synthetic blocked portal",rnc:"101000001"},update:{rnc:"101000001"}});
+      expect(await service.ensureAutoEnrollment(COMPANY_A)).toBe(true);
+      await service.revoke({companyId:COMPANY_A,actorUserId:null,reason:"Synthetic security revocation"});
+      const portal=new EcfCertificationPortalService(prisma as never,service);
+      const attempts=await Promise.all(Array.from({length:5},()=>portal.isPilotCompany(COMPANY_A)));
+      expect(attempts).toEqual([false,false,false,false,false]);
+      expect(await prisma.ecfPortalEnrollment.count({where:{companyId:COMPANY_A}})).toBe(1);
+      expect(await service.eligibility(COMPANY_A)).toMatchObject({eligible:false,reason:"AUTHORIZATION_REVOKED"});
+      expect(await prisma.ecfPortalEnrollment.count({where:{companyId:COMPANY_B}})).toBe(0);
+    } finally {
+      if(oldFlag===undefined)delete process.env.ECF_PORTAL_AUTO_ENROLL_ENABLED;else process.env.ECF_PORTAL_AUTO_ENROLL_ENABLED=oldFlag;
+      await prisma.ecfCompanyConfiguration.deleteMany({where:{companyId:COMPANY_A}});
+      await prisma.appConfig.deleteMany({where:{companyId:COMPANY_A}});
+    }
+  });
 
   it("sin autorización, una empresa nueva NO es elegible (cerrado por defecto)", async () => {
     const result = await service.eligibility(COMPANY_A, { env: {} });

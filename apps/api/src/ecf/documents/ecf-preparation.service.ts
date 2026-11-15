@@ -19,6 +19,7 @@ import { EcfE34CreditService } from "./ecf-e34-credit.service";
 import { e34Conflict, readFiscalSnapshot } from "./ecf-e34-integrity.policy";
 import { EcfDocumentIdempotencyService } from "./ecf-document-idempotency.service";
 import { EcfEmissionService } from "./ecf-emission.service";
+import { EcfSequenceService } from "./ecf-sequence.service";
 import { dec } from "../fiscal-core/ecf-money";
 
 export type EcfPreparationInput = {
@@ -172,10 +173,16 @@ export class EcfPreparationService {
           + "no se prepara un segundo tipo sobre la misma venta.",
       );
     }
+    const sequenceExpiry = await new EcfSequenceService(this.prisma).e31Expiry(user, transaction);
+    const sequenceDueDate = sequenceExpiry.toISOString().slice(0, 10);
+    const requestedDueDate = built.value.sequenceDueDate ?? input.sequenceDueDate;
+    if (requestedDueDate && requestedDueDate.slice(0, 10) !== sequenceDueDate) {
+      return fiscalFailure("ECF_SEQUENCE_EXPIRY_MISMATCH", "El vencimiento E31 debe coincidir con la autorización registrada de esta empresa.");
+    }
     const metadata: EcfIssuanceMetadata = {
       paymentType: input.paymentType,
       ...(input.incomeType ? { incomeType: input.incomeType } : {}),
-      ...(built.value.sequenceDueDate || input.sequenceDueDate ? { sequenceDueDate: built.value.sequenceDueDate ?? input.sequenceDueDate } : {}),
+      sequenceDueDate,
       ...(input.paymentDeadline ? { paymentDeadline: input.paymentDeadline } : {}),
     } as EcfIssuanceMetadata;
 
@@ -187,6 +194,8 @@ export class EcfPreparationService {
     const prepared = await new EcfEmissionService(this.prisma).prepare(user, {
       document,
       metadata,
+      // Recheck under the allocation lock even for standalone preparation.
+      expectedSequenceExpiry: sequenceDueDate,
       // La identidad fiscal se ancla en la VENTA, nunca en la venta + un id de
       // petición: el módulo lo rechaza y, además, así una misma venta no puede
       // producir dos comprobantes (la segunda preparación reutiliza el mismo

@@ -11,7 +11,12 @@ import '../../../core/auth/auth_repository.dart';
 import '../../../core/errors/user_safe_error_text.dart';
 import '../../../core/models/product_model.dart';
 import '../../../core/routing/routes.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/fulltech_dialog.dart';
+import '../../../core/widgets/provided_action_icon.dart';
+import '../../../core/widgets/product_network_image.dart';
 import '../../catalogo/application/product_search_controller.dart';
+import '../../catalogo/data/catalog_repository.dart';
 import '../data/price_lists_repository.dart';
 
 class PriceListsScreen extends ConsumerStatefulWidget {
@@ -52,61 +57,74 @@ class _PriceListsScreenState extends ConsumerState<PriceListsScreen> {
     }
 
     final lists = ref.watch(priceListsProvider);
-    return Scaffold(
-      appBar: AppBar(
-        leading: BackButton(onPressed: () => context.go(Routes.cotizaciones)),
-        title: const Text('Listas de precios'),
-      ),
-      body: lists.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => _ErrorState(
-          message: 'No se pudieron cargar las listas.',
-          onRetry: () => ref.invalidate(priceListsProvider),
+    return Theme(
+      data: _priceListTheme(context),
+      child: Scaffold(
+        appBar: AppBar(
+          leading: BackButton(onPressed: () => context.go(Routes.cotizaciones)),
+          title: const Text('Listas de precios'),
         ),
-        data: (items) {
-          final selected = _selectedList(items);
-          return LayoutBuilder(
-            builder: (context, constraints) {
-              final wide = constraints.maxWidth >= 920;
-              final content = [
-                _ListsPanel(
-                  lists: items,
-                  selectedId: selected?.id,
-                  onSelected: (id) => setState(() => _selectedListId = id),
-                  onCreate: _createList,
-                  onEdit: _editList,
-                  onToggle: _toggleList,
-                ),
-                _RulesPanel(
-                  key: ValueKey('${selected?.id}:${_selectedProduct?.id}'),
-                  list: selected,
-                  selectedProduct: _selectedProduct,
-                  quantityController: _quantity,
-                  saving: _saving,
-                  onPickProduct: _pickProduct,
-                  onSaveRule: _saveRule,
-                  onPreview: _previewPrice,
-                ),
-              ];
-              return wide
-                  ? Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SizedBox(
-                          width: 360,
-                          child: SingleChildScrollView(child: content[0]),
-                        ),
-                        const VerticalDivider(width: 1),
-                        Expanded(child: content[1]),
-                      ],
-                    )
-                  : ListView(
-                      padding: const EdgeInsets.only(bottom: 24),
-                      children: content,
-                    );
-            },
-          );
-        },
+        body: lists.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (error, _) => _ErrorState(
+            message: 'No se pudieron cargar las listas.',
+            onRetry: () => ref.invalidate(priceListsProvider),
+          ),
+          data: (items) {
+            final selected = _selectedList(items);
+            return LayoutBuilder(
+              builder: (context, constraints) {
+                final wide = constraints.maxWidth >= 920;
+                final content = [
+                  _ListsPanel(
+                    lists: items,
+                    selectedId: selected?.id,
+                    onSelected: (id) => setState(() => _selectedListId = id),
+                    onCreate: _createList,
+                    onEdit: _editList,
+                    onToggle: _toggleList,
+                  ),
+                  _RulesPanel(
+                    key: ValueKey('${selected?.id}:${_selectedProduct?.id}'),
+                    list: selected,
+                    selectedProduct: _selectedProduct,
+                    quantityController: _quantity,
+                    saving: _saving,
+                    onPickProduct: _pickProduct,
+                    onSaveRule: _saveRule,
+                    onPreview: _previewPrice,
+                  ),
+                ];
+                final layout = wide
+                    ? Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(
+                            width: 300,
+                            child: SingleChildScrollView(child: content[0]),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(child: content[1]),
+                        ],
+                      )
+                    : ListView(
+                        padding: const EdgeInsets.only(bottom: 24),
+                        children: content,
+                      );
+                return Padding(
+                  padding: EdgeInsets.all(constraints.maxWidth < 640 ? 12 : 24),
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1320),
+                      child: layout,
+                    ),
+                  ),
+                );
+              },
+            );
+          },
+        ),
       ),
     );
   }
@@ -191,10 +209,43 @@ class _PriceListsScreenState extends ConsumerState<PriceListsScreen> {
   }
 
   Future<void> _pickProduct() async {
-    final selected = await showModalBottomSheet<ProductModel>(
+    final selected = await showGeneralDialog<ProductModel>(
       context: context,
-      showDragHandle: true,
-      builder: (context) => const _ProductPicker(),
+      barrierDismissible: true,
+      barrierLabel: 'Cerrar selector de productos',
+      barrierColor: FullTechDialogTokens.overlayColor,
+      transitionDuration: const Duration(milliseconds: 180),
+      transitionBuilder: (context, animation, secondaryAnimation, child) =>
+          SlideTransition(
+            position: Tween(begin: const Offset(0.12, 0), end: Offset.zero)
+                .animate(
+                  CurvedAnimation(
+                    parent: animation,
+                    curve: Curves.easeOutCubic,
+                  ),
+                ),
+            child: child,
+          ),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        final screenWidth = MediaQuery.sizeOf(context).width;
+        return Theme(
+          data: _priceListTheme(context),
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: SizedBox(
+              key: const ValueKey('price-product-drawer'),
+              width: screenWidth < 640
+                  ? screenWidth
+                  : (screenWidth * .38).clamp(360.0, 760.0),
+              height: double.infinity,
+              child: const Material(
+                color: AppColors.surface,
+                child: SafeArea(child: _ProductPicker()),
+              ),
+            ),
+          ),
+        );
+      },
     );
     if (selected != null) setState(() => _selectedProduct = selected);
   }
@@ -266,14 +317,18 @@ class _ListsPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        border: Border.all(color: AppColors.border),
+      ),
       padding: const EdgeInsets.all(12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           FilledButton.icon(
             onPressed: onCreate,
-            icon: const Icon(Icons.add_rounded),
+            icon: const ProvidedActionIcon(ProvidedAction.add, size: 18),
             label: const Text('Nueva lista'),
           ),
           const SizedBox(height: 12),
@@ -281,22 +336,42 @@ class _ListsPanel extends StatelessWidget {
             Card(
               margin: const EdgeInsets.only(bottom: 8),
               child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 4,
+                ),
+                horizontalTitleGap: 8,
                 selected: list.id == selectedId,
-                title: Text(list.name, overflow: TextOverflow.ellipsis),
+                title: Text(
+                  list.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 subtitle: Text(
                   '${list.rules.length} reglas · ${list.clientCount} clientes',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     IconButton(
+                      constraints: const BoxConstraints.tightFor(
+                        width: 40,
+                        height: 40,
+                      ),
                       tooltip: 'Editar lista',
                       icon: const Icon(Icons.edit_outlined),
                       onPressed: () => onEdit(list),
                     ),
-                    Switch(
-                      value: list.active,
-                      onChanged: (_) => onToggle(list),
+                    SizedBox(
+                      width: 56,
+                      child: FittedBox(
+                        child: Switch(
+                          value: list.active,
+                          onChanged: (_) => onToggle(list),
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -382,124 +457,144 @@ class _RulesPanelState extends State<_RulesPanel> {
       return const Center(child: Text('Crea o selecciona una lista.'));
     }
     final product = widget.selectedProduct;
-    return ListView(
-      shrinkWrap: true,
-      padding: const EdgeInsets.all(16),
-      children: [
-        Text(list.name, style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            OutlinedButton.icon(
-              onPressed: widget.onPickProduct,
-              icon: const Icon(Icons.inventory_2_outlined),
-              label: Text(product?.nombre ?? 'Elegir producto'),
-            ),
-            SizedBox(
-              width: 130,
-              child: TextField(
-                controller: widget.quantityController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Cantidad'),
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        border: Border.all(color: AppColors.border),
+      ),
+      child: ListView(
+        shrinkWrap: true,
+        padding: const EdgeInsets.all(16),
+        children: [
+          Text(list.name, style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              OutlinedButton.icon(
+                onPressed: widget.onPickProduct,
+                icon: const Icon(Icons.inventory_2_outlined),
+                label: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 240),
+                  child: Text(
+                    product?.nombre ?? 'Elegir producto',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ),
+              SizedBox(
+                width: 130,
+                child: TextField(
+                  controller: widget.quantityController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Cantidad'),
+                ),
+              ),
+              FilledButton.tonalIcon(
+                onPressed: product == null
+                    ? null
+                    : () => widget.onPreview(list),
+                icon: const Icon(Icons.calculate_outlined),
+                label: const Text('Probar'),
+              ),
+            ],
+          ),
+          if (product != null) ...[
+            const SizedBox(height: 12),
+            Text('Precio general: RD\$${product.precio.toStringAsFixed(2)}'),
+            const SizedBox(height: 12),
+            SegmentedButton<String>(
+              selected: {_mode},
+              segments: const [
+                ButtonSegment(value: 'FIXED_PRICE', label: Text('Precio fijo')),
+                ButtonSegment(
+                  value: 'PERCENT_DISCOUNT',
+                  label: Text('Descuento'),
+                ),
+              ],
+              onSelectionChanged: (value) => setState(() {
+                _mode = value.first;
+                _tiers.clear();
+              }),
             ),
-            FilledButton.tonalIcon(
-              onPressed: product == null ? null : () => widget.onPreview(list),
-              icon: const Icon(Icons.calculate_outlined),
-              label: const Text('Probar'),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                _numberField(_minQty, 'Desde'),
+                if (_mode == 'FIXED_PRICE')
+                  _numberField(_fixedPrice, 'Precio')
+                else
+                  _numberField(_discount, 'Descuento %'),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text('Escalas', style: Theme.of(context).textTheme.titleMedium),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                _numberField(_tierQty, 'Desde'),
+                _numberField(
+                  _tierPrice,
+                  _mode == 'FIXED_PRICE' ? 'Precio' : 'Descuento %',
+                ),
+                IconButton.filledTonal(
+                  tooltip: 'Agregar escala',
+                  onPressed: _addTier,
+                  icon: const Icon(Icons.add_rounded),
+                ),
+              ],
+            ),
+            for (final tier in _tiers)
+              ListTile(
+                dense: true,
+                title: Text('Desde ${tier.minQuantity}'),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _mode == 'FIXED_PRICE'
+                          ? 'RD\$${tier.fixedPrice?.toStringAsFixed(2) ?? '-'}'
+                          : '${tier.discountPercent?.toStringAsFixed(2) ?? '-'}%',
+                    ),
+                    IconButton(
+                      tooltip: 'Quitar escala',
+                      onPressed: () => setState(() => _tiers.remove(tier)),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: widget.saving ? null : () => _save(list),
+              icon: const Icon(Icons.save_outlined),
+              label: const Text('Guardar regla'),
             ),
           ],
-        ),
-        if (product != null) ...[
-          const SizedBox(height: 12),
-          Text('Precio general: RD\$${product.precio.toStringAsFixed(2)}'),
-          const SizedBox(height: 12),
-          SegmentedButton<String>(
-            selected: {_mode},
-            segments: const [
-              ButtonSegment(value: 'FIXED_PRICE', label: Text('Precio fijo')),
-              ButtonSegment(
-                value: 'PERCENT_DISCOUNT',
-                label: Text('Descuento'),
-              ),
-            ],
-            onSelectionChanged: (value) => setState(() {
-              _mode = value.first;
-              _tiers.clear();
-            }),
+          const SizedBox(height: 20),
+          Text(
+            'Reglas de la lista',
+            style: Theme.of(context).textTheme.titleSmall,
           ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              _numberField(_minQty, 'Desde'),
-              if (_mode == 'FIXED_PRICE')
-                _numberField(_fixedPrice, 'Precio')
-              else
-                _numberField(_discount, 'Descuento %'),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text('Escalas', style: Theme.of(context).textTheme.titleMedium),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              _numberField(_tierQty, 'Desde'),
-              _numberField(
-                _tierPrice,
-                _mode == 'FIXED_PRICE' ? 'Precio' : 'Descuento %',
-              ),
-              IconButton.filledTonal(
-                tooltip: 'Agregar escala',
-                onPressed: _addTier,
-                icon: const Icon(Icons.add_rounded),
-              ),
-            ],
-          ),
-          for (final tier in _tiers)
-            ListTile(
-              dense: true,
-              title: Text('Desde ${tier.minQuantity}'),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    _mode == 'FIXED_PRICE'
-                        ? 'RD\$${tier.fixedPrice?.toStringAsFixed(2) ?? '-'}'
-                        : '${tier.discountPercent?.toStringAsFixed(2) ?? '-'}%',
-                  ),
-                  IconButton(
-                    tooltip: 'Quitar escala',
-                    onPressed: () => setState(() => _tiers.remove(tier)),
-                    icon: const Icon(Icons.close),
-                  ),
-                ],
+          const SizedBox(height: 8),
+          for (final rule in list.rules)
+            Card(
+              child: ListTile(
+                title: Text(rule.productName),
+                subtitle: Text(
+                  rule.mode == 'FIXED_PRICE'
+                      ? 'Desde ${rule.minQuantity}: RD\$${rule.fixedPrice?.toStringAsFixed(2) ?? '-'}'
+                      : 'Desde ${rule.minQuantity}: ${rule.discountPercent?.toStringAsFixed(2) ?? '-'}%',
+                ),
               ),
             ),
-          const SizedBox(height: 12),
-          FilledButton.icon(
-            onPressed: widget.saving ? null : () => _save(list),
-            icon: const Icon(Icons.save_outlined),
-            label: const Text('Guardar regla'),
-          ),
         ],
-        const SizedBox(height: 20),
-        for (final rule in list.rules)
-          Card(
-            child: ListTile(
-              title: Text(rule.productName),
-              subtitle: Text(
-                rule.mode == 'FIXED_PRICE'
-                    ? 'Desde ${rule.minQuantity}: RD\$${rule.fixedPrice?.toStringAsFixed(2) ?? '-'}'
-                    : 'Desde ${rule.minQuantity}: ${rule.discountPercent?.toStringAsFixed(2) ?? '-'}%',
-              ),
-            ),
-          ),
-      ],
+      ),
     );
   }
 
@@ -591,15 +686,31 @@ class _ProductPicker extends ConsumerStatefulWidget {
 class _ProductPickerState extends ConsumerState<_ProductPicker> {
   late final ProductSearchController _search;
   late final VoidCallback _removeListener;
+  final Set<String> _categories = {};
+  String? _category;
 
   @override
   void initState() {
     super.initState();
     _search = ProductSearchController(dio: ref.read(dioProvider));
     _removeListener = _search.addListener((_) {
+      _categories.addAll(
+        _search.snapshot.items
+            .map((p) => p.categoriaLabel)
+            .where((c) => c.isNotEmpty),
+      );
       if (mounted) setState(() {});
     }, fireImmediately: false);
     unawaited(_search.reset());
+    unawaited(_loadCategories());
+  }
+
+  Future<void> _loadCategories() async {
+    final categories = await ref
+        .read(catalogRepositoryProvider)
+        .fetchProductCategories();
+    if (!mounted) return;
+    setState(() => _categories.addAll(categories.keys));
   }
 
   @override
@@ -614,12 +725,65 @@ class _ProductPickerState extends ConsumerState<_ProductPicker> {
     final state = _search.snapshot;
     return Column(
       children: [
-        TextField(
-          decoration: const InputDecoration(
-            labelText: 'Buscar producto por nombre o código',
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+          child: Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Elegir producto',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Cerrar productos',
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const ProvidedActionIcon(ProvidedAction.close, size: 16),
+              ),
+            ],
           ),
-          onChanged: _search.setQuery,
         ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: TextField(
+            decoration: const InputDecoration(
+              prefixIcon: Padding(
+                padding: EdgeInsets.all(12),
+                child: ProvidedActionIcon(ProvidedAction.search, size: 18),
+              ),
+              labelText: 'Buscar producto por nombre o código',
+            ),
+            onChanged: _search.setQuery,
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          child: DropdownButtonFormField<String>(
+            initialValue: _category ?? '',
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Categoría'),
+            items: [
+              const DropdownMenuItem(
+                value: '',
+                child: Text('Todas las categorías'),
+              ),
+              for (final category in (_categories.toList()..sort()))
+                DropdownMenuItem(
+                  value: category,
+                  child: Text(
+                    category,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
+            onChanged: (value) {
+              setState(() => _category = value == '' ? null : value);
+              _search.patchFilter('category', _category);
+            },
+          ),
+        ),
+        const Divider(height: 1),
         Expanded(
           child: state.isInitialLoading
               ? const Center(child: CircularProgressIndicator())
@@ -635,7 +799,8 @@ class _ProductPickerState extends ConsumerState<_ProductPicker> {
               ? const Center(
                   child: Text('No hay productos para esta búsqueda.'),
                 )
-              : ListView.builder(
+              : ListView.separated(
+                  separatorBuilder: (_, __) => const Divider(height: 1),
                   itemCount: state.items.length + (state.hasMore ? 1 : 0),
                   itemBuilder: (context, index) {
                     if (index == state.items.length) {
@@ -648,10 +813,29 @@ class _ProductPickerState extends ConsumerState<_ProductPicker> {
                     }
                     final product = state.items[index];
                     return ListTile(
+                      leading: SizedBox.square(
+                        dimension: 40,
+                        child: ProductNetworkImage(
+                          imageUrl: product.displayFotoUrl ?? '',
+                          productId: product.id,
+                          productName: product.nombre,
+                          originalUrl: product.originalFotoUrl,
+                          fit: BoxFit.contain,
+                          fallback: const Icon(
+                            Icons.inventory_2_outlined,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 4,
+                      ),
                       title: Text(product.nombre),
                       subtitle: Text(
                         'RD\$${product.precio.toStringAsFixed(2)}',
                       ),
+                      trailing: const Icon(Icons.chevron_right, size: 20),
                       onTap: () => Navigator.of(context).pop(product),
                     );
                   },
@@ -675,37 +859,64 @@ class _ListDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(title),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            controller: name,
-            decoration: const InputDecoration(labelText: 'Nombre'),
+    void save() {
+      final value = name.text.trim();
+      if (value.isEmpty) return;
+      Navigator.of(context).pop(_ListDraft(value, description.text.trim()));
+    }
+
+    return Theme(
+      data: _priceListTheme(context),
+      child: FullTechDialog(
+        title: title,
+        maxWidth: 580,
+        borderRadius: 0,
+        showCloseButton: true,
+        padding: const EdgeInsets.all(24),
+        onClose: () => Navigator.of(context).pop(),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                controller: name,
+                autofocus: true,
+                textInputAction: TextInputAction.next,
+                decoration: const InputDecoration(labelText: 'Nombre'),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: description,
+                minLines: 2,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: 'Descripción',
+                  alignLabelWithHint: true,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('Cancelar'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: save,
+                      child: const Text('Guardar'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-          TextField(
-            controller: description,
-            decoration: const InputDecoration(labelText: 'Descripción'),
-          ),
-        ],
+        ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancelar'),
-        ),
-        FilledButton(
-          onPressed: () {
-            final value = name.text.trim();
-            if (value.isEmpty) return;
-            Navigator.of(
-              context,
-            ).pop(_ListDraft(value, description.text.trim()));
-          },
-          child: const Text('Guardar'),
-        ),
-      ],
     );
   }
 }
@@ -756,3 +967,65 @@ class _RuleDraft {
 
 double _number(String value) =>
     double.tryParse(value.replaceAll(',', '.')) ?? 0;
+
+ThemeData _priceListTheme(BuildContext context) {
+  final theme = Theme.of(context);
+  const shape = RoundedRectangleBorder();
+  const border = OutlineInputBorder(
+    borderRadius: BorderRadius.zero,
+    borderSide: BorderSide(color: AppColors.border),
+  );
+  return theme.copyWith(
+    scaffoldBackgroundColor: AppColors.background,
+    filledButtonTheme: FilledButtonThemeData(
+      style: (theme.filledButtonTheme.style ?? const ButtonStyle()).copyWith(
+        shape: const WidgetStatePropertyAll(shape),
+        minimumSize: const WidgetStatePropertyAll(Size(40, 40)),
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: (theme.outlinedButtonTheme.style ?? const ButtonStyle()).copyWith(
+        shape: const WidgetStatePropertyAll(shape),
+        minimumSize: const WidgetStatePropertyAll(Size(40, 40)),
+      ),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: (theme.textButtonTheme.style ?? const ButtonStyle()).copyWith(
+        shape: const WidgetStatePropertyAll(shape),
+      ),
+    ),
+    iconButtonTheme: const IconButtonThemeData(
+      style: ButtonStyle(shape: WidgetStatePropertyAll(shape)),
+    ),
+    segmentedButtonTheme: SegmentedButtonThemeData(
+      style: (theme.segmentedButtonTheme.style ?? const ButtonStyle()).copyWith(
+        shape: const WidgetStatePropertyAll(shape),
+      ),
+    ),
+    cardTheme: const CardThemeData(
+      shape: RoundedRectangleBorder(side: BorderSide(color: AppColors.border)),
+      elevation: 0,
+      color: AppColors.surface,
+      margin: EdgeInsets.only(bottom: 8),
+    ),
+    listTileTheme: theme.listTileTheme.copyWith(
+      shape: shape,
+      titleTextStyle: theme.textTheme.bodyMedium?.copyWith(
+        fontWeight: FontWeight.w500,
+      ),
+      subtitleTextStyle: theme.textTheme.bodySmall?.copyWith(
+        color: AppColors.textSecondary,
+      ),
+    ),
+    inputDecorationTheme: theme.inputDecorationTheme.copyWith(
+      border: border,
+      enabledBorder: border,
+      focusedBorder: border.copyWith(
+        borderSide: const BorderSide(color: AppColors.primary),
+      ),
+      filled: true,
+      fillColor: AppColors.surface,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+    ),
+  );
+}

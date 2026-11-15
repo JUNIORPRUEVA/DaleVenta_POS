@@ -29,12 +29,9 @@ class EcfWelcomeStep extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final short = MediaQuery.sizeOf(context).height < 820;
-    final left = _WelcomeIntro(
-      short: short,
-      onStart: onStart,
-    );
+    final left = _WelcomeIntro(short: short, onStart: onStart);
     final right = Container(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(18),
@@ -47,13 +44,7 @@ class EcfWelcomeStep extends StatelessWidget {
           ),
         ],
       ),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: short ? 520 : 640),
-        child: EcfHabilitacionVideoCard(
-          videoUrl: videoUrl,
-          maxVideoWidth: short ? 500 : 620,
-        ),
-      ),
+      child: EcfHabilitacionVideoCard(videoUrl: videoUrl, maxVideoWidth: 620),
     );
 
     return LayoutBuilder(
@@ -70,18 +61,14 @@ class EcfWelcomeStep extends StatelessWidget {
                   ? Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(flex: 4, child: left),
-                        const SizedBox(width: 40),
-                        Expanded(flex: 6, child: right),
+                        Expanded(child: left),
+                        const SizedBox(width: 32),
+                        Expanded(child: right),
                       ],
                     )
                   : Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        left,
-                        const SizedBox(height: 20),
-                        right,
-                      ],
+                      children: [left, const SizedBox(height: 20), right],
                     ),
             ),
           ),
@@ -112,7 +99,7 @@ class _WelcomeIntro extends StatelessWidget {
     ),
     (
       'Inicia la postulación',
-      'Continúa el proceso acompañado, sin salir de FullPOS.',
+      'Continúa en el asistente desde tu navegador y vuelve a FullPOS al terminar.',
     ),
   ];
 
@@ -144,10 +131,10 @@ class _WelcomeIntro extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Text(
-          'Todo el proceso, acompañado por FullPOS y en un solo lugar. '
-          'Mira la guía y comienza cuando estés listo.',
+          'FullPOS te acompaña paso a paso. Revisa tus datos y comienza '
+          'cuando estés listo.',
           style: theme.textTheme.bodyMedium?.copyWith(
-            fontSize: 13.5,
+            fontSize: 14,
             height: 1.5,
             color: AppColors.textSecondary,
           ),
@@ -156,10 +143,10 @@ class _WelcomeIntro extends StatelessWidget {
         const Text(
           'Paso a paso',
           style: TextStyle(
-            fontSize: 11.5,
+            fontSize: 12,
             fontWeight: FontWeight.w700,
             letterSpacing: 0.2,
-            color: AppColors.textMuted,
+            color: AppColors.textSecondary,
           ),
         ),
         const SizedBox(height: 10),
@@ -238,7 +225,7 @@ class _WelcomeStepRow extends StatelessWidget {
                 Text(
                   title,
                   style: const TextStyle(
-                    fontSize: 13,
+                    fontSize: 14,
                     fontWeight: FontWeight.w700,
                     height: 1.3,
                     color: AppColors.textPrimary,
@@ -248,9 +235,9 @@ class _WelcomeStepRow extends StatelessWidget {
                 Text(
                   hint,
                   style: const TextStyle(
-                    fontSize: 11.8,
-                    height: 1.4,
-                    color: AppColors.textMuted,
+                    fontSize: 14,
+                    height: 1.5,
+                    color: AppColors.textSecondary,
                   ),
                 ),
               ],

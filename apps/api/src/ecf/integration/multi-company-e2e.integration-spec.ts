@@ -160,7 +160,9 @@ uat("Validación integral multiempresa — cinco empresas ficticias", () => {
     app.useGlobalPipes(
       new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
     );
-    await app.init();
+    // Keep one loopback server open for concurrent Supertest requests. Letting
+    // Supertest auto-listen/close it per request can reset another in-flight call.
+    await app.listen(0, "127.0.0.1");
     prisma = app.get(PrismaService);
   }
 
@@ -236,6 +238,7 @@ uat("Validación integral multiempresa — cinco empresas ficticias", () => {
         rangeTo: end,
         approvedQuantity: end - start + 1,
         declarationAccepted: true,
+        expiresAt: "2035-12-31",
       });
     expect(declared.status).toBe(201);
     const res = await http()
@@ -360,11 +363,7 @@ uat("Validación integral multiempresa — cinco empresas ficticias", () => {
         documentType: "E31",
         paymentType: 1,
         incomeType: 1,
-        // `sequenceDueDate` es obligatorio por contrato para E31: sin él la
-        // preparación se rechaza con ECF_METADATA_REQUIRED.
-        sequenceDueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-          .toISOString()
-          .slice(0, 10),
+        // The backend supplies E31 expiry from this company's authorization.
       });
   }
 
@@ -470,9 +469,7 @@ uat("Validación integral multiempresa — cinco empresas ficticias", () => {
         encf,
         paymentType: 1,
         incomeType: 1,
-        sequenceDueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-          .toISOString()
-          .slice(0, 10),
+        sequenceDueDate: "2035-12-31",
       } as never,
     );
     if (!mapped.ok) {

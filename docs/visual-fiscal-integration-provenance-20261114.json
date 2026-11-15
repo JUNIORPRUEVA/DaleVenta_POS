@@ -1,0 +1,3151 @@
+{
+  "base": "cbc3eceb205e4af6e914818485a23bcbdc448055",
+  "records": [
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/assets/image/action_add.png",
+      "sourceSha256": "570876c33258860b2e17a39291619cc9a0d5f3c4847bebda36d4421326e5ecea",
+      "candidateSha256": "570876c33258860b2e17a39291619cc9a0d5f3c4847bebda36d4421326e5ecea",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/assets/image/action_analytics.png",
+      "sourceSha256": "7ecdca032eebf9826fadc24db444162665fa67466e91e9a6101343a936b43a12",
+      "candidateSha256": "7ecdca032eebf9826fadc24db444162665fa67466e91e9a6101343a936b43a12",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/assets/image/action_calendar.png",
+      "sourceSha256": "e38a1eb3b481f11f90be5e7ab2b418c4c971896d58a1d3fc2495088a89b57bd7",
+      "candidateSha256": "e38a1eb3b481f11f90be5e7ab2b418c4c971896d58a1d3fc2495088a89b57bd7",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/assets/image/action_category.png",
+      "sourceSha256": "6c4eed431ec824708191b8cf655b9fb9a30e3ceb99f0f3eacf6de179454ba4ab",
+      "candidateSha256": "6c4eed431ec824708191b8cf655b9fb9a30e3ceb99f0f3eacf6de179454ba4ab",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/assets/image/action_close.png",
+      "sourceSha256": "b82b6cfffa5a22f4b2dc6895174a1a887725fc9fe12d27487a601150677e52d7",
+      "candidateSha256": "b82b6cfffa5a22f4b2dc6895174a1a887725fc9fe12d27487a601150677e52d7",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/assets/image/action_delete.png",
+      "sourceSha256": "dcb19b32be8f2a6d52ee6e332d1a3e22c7e0e09daeb137269470ce25170ddfcd",
+      "candidateSha256": "dcb19b32be8f2a6d52ee6e332d1a3e22c7e0e09daeb137269470ce25170ddfcd",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/assets/image/action_download.png",
+      "sourceSha256": "8e6b702e5d547c65c5666c3f8c681226e3dbd5d4fefd97167490efe46df92eda",
+      "candidateSha256": "8e6b702e5d547c65c5666c3f8c681226e3dbd5d4fefd97167490efe46df92eda",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/assets/image/action_edit.png",
+      "sourceSha256": "f264d6d2932b8eb0c158b7cabee451d18b1b4471932eda4ff88b32378a3d73ca",
+      "candidateSha256": "f264d6d2932b8eb0c158b7cabee451d18b1b4471932eda4ff88b32378a3d73ca",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/assets/image/action_filter.png",
+      "sourceSha256": "a4d0b8dae1b1276424debacd8bdf760e67eb3c82175a7bf6e38ae8aacb872f94",
+      "candidateSha256": "a4d0b8dae1b1276424debacd8bdf760e67eb3c82175a7bf6e38ae8aacb872f94",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/assets/image/action_order.png",
+      "sourceSha256": "831119f3230c869a91bdf9da6bddc8fe47f84db9c28c4833c07d41f55d328863",
+      "candidateSha256": "831119f3230c869a91bdf9da6bddc8fe47f84db9c28c4833c07d41f55d328863",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/assets/image/action_pdf.png",
+      "sourceSha256": "490adbe85b5951f86af716538d0c1d0574e90eb360ea4c7d43fddd6d87460906",
+      "candidateSha256": "490adbe85b5951f86af716538d0c1d0574e90eb360ea4c7d43fddd6d87460906",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/assets/image/action_profit.png",
+      "sourceSha256": "b53cfb3bc1c3a6836cd1dcf9ef35313fb649f2d241ea7b54f582f856a72618e3",
+      "candidateSha256": "b53cfb3bc1c3a6836cd1dcf9ef35313fb649f2d241ea7b54f582f856a72618e3",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/assets/image/action_refresh.png",
+      "sourceSha256": "9f8732b1eb5b7cb8655fe7065da817c60742ec0b57a5a504ceeba5988035eacf",
+      "candidateSha256": "9f8732b1eb5b7cb8655fe7065da817c60742ec0b57a5a504ceeba5988035eacf",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/assets/image/action_reload.png",
+      "sourceSha256": "bd068aea0a9e27b908cf96df5fb30bf3f422b3a00865444afbabb7d25dd3efd2",
+      "candidateSha256": "bd068aea0a9e27b908cf96df5fb30bf3f422b3a00865444afbabb7d25dd3efd2",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/assets/image/action_search.png",
+      "sourceSha256": "2f70e710aafd4832fbc83c2d586f66360351e601b89dfff0d118c0fdc2655cdc",
+      "candidateSha256": "2f70e710aafd4832fbc83c2d586f66360351e601b89dfff0d118c0fdc2655cdc",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/assets/image/action_send.png",
+      "sourceSha256": "456efeed3ad8ca7db12fde95f5ec44eca922c00bc91aa2744f37f53e51c69c54",
+      "candidateSha256": "456efeed3ad8ca7db12fde95f5ec44eca922c00bc91aa2744f37f53e51c69c54",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/assets/image/action_supplier.png",
+      "sourceSha256": "169742a8c2c66dc8eef7860aff921973475f6d944c14ad8b2e549ab34330394c",
+      "candidateSha256": "169742a8c2c66dc8eef7860aff921973475f6d944c14ad8b2e549ab34330394c",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/assets/image/cliente-nuevo.png",
+      "sourceSha256": "ec31bb7edf81bbf3d170c930614fedd315de82e98f41dbb7c745f87900b1b69b",
+      "candidateSha256": "ec31bb7edf81bbf3d170c930614fedd315de82e98f41dbb7c745f87900b1b69b",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/lib/core/app_access/app_access_links.dart",
+      "sourceSha256": "746939c8b5b1b5a28ae4e7aafb3f764ef74d47b227929a9332e65a3b9700778b",
+      "candidateSha256": "746939c8b5b1b5a28ae4e7aafb3f764ef74d47b227929a9332e65a3b9700778b",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/lib/core/auth/business_registration_policy.dart",
+      "sourceSha256": "b90c0f8eb21b7e574c5b2e1db5e0c75fc9fe7309cffdcf6815611209834ccc8b",
+      "candidateSha256": "b90c0f8eb21b7e574c5b2e1db5e0c75fc9fe7309cffdcf6815611209834ccc8b",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/lib/core/config/product_config.dart",
+      "sourceSha256": "eb91052859789219450927e39e05b2d32d27040084f85efcf8f72e45a2b1c3ee",
+      "candidateSha256": "eb91052859789219450927e39e05b2d32d27040084f85efcf8f72e45a2b1c3ee",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/lib/core/debug/app_error_overlay.dart",
+      "sourceSha256": "dbd3d663d01f849a087177b2bab382522381b9f35864963afc874732b44b03aa",
+      "candidateSha256": "dbd3d663d01f849a087177b2bab382522381b9f35864963afc874732b44b03aa",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/lib/core/routing/app_router.dart",
+      "sourceSha256": "179e357a8d1989a456772937ab6d5f48032aed484af89b91a90de88e6ae1b840",
+      "candidateSha256": "179e357a8d1989a456772937ab6d5f48032aed484af89b91a90de88e6ae1b840",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/lib/core/utils/app_feedback.dart",
+      "sourceSha256": "8769f87ef92211b4f6b30227619329c7d0fb7dae2f6234f04a011c9e8e5c6cb3",
+      "candidateSha256": "8769f87ef92211b4f6b30227619329c7d0fb7dae2f6234f04a011c9e8e5c6cb3",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/lib/core/utils/open_web_registration.dart",
+      "sourceSha256": "d5a09cc2378fd9f7da4da23c8a45a938c196ae12ba4ef1797b0c82a6a90a03d8",
+      "candidateSha256": "d5a09cc2378fd9f7da4da23c8a45a938c196ae12ba4ef1797b0c82a6a90a03d8",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/lib/core/utils/safe_url_launcher.dart",
+      "sourceSha256": "832f8838cefa25d7dd2f21995d57d51e9bca107fd1bc79cdb3cbd077ea389b1b",
+      "candidateSha256": "832f8838cefa25d7dd2f21995d57d51e9bca107fd1bc79cdb3cbd077ea389b1b",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/lib/core/widgets/app_drawer.dart",
+      "sourceSha256": "1e321707db47e9c3c6fab113a0919f37c10201abfb1bd3f1fcb4e7e3ad5c4841",
+      "candidateSha256": "c46d006ad66dd339978a6ce039a5ce09a5a268684c0bb89650581b9d30257413",
+      "status": "merged-or-validated-generated"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/lib/core/widgets/app_navigation.dart",
+      "sourceSha256": "497e5ba3f5b13bc45908208cae5fcfb211bed68f6efd0d92e79ed5f69452b0f5",
+      "candidateSha256": "497e5ba3f5b13bc45908208cae5fcfb211bed68f6efd0d92e79ed5f69452b0f5",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/lib/core/widgets/branded_menu_button.dart",
+      "sourceSha256": "00e346fb2b4903b4ad4ff04ee59bc907fb0a2d8c3b11c9170cf65898632b3e15",
+      "candidateSha256": "00e346fb2b4903b4ad4ff04ee59bc907fb0a2d8c3b11c9170cf65898632b3e15",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/lib/core/widgets/fulltech_dialog.dart",
+      "sourceSha256": "83cb292361b4c32cfdd574cdf7f390b7c35a289a2544903c5eaf66d592017d78",
+      "candidateSha256": "83cb292361b4c32cfdd574cdf7f390b7c35a289a2544903c5eaf66d592017d78",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/lib/core/widgets/history_filter_panel.dart",
+      "sourceSha256": "dae18021174e07e981828e57d62c94adc6e0faebbab950a8bef6f1cced917420",
+      "candidateSha256": "dae18021174e07e981828e57d62c94adc6e0faebbab950a8bef6f1cced917420",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/lib/core/widgets/history_presentation.dart",
+      "sourceSha256": "25402639c5ff58336b9bd7eb7481bc8dd4505bae7d97e670ddf8f7a0e0cb8281",
+      "candidateSha256": "25402639c5ff58336b9bd7eb7481bc8dd4505bae7d97e670ddf8f7a0e0cb8281",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/lib/core/widgets/preview/refined_topbar_preview.dart",
+      "sourceSha256": "efb04eeb4c884123f958d059bcdfe4bc0ad8b4826f8ea2bb189a9bc5094a2307",
+      "candidateSha256": "efb04eeb4c884123f958d059bcdfe4bc0ad8b4826f8ea2bb189a9bc5094a2307",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/lib/core/widgets/provided_action_icon.dart",
+      "sourceSha256": "e39ebec9fb3ba416e421c8512b42d3b242d9cdd44bbd05a5dac050ce40115609",
+      "candidateSha256": "e39ebec9fb3ba416e421c8512b42d3b242d9cdd44bbd05a5dac050ce40115609",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/lib/core/widgets/responsive_shell.dart",
+      "sourceSha256": "30635ede7ff5a01cb60102f8028a943f2d96e8af819b587f35591508a8d6f995",
+      "candidateSha256": "30635ede7ff5a01cb60102f8028a943f2d96e8af819b587f35591508a8d6f995",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/lib/core/widgets/web_session_actions.dart",
+      "sourceSha256": "47c9ff481ac272332fffa46da9c55e2d1011238b684724518e207e676f81ee23",
+      "candidateSha256": "47c9ff481ac272332fffa46da9c55e2d1011238b684724518e207e676f81ee23",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/lib/features/account/apps_downloads_panel.dart",
+      "sourceSha256": "2d383adf15eaaf2c6c9e5a36fe5202f3dbfee59131548e970d4576816c8c9ff1",
+      "candidateSha256": "2d383adf15eaaf2c6c9e5a36fe5202f3dbfee59131548e970d4576816c8c9ff1",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/lib/features/auth/presentation/landing_screen.dart",
+      "sourceSha256": "99c10b93f778103f3d6aae05e621ff0bcda2fe8c3309f23df0532f570f441dec",
+      "candidateSha256": "99c10b93f778103f3d6aae05e621ff0bcda2fe8c3309f23df0532f570f441dec",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/lib/features/auth/presentation/login_screen.dart",
+      "sourceSha256": "347a20798e411676e817cf4766319cd99e777032700ea12b7eca11f58508191b",
+      "candidateSha256": "347a20798e411676e817cf4766319cd99e777032700ea12b7eca11f58508191b",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/lib/features/price_lists/ui/price_lists_screen.dart",
+      "sourceSha256": "4fdd8ddc3648bce87465c94de8316c7cc0483644fded65f5a9c9d5f033e4ae4d",
+      "candidateSha256": "4fdd8ddc3648bce87465c94de8316c7cc0483644fded65f5a9c9d5f033e4ae4d",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/lib/features/products/ui/inventory_module_pages.dart",
+      "sourceSha256": "5b2a5f7fb60e1a30bd0eff3e1fe3fd9ccb95f4243a018097bf999bad3b3403cc",
+      "candidateSha256": "5b2a5f7fb60e1a30bd0eff3e1fe3fd9ccb95f4243a018097bf999bad3b3403cc",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/lib/features/reports/ui/reports_interactive_chart.dart",
+      "sourceSha256": "e133585566fa20c91b8bdedb34d4218eeff1ed91e3ba05eed21ab170453b7612",
+      "candidateSha256": "e133585566fa20c91b8bdedb34d4218eeff1ed91e3ba05eed21ab170453b7612",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/lib/features/reports/ui/reports_page.dart",
+      "sourceSha256": "4e4ace080f2a6fdbef751614ce1dc682bc65d70d9a0afba95459d4872fefcad1",
+      "candidateSha256": "4e4ace080f2a6fdbef751614ce1dc682bc65d70d9a0afba95459d4872fefcad1",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/lib/features/reports/utils/sales_report_pdf_service.dart",
+      "sourceSha256": "409e0e097d4de118bb2df7444081063961e9294ab462f3ba82131d5088c3014f",
+      "candidateSha256": "409e0e097d4de118bb2df7444081063961e9294ab462f3ba82131d5088c3014f",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/lib/main.dart",
+      "sourceSha256": "50cc12076d718526b30963c7ccece653ee0238c449ddcf82344821c3a386decd",
+      "candidateSha256": "50cc12076d718526b30963c7ccece653ee0238c449ddcf82344821c3a386decd",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/lib/modules/clientes/clientes_screen.dart",
+      "sourceSha256": "12f498b5193faeec449b58200fbf79160e7f55eff391d7d8ad83386d6459f7d2",
+      "candidateSha256": "12f498b5193faeec449b58200fbf79160e7f55eff391d7d8ad83386d6459f7d2",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/lib/modules/compras/compras_screen.dart",
+      "sourceSha256": "5cf957051f1522ef00c78887995fd798ec2e32bfcc4316eacccf12c62f71c5b5",
+      "candidateSha256": "5cf957051f1522ef00c78887995fd798ec2e32bfcc4316eacccf12c62f71c5b5",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/lib/modules/compras/purchase_visual_theme.dart",
+      "sourceSha256": "8b4e0fa6a63b527505a6d00156dac4a84eae25ddf1a8fede7d3127eefc49571c",
+      "candidateSha256": "8b4e0fa6a63b527505a6d00156dac4a84eae25ddf1a8fede7d3127eefc49571c",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/lib/modules/compras/utils/purchase_order_pdf_service.dart",
+      "sourceSha256": "6ab9761da699aff5457b59ff3e65770e125639187100e561a587ed2a2a6b25cf",
+      "candidateSha256": "6ab9761da699aff5457b59ff3e65770e125639187100e561a587ed2a2a6b25cf",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/lib/modules/cotizaciones/ai/presentation/widgets/quotation_rule_detail_sheet.dart",
+      "sourceSha256": "5f3e31a4d65de12a369f358d97b90f7385039d4067ca0b070f68adfa587636ce",
+      "candidateSha256": "5f3e31a4d65de12a369f358d97b90f7385039d4067ca0b070f68adfa587636ce",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/lib/modules/cotizaciones/cotizaciones_historial_screen.dart",
+      "sourceSha256": "e45c087253646933b456f4631289b601d938fafeb12733b4e2f019f00ce1a30b",
+      "candidateSha256": "e45c087253646933b456f4631289b601d938fafeb12733b4e2f019f00ce1a30b",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/lib/modules/cotizaciones/cotizaciones_screen.dart",
+      "sourceSha256": "4ab65331ddd12e979fd273f6ebb9db46b2607e3c54a7ef28bc49b6daf38123eb",
+      "candidateSha256": "64112d34c88071f3e8939508a8b8da9fba3b83935af2191105c9a4a660c3d139",
+      "status": "merged-or-validated-generated"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/lib/modules/cotizaciones/presentation/preview/sales_detail_panel_preview.dart",
+      "sourceSha256": "21923cc128f443a93fa28a6a023094c92b537515d7fd7d59459c9b17e42fa06d",
+      "candidateSha256": "21923cc128f443a93fa28a6a023094c92b537515d7fd7d59459c9b17e42fa06d",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/lib/modules/cotizaciones/presentation/widgets/sales_catalog_command_bar.dart",
+      "sourceSha256": "764ef0f9a8d8d0644cb6881253fe9aaf1b620913c8e333ee91ebd611f5084465",
+      "candidateSha256": "764ef0f9a8d8d0644cb6881253fe9aaf1b620913c8e333ee91ebd611f5084465",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/lib/modules/cotizaciones/presentation/widgets/sales_client_selector.dart",
+      "sourceSha256": "0dba9f80985c14753e6ff9f57703bb74a8e0d227bdb8d41e3fc13d5ce4578cc2",
+      "candidateSha256": "0dba9f80985c14753e6ff9f57703bb74a8e0d227bdb8d41e3fc13d5ce4578cc2",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/lib/modules/cotizaciones/presentation/widgets/sales_detail_header.dart",
+      "sourceSha256": "0717ddb50a98e40127251420e14a7487c8c4a09a57105bbe54f1b3f8e73a986c",
+      "candidateSha256": "0717ddb50a98e40127251420e14a7487c8c4a09a57105bbe54f1b3f8e73a986c",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/lib/modules/ventas/credit_history_filters.dart",
+      "sourceSha256": "db8dc4b43fb7f20463a639c1838fe9b8635db36e5ec6f8e8f81c144a9918b0c1",
+      "candidateSha256": "db8dc4b43fb7f20463a639c1838fe9b8635db36e5ec6f8e8f81c144a9918b0c1",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/lib/modules/ventas/ecf_pos_fiscal_selector.dart",
+      "sourceSha256": "b966a90c3796c85f792cd96d6fa0cf129c354ad6a388d0ab9a655aa90646904e",
+      "candidateSha256": "b966a90c3796c85f792cd96d6fa0cf129c354ad6a388d0ab9a655aa90646904e",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/lib/modules/ventas/sales_credit_screen.dart",
+      "sourceSha256": "2ac125153ab3e25bd5473f62a6fd2b222237eb40f7ea4109840c29b16af76223",
+      "candidateSha256": "2ac125153ab3e25bd5473f62a6fd2b222237eb40f7ea4109840c29b16af76223",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/lib/modules/ventas/tpv_sales_history_screen.dart",
+      "sourceSha256": "3cc114956fa21edf004bd07e7b485764b80174b4d36a17ca93c6b4e48380dca0",
+      "candidateSha256": "7b50439b7b554fa6ea383cf07c20ef6379c817b5bd6fc46835ba9551e1938e85",
+      "status": "merged-or-validated-generated"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/core/app_access/app_access_links_test.dart",
+      "sourceSha256": "240dbf3a29b1cf9bcecbad9b6b71215c530e3137c57a3fc76f0ad7475d8fc3a0",
+      "candidateSha256": "240dbf3a29b1cf9bcecbad9b6b71215c530e3137c57a3fc76f0ad7475d8fc3a0",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/core/debug/app_error_overlay_test.dart",
+      "sourceSha256": "7f33798dcda2acccd155780d39064f4d571406aea05217aa064cedff3610e7e1",
+      "candidateSha256": "7f33798dcda2acccd155780d39064f4d571406aea05217aa064cedff3610e7e1",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/core/widgets/app_drawer_all_options_reachable_test.dart",
+      "sourceSha256": "28d3c486e1343f3696a2ca4ff2216e57c44a8f8de277dba26c5fb09c02268ff5",
+      "candidateSha256": "37cce2e5e1d126a77a98922c45b012d351cacff8dcafe000522844e77240c15e",
+      "status": "merged-or-validated-generated"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/core/widgets/app_navigation_sections_test.dart",
+      "sourceSha256": "de59e09ea568daf324ed5b975db7adee39eb1ad6163d28320bae5a11991ab2ac",
+      "candidateSha256": "de59e09ea568daf324ed5b975db7adee39eb1ad6163d28320bae5a11991ab2ac",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/core/widgets/branded_menu_button_test.dart",
+      "sourceSha256": "917bb51c3b59df469b4a723d4ae312fe55d9261bacafe55cc48df9c0de682776",
+      "candidateSha256": "917bb51c3b59df469b4a723d4ae312fe55d9261bacafe55cc48df9c0de682776",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/core/widgets/goldens/branded_menu_1280.png",
+      "sourceSha256": "bbd46a60070cf883db0de1fd5b686a4c2d59028c0471f4c96f3760efce491221",
+      "candidateSha256": "bbd46a60070cf883db0de1fd5b686a4c2d59028c0471f4c96f3760efce491221",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/core/widgets/goldens/branded_menu_320.png",
+      "sourceSha256": "90b9551f0df2fcc1875f63c30d577be87b765e7438e470f06f78b1c38ebdd269",
+      "candidateSha256": "90b9551f0df2fcc1875f63c30d577be87b765e7438e470f06f78b1c38ebdd269",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/core/widgets/goldens/branded_menu_390.png",
+      "sourceSha256": "27408e80e79a26f4a100117314ddc7203b0e979b40c5406903c4aa5ae3cff601",
+      "candidateSha256": "27408e80e79a26f4a100117314ddc7203b0e979b40c5406903c4aa5ae3cff601",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/core/widgets/goldens/linux/branded_menu_1280.png",
+      "sourceSha256": "eb5487a2e318732088a20358dbdb79f302a9b7e37bd78b7ce6d44d9117fcb866",
+      "candidateSha256": "eb5487a2e318732088a20358dbdb79f302a9b7e37bd78b7ce6d44d9117fcb866",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/core/widgets/goldens/linux/branded_menu_320.png",
+      "sourceSha256": "d3d7751076f1e463992b958e4327f72170c6f7de1a494ed4d175340d7fa770f3",
+      "candidateSha256": "d3d7751076f1e463992b958e4327f72170c6f7de1a494ed4d175340d7fa770f3",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/core/widgets/goldens/linux/branded_menu_390.png",
+      "sourceSha256": "93e1d71fb8d1429ac1d0e664ee013c0c0e7090edf702d3ad13656bbb2e93b3fa",
+      "candidateSha256": "93e1d71fb8d1429ac1d0e664ee013c0c0e7090edf702d3ad13656bbb2e93b3fa",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/core/widgets/goldens/linux/refined_topbar_1280.png",
+      "sourceSha256": "4afdc2ef2b3169033654badbed86543fc0f4726f324822fd0d7b5047212d3488",
+      "candidateSha256": "4afdc2ef2b3169033654badbed86543fc0f4726f324822fd0d7b5047212d3488",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/core/widgets/goldens/linux/refined_topbar_900.png",
+      "sourceSha256": "c7b5b15303d0840de8bd8360e466510e10e3d1aaa1e5690ce67e1bb5bc54b598",
+      "candidateSha256": "c7b5b15303d0840de8bd8360e466510e10e3d1aaa1e5690ce67e1bb5bc54b598",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/core/widgets/goldens/linux/refined_topbar_960.png",
+      "sourceSha256": "5f24985e54e8690ebee93e8793ce0ba3f52416c80a8886f8ef0965461226f5ad",
+      "candidateSha256": "5f24985e54e8690ebee93e8793ce0ba3f52416c80a8886f8ef0965461226f5ad",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/core/widgets/goldens/refined_topbar_1280.png",
+      "sourceSha256": "d456e9796c8b12900d8f521bc099dd7c329a4b8cfcc190130918495b16c136b6",
+      "candidateSha256": "d456e9796c8b12900d8f521bc099dd7c329a4b8cfcc190130918495b16c136b6",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/core/widgets/goldens/refined_topbar_900.png",
+      "sourceSha256": "7142f0eeb4a3a0c05b57dcdd1d49c13eeab5c160230244a2c16ab7dffb86590f",
+      "candidateSha256": "7142f0eeb4a3a0c05b57dcdd1d49c13eeab5c160230244a2c16ab7dffb86590f",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/core/widgets/goldens/refined_topbar_960.png",
+      "sourceSha256": "f67243aaa31f2d2239a50deb9de3011798bf5b5494bfd99010664b28d123d070",
+      "candidateSha256": "f67243aaa31f2d2239a50deb9de3011798bf5b5494bfd99010664b28d123d070",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/core/widgets/refined_topbar_controls_test.dart",
+      "sourceSha256": "1d5fb8a15acb305473c9d4fed66f41c973a18354baac57d6968d7290ea1737ba",
+      "candidateSha256": "1d5fb8a15acb305473c9d4fed66f41c973a18354baac57d6968d7290ea1737ba",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/account/apps_downloads_panel_test.dart",
+      "sourceSha256": "bfb97b12602d0a19d5be1f7f50f5dd0873536783831fec8523960091b2879804",
+      "candidateSha256": "bfb97b12602d0a19d5be1f7f50f5dd0873536783831fec8523960091b2879804",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/auth/landing_screen_test.dart",
+      "sourceSha256": "826d73fafded10442f6f7fe704a0fb0249db451241c5f6b9cc3a26709c2d44e9",
+      "candidateSha256": "826d73fafded10442f6f7fe704a0fb0249db451241c5f6b9cc3a26709c2d44e9",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/auth/login_feedback_test.dart",
+      "sourceSha256": "631650cc911f6815e262028e063c37e06e054f24ebc684013a96fab97f60e665",
+      "candidateSha256": "631650cc911f6815e262028e063c37e06e054f24ebc684013a96fab97f60e665",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/auth/mobile_business_registration_policy_test.dart",
+      "sourceSha256": "5a4f0906f0413ebdc8252aa5a03af3b9868962ff50a3053815c99778b20544b2",
+      "candidateSha256": "5a4f0906f0413ebdc8252aa5a03af3b9868962ff50a3053815c99778b20544b2",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/price_lists/goldens/linux/price_dialog_1024.png",
+      "sourceSha256": "dd99f83d765e835205eb21ab4a9fdb3953d3555f55d7581def64d97edecb8f71",
+      "candidateSha256": "dd99f83d765e835205eb21ab4a9fdb3953d3555f55d7581def64d97edecb8f71",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/price_lists/goldens/linux/price_dialog_1920.png",
+      "sourceSha256": "6683ce869d26946c72a0a04c4d5d9ae2d25f91bc0dc1dfc326b76fac4c844535",
+      "candidateSha256": "6683ce869d26946c72a0a04c4d5d9ae2d25f91bc0dc1dfc326b76fac4c844535",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/price_lists/goldens/linux/price_dialog_2560.png",
+      "sourceSha256": "b91abcd4ec53a1c7e7f41d77f965a44eab5ff3acb2339c6f3a21d341487512bf",
+      "candidateSha256": "b91abcd4ec53a1c7e7f41d77f965a44eab5ff3acb2339c6f3a21d341487512bf",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/price_lists/goldens/linux/price_dialog_390.png",
+      "sourceSha256": "5877d8ad405966960d67440f1b4bcc995ad1d7bd60f6c53e78102e4e0373925f",
+      "candidateSha256": "5877d8ad405966960d67440f1b4bcc995ad1d7bd60f6c53e78102e4e0373925f",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/price_lists/goldens/linux/price_lists_1024.png",
+      "sourceSha256": "a8665b00956e3cd50d7163b7669e603c367bb10439c1a1f70ceaf44a85d8af9d",
+      "candidateSha256": "a8665b00956e3cd50d7163b7669e603c367bb10439c1a1f70ceaf44a85d8af9d",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/price_lists/goldens/linux/price_lists_1920.png",
+      "sourceSha256": "e93acd7f94c9b5c5772cad5d91a5b043e1d9582b85d90211dd830363525053a1",
+      "candidateSha256": "e93acd7f94c9b5c5772cad5d91a5b043e1d9582b85d90211dd830363525053a1",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/price_lists/goldens/linux/price_lists_2560.png",
+      "sourceSha256": "3df986034cc2a595127b4acb971b166b852485de07666a3f772315a662c0527a",
+      "candidateSha256": "3df986034cc2a595127b4acb971b166b852485de07666a3f772315a662c0527a",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/price_lists/goldens/linux/price_lists_390.png",
+      "sourceSha256": "6038f98300d00a49a02715b92d3c2dfeaf6e2143793e107b248e3536065de9f8",
+      "candidateSha256": "6038f98300d00a49a02715b92d3c2dfeaf6e2143793e107b248e3536065de9f8",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/price_lists/goldens/linux/price_picker_1024.png",
+      "sourceSha256": "8a543a08253be909d08157845b1d9f35feecf7a961e97bc9055f6631dd0e2e91",
+      "candidateSha256": "8a543a08253be909d08157845b1d9f35feecf7a961e97bc9055f6631dd0e2e91",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/price_lists/goldens/linux/price_picker_1920.png",
+      "sourceSha256": "bf099ed4e4df9813332a211133efbb6696eba1a3e79592fe11dec01bd06a8330",
+      "candidateSha256": "bf099ed4e4df9813332a211133efbb6696eba1a3e79592fe11dec01bd06a8330",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/price_lists/goldens/linux/price_picker_2560.png",
+      "sourceSha256": "9d831b18117430eaf2e41e0874862aa33728437989f3a5b638f57b0b6398f2a7",
+      "candidateSha256": "9d831b18117430eaf2e41e0874862aa33728437989f3a5b638f57b0b6398f2a7",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/price_lists/goldens/linux/price_picker_390.png",
+      "sourceSha256": "41aac4725aa33db75a60a327bd3b62da526a2bb9fc7c031631447928409b7022",
+      "candidateSha256": "41aac4725aa33db75a60a327bd3b62da526a2bb9fc7c031631447928409b7022",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/price_lists/goldens/price_dialog_1024.png",
+      "sourceSha256": "fd0bc16b21295f6aef38aa385bda417bc4f15b326e54cc5c6ebc4f92cdc67f45",
+      "candidateSha256": "fd0bc16b21295f6aef38aa385bda417bc4f15b326e54cc5c6ebc4f92cdc67f45",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/price_lists/goldens/price_dialog_1920.png",
+      "sourceSha256": "6adef927754c5f1bafe514e7fbe3df9b55183636c4ac2163e2de967fac46b2bf",
+      "candidateSha256": "6adef927754c5f1bafe514e7fbe3df9b55183636c4ac2163e2de967fac46b2bf",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/price_lists/goldens/price_dialog_2560.png",
+      "sourceSha256": "b306450cd4714b3def9f488afaceff7d76b67d440325555a22ba7255e4eda8be",
+      "candidateSha256": "b306450cd4714b3def9f488afaceff7d76b67d440325555a22ba7255e4eda8be",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/price_lists/goldens/price_dialog_390.png",
+      "sourceSha256": "7df4466ec3fd2466a3b51cdf3414573f41b262553f4460d7ea6177f76d5d42aa",
+      "candidateSha256": "7df4466ec3fd2466a3b51cdf3414573f41b262553f4460d7ea6177f76d5d42aa",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/price_lists/goldens/price_lists_1024.png",
+      "sourceSha256": "996e3fa1a34e2466c99cb8eadc810d12230c1b08d921f45c6960ebf2375fedcb",
+      "candidateSha256": "996e3fa1a34e2466c99cb8eadc810d12230c1b08d921f45c6960ebf2375fedcb",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/price_lists/goldens/price_lists_1920.png",
+      "sourceSha256": "34d5434b9b3c7afa19c231a991ddf40a37912420b86df2f388e4c15660726c1a",
+      "candidateSha256": "34d5434b9b3c7afa19c231a991ddf40a37912420b86df2f388e4c15660726c1a",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/price_lists/goldens/price_lists_2560.png",
+      "sourceSha256": "c0dda16465cfd9eb6af68834196803a42666ceb11702e9569013935804cdaf3c",
+      "candidateSha256": "c0dda16465cfd9eb6af68834196803a42666ceb11702e9569013935804cdaf3c",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/price_lists/goldens/price_lists_390.png",
+      "sourceSha256": "9da41f76533c576095092b206277d02cb6e58c65a22114939aa2e6c31afa24d8",
+      "candidateSha256": "9da41f76533c576095092b206277d02cb6e58c65a22114939aa2e6c31afa24d8",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/price_lists/goldens/price_picker_1024.png",
+      "sourceSha256": "7e5fa20dd6f33378894a657428ee6436607af2aec9f5202db1cda517869c2a99",
+      "candidateSha256": "7e5fa20dd6f33378894a657428ee6436607af2aec9f5202db1cda517869c2a99",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/price_lists/goldens/price_picker_1920.png",
+      "sourceSha256": "8574b4d1f4da133f53c2e517dee4ddd97b030c30cb57b59c74e772913fa220b3",
+      "candidateSha256": "8574b4d1f4da133f53c2e517dee4ddd97b030c30cb57b59c74e772913fa220b3",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/price_lists/goldens/price_picker_2560.png",
+      "sourceSha256": "c9e741b19a3f96aa4d6b85cb7e9f7701146d4d1bda3aa1d25a31eb95fe816b4a",
+      "candidateSha256": "c9e741b19a3f96aa4d6b85cb7e9f7701146d4d1bda3aa1d25a31eb95fe816b4a",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/price_lists/goldens/price_picker_390.png",
+      "sourceSha256": "ceebfa0eb6c316f94aa4d7d8fad16d98b770999b8e9469fad10165cdd4bbc96e",
+      "candidateSha256": "ceebfa0eb6c316f94aa4d7d8fad16d98b770999b8e9469fad10165cdd4bbc96e",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/price_lists/price_lists_screen_test.dart",
+      "sourceSha256": "971825b02d7b388679b324e11d40a37e548446cdbede836d13a082e04cbc7a94",
+      "candidateSha256": "971825b02d7b388679b324e11d40a37e548446cdbede836d13a082e04cbc7a94",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/products/catalog_design_test.dart",
+      "sourceSha256": "be2680f1894a44ac84b26e1e6354aabb6c4b931ece83ec3c1619007c0a3e34f0",
+      "candidateSha256": "be2680f1894a44ac84b26e1e6354aabb6c4b931ece83ec3c1619007c0a3e34f0",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/products/categories_design_test.dart",
+      "sourceSha256": "f90f2f660eaf6c58639e89dc3b291525f23d37a38eb9ef3e59fa24a9188af278",
+      "candidateSha256": "f90f2f660eaf6c58639e89dc3b291525f23d37a38eb9ef3e59fa24a9188af278",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/products/goldens/catalog_1024.png",
+      "sourceSha256": "e4188ec280f9a57dcd2cdfd05f0a601b186dd7c60b06af034a436e23fbaf1c58",
+      "candidateSha256": "e4188ec280f9a57dcd2cdfd05f0a601b186dd7c60b06af034a436e23fbaf1c58",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/products/goldens/catalog_1920.png",
+      "sourceSha256": "31173c31a73d7e04cc8f37ecf86f9e86a0d995f98789725e2e5c51578de050f3",
+      "candidateSha256": "31173c31a73d7e04cc8f37ecf86f9e86a0d995f98789725e2e5c51578de050f3",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/products/goldens/catalog_2560.png",
+      "sourceSha256": "8a065817d96f978c64bf4b3d0b330511ccae46c56c82360dc85d8bcdf82558c8",
+      "candidateSha256": "8a065817d96f978c64bf4b3d0b330511ccae46c56c82360dc85d8bcdf82558c8",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/products/goldens/catalog_390.png",
+      "sourceSha256": "3f69c77ccb10a7647e5fb65b7bfb856f0a59cfb6a67182003cdc8acff227a113",
+      "candidateSha256": "3f69c77ccb10a7647e5fb65b7bfb856f0a59cfb6a67182003cdc8acff227a113",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/products/goldens/catalog_768.png",
+      "sourceSha256": "def7c5789954896807ddec3704961c1321c913ce97e970a6fad50ee96e73d1ae",
+      "candidateSha256": "def7c5789954896807ddec3704961c1321c913ce97e970a6fad50ee96e73d1ae",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/products/goldens/categories_1024.png",
+      "sourceSha256": "dde58d4255c1bad4fa0bcce9c21b4f675ecaa1238d72c7e5c82bbc9773e80bde",
+      "candidateSha256": "dde58d4255c1bad4fa0bcce9c21b4f675ecaa1238d72c7e5c82bbc9773e80bde",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/products/goldens/categories_1920.png",
+      "sourceSha256": "f2052bd21a3ecec36ffd75f4c6fd03acb5fa465a06eab7a64f4a192e7e63e5a1",
+      "candidateSha256": "f2052bd21a3ecec36ffd75f4c6fd03acb5fa465a06eab7a64f4a192e7e63e5a1",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/products/goldens/categories_2560.png",
+      "sourceSha256": "41b669caa0ed978630203d96bf9370a8a0f9d03f513512ee49d21bb11218ea89",
+      "candidateSha256": "41b669caa0ed978630203d96bf9370a8a0f9d03f513512ee49d21bb11218ea89",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/products/goldens/categories_390.png",
+      "sourceSha256": "6a80948176e3021609be65b301e34f06f223518c580e44ed3551e597ff0db7da",
+      "candidateSha256": "6a80948176e3021609be65b301e34f06f223518c580e44ed3551e597ff0db7da",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/products/goldens/category_editor_1024.png",
+      "sourceSha256": "a5754bfbcbfa3cd07952c4dc0db552b571a3dbde9c510de2bcdd2d7a81de7981",
+      "candidateSha256": "a5754bfbcbfa3cd07952c4dc0db552b571a3dbde9c510de2bcdd2d7a81de7981",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/products/goldens/category_editor_1920.png",
+      "sourceSha256": "07ba4ff9d2efb52d9790a25e507e3200b7c19dec7f15f3722a45daaa41359dac",
+      "candidateSha256": "07ba4ff9d2efb52d9790a25e507e3200b7c19dec7f15f3722a45daaa41359dac",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/products/goldens/category_editor_2560.png",
+      "sourceSha256": "c36a11767cb48d5f43b712a841c5625ef2eb4772a8cd59e591812228715df7ac",
+      "candidateSha256": "c36a11767cb48d5f43b712a841c5625ef2eb4772a8cd59e591812228715df7ac",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/products/goldens/category_editor_390.png",
+      "sourceSha256": "6d61c1eef88676ff48c44ff4b705f6bac79b2a0833ee289ac14cfc073c92bf50",
+      "candidateSha256": "6d61c1eef88676ff48c44ff4b705f6bac79b2a0833ee289ac14cfc073c92bf50",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/products/goldens/inventory_count_1024.png",
+      "sourceSha256": "5340b5bf1bf0cad0ede9776fc3f1b302ffc075ec5ee12f3d7c8c19b3f573d3ce",
+      "candidateSha256": "5340b5bf1bf0cad0ede9776fc3f1b302ffc075ec5ee12f3d7c8c19b3f573d3ce",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/products/goldens/inventory_count_1920.png",
+      "sourceSha256": "afaaa6892eb3afc2a7aa44bb9471260dcf5c7213f0d927f81af69d7455201083",
+      "candidateSha256": "afaaa6892eb3afc2a7aa44bb9471260dcf5c7213f0d927f81af69d7455201083",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/products/goldens/inventory_count_390.png",
+      "sourceSha256": "530c8e06472778016a1a6aa0a17a647af3d92f13c8ff6ef7219774ff318e80af",
+      "candidateSha256": "530c8e06472778016a1a6aa0a17a647af3d92f13c8ff6ef7219774ff318e80af",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/products/goldens/inventory_filter_1024.png",
+      "sourceSha256": "e4f313a4e8e8c4b3f70a26a0690de1d7fb72460097b8f348b676cec2385dbfd5",
+      "candidateSha256": "e4f313a4e8e8c4b3f70a26a0690de1d7fb72460097b8f348b676cec2385dbfd5",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/products/goldens/inventory_filter_1920.png",
+      "sourceSha256": "db083a2ac65aa912ec3b22642a6b2f5000e8a9e347b44f25191ec6fe47729a71",
+      "candidateSha256": "db083a2ac65aa912ec3b22642a6b2f5000e8a9e347b44f25191ec6fe47729a71",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/products/goldens/inventory_filter_390.png",
+      "sourceSha256": "095ea5c59f59a36a6223984b3d8b5f9ec0c287d00bf30cbf643ca46b8475d520",
+      "candidateSha256": "095ea5c59f59a36a6223984b3d8b5f9ec0c287d00bf30cbf643ca46b8475d520",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/products/goldens/linux/catalog_1024.png",
+      "sourceSha256": "aeebfff3bd24656cded06b04b80e83c1f07fb91deed17d9b625ac1487489e9a6",
+      "candidateSha256": "aeebfff3bd24656cded06b04b80e83c1f07fb91deed17d9b625ac1487489e9a6",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/products/goldens/linux/catalog_1920.png",
+      "sourceSha256": "9fafaab86235ac0fe64f4c05c0181549ca397e4f22aa26a406913dde14e2a792",
+      "candidateSha256": "9fafaab86235ac0fe64f4c05c0181549ca397e4f22aa26a406913dde14e2a792",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/products/goldens/linux/catalog_2560.png",
+      "sourceSha256": "8372ce5efce652109a918e280c4f4b8f92ad1d8b45486089ea6b9664ae6f9c67",
+      "candidateSha256": "8372ce5efce652109a918e280c4f4b8f92ad1d8b45486089ea6b9664ae6f9c67",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/products/goldens/linux/catalog_390.png",
+      "sourceSha256": "8ff95310618c48063655320e67318045a0375eb6a96b9dc6c50fbf1183b969a7",
+      "candidateSha256": "8ff95310618c48063655320e67318045a0375eb6a96b9dc6c50fbf1183b969a7",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/products/goldens/linux/catalog_768.png",
+      "sourceSha256": "403c3ec57163b09b8ac7877a85e4d6a5caecf2b4e17dcc8a1843d07f0dd849e3",
+      "candidateSha256": "403c3ec57163b09b8ac7877a85e4d6a5caecf2b4e17dcc8a1843d07f0dd849e3",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/products/goldens/linux/categories_1024.png",
+      "sourceSha256": "e628812cbb603f9df619cf1e3d0749693e600ba1893f3267220b6d938851e200",
+      "candidateSha256": "e628812cbb603f9df619cf1e3d0749693e600ba1893f3267220b6d938851e200",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/products/goldens/linux/categories_1920.png",
+      "sourceSha256": "f45876b501bd9180e5b35f59288eafc7ad0fb41fae2fa5941e1b486eeea8ef94",
+      "candidateSha256": "f45876b501bd9180e5b35f59288eafc7ad0fb41fae2fa5941e1b486eeea8ef94",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/products/goldens/linux/categories_2560.png",
+      "sourceSha256": "c27edc4e7bad915f66378ad0903629a5d8a3e9c59729c3a86e57e6a9607b9d03",
+      "candidateSha256": "c27edc4e7bad915f66378ad0903629a5d8a3e9c59729c3a86e57e6a9607b9d03",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/products/goldens/linux/categories_390.png",
+      "sourceSha256": "daab336328b9e6470602b69300ed5f8a68eccd2065c00246935ab7ca59a40ae1",
+      "candidateSha256": "daab336328b9e6470602b69300ed5f8a68eccd2065c00246935ab7ca59a40ae1",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/products/goldens/linux/category_editor_1024.png",
+      "sourceSha256": "e9d95ddc3993137814a130b16247c512b3bf9bf7b28936fc7d7cc942fda8ad3a",
+      "candidateSha256": "e9d95ddc3993137814a130b16247c512b3bf9bf7b28936fc7d7cc942fda8ad3a",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/products/goldens/linux/category_editor_1920.png",
+      "sourceSha256": "1845753d75ac77b448bf7f50a8c2649208f6d4258de63846a27005b397a0d26b",
+      "candidateSha256": "1845753d75ac77b448bf7f50a8c2649208f6d4258de63846a27005b397a0d26b",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/products/goldens/linux/category_editor_2560.png",
+      "sourceSha256": "9fb5116a0ee2fcb01ffb2495fa116b3e6e825fa12364e12d561ff06e049d3139",
+      "candidateSha256": "9fb5116a0ee2fcb01ffb2495fa116b3e6e825fa12364e12d561ff06e049d3139",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/products/goldens/linux/category_editor_390.png",
+      "sourceSha256": "cff162b456a2ed67a0a1d162c3a7a4f9728a61ba4d92769fe44a389a3374d039",
+      "candidateSha256": "cff162b456a2ed67a0a1d162c3a7a4f9728a61ba4d92769fe44a389a3374d039",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/products/goldens/linux/inventory_count_1024.png",
+      "sourceSha256": "d880e1ddb4b29ad35d6c370d5485eaefcf5233c0c7f79083ab8721ff50be92c0",
+      "candidateSha256": "d880e1ddb4b29ad35d6c370d5485eaefcf5233c0c7f79083ab8721ff50be92c0",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/products/goldens/linux/inventory_count_1920.png",
+      "sourceSha256": "f156ba06fffcf0c2269a725abff842efb718fa5bf7331048a8cadc5b8f17cad6",
+      "candidateSha256": "f156ba06fffcf0c2269a725abff842efb718fa5bf7331048a8cadc5b8f17cad6",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/products/goldens/linux/inventory_count_390.png",
+      "sourceSha256": "941acadbf25dfa9f2e5d3056bb58b5b061201f5a608adc38813a9e16109e6edd",
+      "candidateSha256": "941acadbf25dfa9f2e5d3056bb58b5b061201f5a608adc38813a9e16109e6edd",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/products/goldens/linux/inventory_filter_1024.png",
+      "sourceSha256": "39ac8c9944b1509456586669495d22e52a4c9cbf717b981f7017e90ca5676a9b",
+      "candidateSha256": "39ac8c9944b1509456586669495d22e52a4c9cbf717b981f7017e90ca5676a9b",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/products/goldens/linux/inventory_filter_1920.png",
+      "sourceSha256": "dd6e4cc0c28cd859fd2138d27f2c70c2c072fe33abe07d0ae14f5555f26e7877",
+      "candidateSha256": "dd6e4cc0c28cd859fd2138d27f2c70c2c072fe33abe07d0ae14f5555f26e7877",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/products/goldens/linux/inventory_filter_390.png",
+      "sourceSha256": "b373db57af67c658e50d62695d6d869de281d121c58c0452415c081dda11f42f",
+      "candidateSha256": "b373db57af67c658e50d62695d6d869de281d121c58c0452415c081dda11f42f",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/products/inventory_count_design_test.dart",
+      "sourceSha256": "b81464c45399e22d68fe5514ef47d892118a5ccdad4a0c5e99608c68a13479f6",
+      "candidateSha256": "b81464c45399e22d68fe5514ef47d892118a5ccdad4a0c5e99608c68a13479f6",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/reports/goldens/linux/reports_1024.png",
+      "sourceSha256": "b88ac9e5398ddb024e2468e2cd22096ce43d2f84f7d2651f4d48d0b33e4a3b64",
+      "candidateSha256": "b88ac9e5398ddb024e2468e2cd22096ce43d2f84f7d2651f4d48d0b33e4a3b64",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/reports/goldens/linux/reports_1920.png",
+      "sourceSha256": "899d9d83c9198078f6b56ba84a387ddba7821a6ff4655c45ff36848f6627db84",
+      "candidateSha256": "899d9d83c9198078f6b56ba84a387ddba7821a6ff4655c45ff36848f6627db84",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/reports/goldens/linux/reports_2560.png",
+      "sourceSha256": "26e96d6631f16f61cf0df774e9e72271f6ee8c189a3b8a55422bd6bbf51da985",
+      "candidateSha256": "26e96d6631f16f61cf0df774e9e72271f6ee8c189a3b8a55422bd6bbf51da985",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/reports/goldens/linux/reports_390.png",
+      "sourceSha256": "2ae8b1615c8eb3097bba8c4efc0e6e5322d8609479198630c0eef2a7f09e1b6c",
+      "candidateSha256": "2ae8b1615c8eb3097bba8c4efc0e6e5322d8609479198630c0eef2a7f09e1b6c",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/reports/goldens/linux/reports_category_1024.png",
+      "sourceSha256": "52e27decd2bf007650b5fa8affa385566906f3d1243f6261576f0c6fa2388d9e",
+      "candidateSha256": "52e27decd2bf007650b5fa8affa385566906f3d1243f6261576f0c6fa2388d9e",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/reports/goldens/linux/reports_details_1024.png",
+      "sourceSha256": "39e6deb24cc72d2f8941a8d1fda787823d28451e143511ec1369d3c8cc8701e0",
+      "candidateSha256": "39e6deb24cc72d2f8941a8d1fda787823d28451e143511ec1369d3c8cc8701e0",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/reports/goldens/linux/reports_details_1920.png",
+      "sourceSha256": "8da5e0fe6c475328b5295cfaacff8fddc19cf0981eedd0d6c57c0f7335017832",
+      "candidateSha256": "8da5e0fe6c475328b5295cfaacff8fddc19cf0981eedd0d6c57c0f7335017832",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/reports/goldens/linux/reports_details_2560.png",
+      "sourceSha256": "c27742e31a2af0240fd6c5d676161b6f78fc27351f54ba15c589fc25b05757dc",
+      "candidateSha256": "c27742e31a2af0240fd6c5d676161b6f78fc27351f54ba15c589fc25b05757dc",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/reports/goldens/linux/reports_details_390.png",
+      "sourceSha256": "d42f517b37a1530e12e8cf70b9dd21ddc9af29b7de6a0d9ed108cdea3a143b56",
+      "candidateSha256": "d42f517b37a1530e12e8cf70b9dd21ddc9af29b7de6a0d9ed108cdea3a143b56",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/reports/goldens/linux/reports_empty_1024.png",
+      "sourceSha256": "41fb0a4e45a48a1d11679e727b46d4387256408f69e0ac83df91036f9cf71f50",
+      "candidateSha256": "41fb0a4e45a48a1d11679e727b46d4387256408f69e0ac83df91036f9cf71f50",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/reports/goldens/linux/reports_range_1024.png",
+      "sourceSha256": "60e36bd4ef4ae7f3e12c18beab1481db9eed63aa7dc222d4a95abf7227ed2ead",
+      "candidateSha256": "60e36bd4ef4ae7f3e12c18beab1481db9eed63aa7dc222d4a95abf7227ed2ead",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/reports/goldens/reports_1024.png",
+      "sourceSha256": "b3311043c1c5042b36b20575784a3368c0a6ab05d3c1c7c0285a5e3d87fdfd40",
+      "candidateSha256": "b3311043c1c5042b36b20575784a3368c0a6ab05d3c1c7c0285a5e3d87fdfd40",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/reports/goldens/reports_1920.png",
+      "sourceSha256": "9dbeb3762293e2f3f42cb0cde20dd8443df00235b78363763e0ec4e931af11b3",
+      "candidateSha256": "9dbeb3762293e2f3f42cb0cde20dd8443df00235b78363763e0ec4e931af11b3",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/reports/goldens/reports_2560.png",
+      "sourceSha256": "8653688211a4a6db2658fdb20821b13e06c1f52f4180cfd9bb0e5fb222525027",
+      "candidateSha256": "8653688211a4a6db2658fdb20821b13e06c1f52f4180cfd9bb0e5fb222525027",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/reports/goldens/reports_390.png",
+      "sourceSha256": "fb62e3866c18c8af78de462ac9933ee8e00316a310a53257efd95ffbd7516614",
+      "candidateSha256": "fb62e3866c18c8af78de462ac9933ee8e00316a310a53257efd95ffbd7516614",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/reports/goldens/reports_category_1024.png",
+      "sourceSha256": "4bfd2323b2e194082c4f1aed33c34c7b98f7b31fdd8bd674801e9c264049e8f9",
+      "candidateSha256": "4bfd2323b2e194082c4f1aed33c34c7b98f7b31fdd8bd674801e9c264049e8f9",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/reports/goldens/reports_details_1024.png",
+      "sourceSha256": "eebca060d16450a8c52c58da6b22aecf54e983cd1ed23b29ccf86c4a068a6455",
+      "candidateSha256": "eebca060d16450a8c52c58da6b22aecf54e983cd1ed23b29ccf86c4a068a6455",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/reports/goldens/reports_details_1920.png",
+      "sourceSha256": "c8a9a399fbf95e070a24be9ea98a88aa4b845711a36fb57a191b9a875aa73215",
+      "candidateSha256": "c8a9a399fbf95e070a24be9ea98a88aa4b845711a36fb57a191b9a875aa73215",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/reports/goldens/reports_details_2560.png",
+      "sourceSha256": "2c21af52f9df2986096c2c26b614832fdf468e51b6db2e6af9551f0343920f9c",
+      "candidateSha256": "2c21af52f9df2986096c2c26b614832fdf468e51b6db2e6af9551f0343920f9c",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/reports/goldens/reports_details_390.png",
+      "sourceSha256": "8963a3ae89d313be1957dadbc95461fb38063bd1799db2297ce47a29e25e4919",
+      "candidateSha256": "8963a3ae89d313be1957dadbc95461fb38063bd1799db2297ce47a29e25e4919",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/reports/goldens/reports_empty_1024.png",
+      "sourceSha256": "45760ea3a41b8a83604e65e58f60e099aef5cfb181ccd6aae443da62355f63b1",
+      "candidateSha256": "45760ea3a41b8a83604e65e58f60e099aef5cfb181ccd6aae443da62355f63b1",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/reports/goldens/reports_range_1024.png",
+      "sourceSha256": "375ceebaa45b67921845bdffb04fcbb490a3e1e416b8e3b2312c18cb4a053d27",
+      "candidateSha256": "375ceebaa45b67921845bdffb04fcbb490a3e1e416b8e3b2312c18cb4a053d27",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/reports/reports_design_test.dart",
+      "sourceSha256": "091b70fbccd2133d5ed8a4e0a51d2f0e4cca2a7dbe7e1421133194f8de2973cf",
+      "candidateSha256": "091b70fbccd2133d5ed8a4e0a51d2f0e4cca2a7dbe7e1421133194f8de2973cf",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/features/reports/sales_report_pdf_service_test.dart",
+      "sourceSha256": "7835b89ede7cc2549a4eda47179cb0792d22cce7f02fe9ea7281646e8e046299",
+      "candidateSha256": "7835b89ede7cc2549a4eda47179cb0792d22cce7f02fe9ea7281646e8e046299",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/clientes/clientes_screen_compact_panel_test.dart",
+      "sourceSha256": "12a0192525b2eaf9ff58761bbcc63ff0a479c2e42ef3ffdd37ee24a24f0be55c",
+      "candidateSha256": "12a0192525b2eaf9ff58761bbcc63ff0a479c2e42ef3ffdd37ee24a24f0be55c",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/clientes/goldens/clients_1024.png",
+      "sourceSha256": "33a6ef2cf93297f9f10bcfcb171d63c79e61d5a3a4ff16cd9f4dabeba00324ab",
+      "candidateSha256": "33a6ef2cf93297f9f10bcfcb171d63c79e61d5a3a4ff16cd9f4dabeba00324ab",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/clientes/goldens/clients_1366.png",
+      "sourceSha256": "6a2042904825b885f7f08416ea68d2d297bceb75ba75d2473fb1a653da8f0ce8",
+      "candidateSha256": "6a2042904825b885f7f08416ea68d2d297bceb75ba75d2473fb1a653da8f0ce8",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/clientes/goldens/clients_1920.png",
+      "sourceSha256": "dbb4841ca9eee12e74c3dfe0d07d8e32e6dea2f8162e4a2666a9cba7938f7473",
+      "candidateSha256": "dbb4841ca9eee12e74c3dfe0d07d8e32e6dea2f8162e4a2666a9cba7938f7473",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/clientes/goldens/clients_2560.png",
+      "sourceSha256": "c90923c3720ece68cbba0e542cefc5322cc022729e464685c9898cc981d9841f",
+      "candidateSha256": "c90923c3720ece68cbba0e542cefc5322cc022729e464685c9898cc981d9841f",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/clientes/goldens/clients_empty_1024.png",
+      "sourceSha256": "dac1e082dc98efe86b602724cf3156311d999aae4b3ce4de1a780b3b2d27009c",
+      "candidateSha256": "dac1e082dc98efe86b602724cf3156311d999aae4b3ce4de1a780b3b2d27009c",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/clientes/goldens/clients_empty_1366.png",
+      "sourceSha256": "9bd74d56206875dc64d1caafcf2f2cc916412cbb9862697a0363959f6793c074",
+      "candidateSha256": "9bd74d56206875dc64d1caafcf2f2cc916412cbb9862697a0363959f6793c074",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/clientes/goldens/clients_empty_1920.png",
+      "sourceSha256": "4773da5b20e6d974950ba925ea7cfaf380c3eed2b10f7cd853802809d5efcb85",
+      "candidateSha256": "4773da5b20e6d974950ba925ea7cfaf380c3eed2b10f7cd853802809d5efcb85",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/clientes/goldens/clients_empty_2560.png",
+      "sourceSha256": "1b89d13c41da9e2475f1c820e827224e18cf89da39dbfbec18dc73baf79b5272",
+      "candidateSha256": "1b89d13c41da9e2475f1c820e827224e18cf89da39dbfbec18dc73baf79b5272",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/clientes/goldens/linux/clients_1024.png",
+      "sourceSha256": "ed8acea27ee8725654a6062043aa4f56c0def678d8083b718ccf9b1dce12ceea",
+      "candidateSha256": "ed8acea27ee8725654a6062043aa4f56c0def678d8083b718ccf9b1dce12ceea",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/clientes/goldens/linux/clients_1366.png",
+      "sourceSha256": "c6b8af5f924700b5ba11261637d509bcb3214229b077f5312173c38a13b3e0d7",
+      "candidateSha256": "c6b8af5f924700b5ba11261637d509bcb3214229b077f5312173c38a13b3e0d7",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/clientes/goldens/linux/clients_1920.png",
+      "sourceSha256": "a70018312d77a957aad417ae60e92376c7e6ea43742b6d8ba8762fc7515fcaf3",
+      "candidateSha256": "a70018312d77a957aad417ae60e92376c7e6ea43742b6d8ba8762fc7515fcaf3",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/clientes/goldens/linux/clients_2560.png",
+      "sourceSha256": "b75482d449974bb076f8a066d5841864541e6463ca83ef76e7160148072291b0",
+      "candidateSha256": "b75482d449974bb076f8a066d5841864541e6463ca83ef76e7160148072291b0",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/clientes/goldens/linux/clients_empty_1024.png",
+      "sourceSha256": "4a169fa5538f6f615cbd9ab304336aae51f9bbf44fca67a18973777f5f070320",
+      "candidateSha256": "4a169fa5538f6f615cbd9ab304336aae51f9bbf44fca67a18973777f5f070320",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/clientes/goldens/linux/clients_empty_1366.png",
+      "sourceSha256": "b6fd4efd64e1af771a96e9ad0337fe44f875db44f8cdc04961440d9919e2eb65",
+      "candidateSha256": "b6fd4efd64e1af771a96e9ad0337fe44f875db44f8cdc04961440d9919e2eb65",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/clientes/goldens/linux/clients_empty_1920.png",
+      "sourceSha256": "3e5bc61587b7c6a1977040d9e71d7b895d59f3eb71908ea467a515d96d67b1b3",
+      "candidateSha256": "3e5bc61587b7c6a1977040d9e71d7b895d59f3eb71908ea467a515d96d67b1b3",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/clientes/goldens/linux/clients_empty_2560.png",
+      "sourceSha256": "ee2101a87750a67a041f58e7d6a2bdef13e9a8fba92657f44a6dda24c1f272e0",
+      "candidateSha256": "ee2101a87750a67a041f58e7d6a2bdef13e9a8fba92657f44a6dda24c1f272e0",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/external_product_1024.png",
+      "sourceSha256": "89876c22de3f1d4895cb17714c714a189da85dda973b398423a21380f1b413c6",
+      "candidateSha256": "89876c22de3f1d4895cb17714c714a189da85dda973b398423a21380f1b413c6",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/external_product_1920.png",
+      "sourceSha256": "ffa4979241e1a74970e2713701d0969697bd623eb93bc0c61d018fc53761097b",
+      "candidateSha256": "ffa4979241e1a74970e2713701d0969697bd623eb93bc0c61d018fc53761097b",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/external_product_390.png",
+      "sourceSha256": "18ad8238cb264c9adba5aa69b09db4e31a9229dbff79076e2c96de4b71f0cfa4",
+      "candidateSha256": "18ad8238cb264c9adba5aa69b09db4e31a9229dbff79076e2c96de4b71f0cfa4",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/linux/external_product_1024.png",
+      "sourceSha256": "8487b501deed1babf6203392ff95882a6e0687ac241fe5de0b5ab77e8c44801c",
+      "candidateSha256": "8487b501deed1babf6203392ff95882a6e0687ac241fe5de0b5ab77e8c44801c",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/linux/external_product_1920.png",
+      "sourceSha256": "15456965f2b68fdb97b702e5b1e92d93a0cac2e715ba751bff41e63506aec9b9",
+      "candidateSha256": "15456965f2b68fdb97b702e5b1e92d93a0cac2e715ba751bff41e63506aec9b9",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/linux/external_product_390.png",
+      "sourceSha256": "0d0b34b405b2f6055f1417522a1a90f4e6ce83849f9d5f3e1f9e61190262bd43",
+      "candidateSha256": "0d0b34b405b2f6055f1417522a1a90f4e6ce83849f9d5f3e1f9e61190262bd43",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/linux/purchase_detail_1024.png",
+      "sourceSha256": "4db6030eae55851c1501be2dcb689df1e084a1122e6a5f0ba654f7952b58b4f5",
+      "candidateSha256": "4db6030eae55851c1501be2dcb689df1e084a1122e6a5f0ba654f7952b58b4f5",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/linux/purchase_detail_1920.png",
+      "sourceSha256": "23964150531059f05b5a40077ebcba88965415b9f2ec6e11ad73fc797c1871f2",
+      "candidateSha256": "23964150531059f05b5a40077ebcba88965415b9f2ec6e11ad73fc797c1871f2",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/linux/purchase_filters_1024.png",
+      "sourceSha256": "c1f1b26c85e669fe0586fe7631f3e7e6d1ea79e8e6465cd2ba7576602376279f",
+      "candidateSha256": "c1f1b26c85e669fe0586fe7631f3e7e6d1ea79e8e6465cd2ba7576602376279f",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/linux/purchase_filters_1920.png",
+      "sourceSha256": "4a1b7ee93b106d1c5fd69075df38f47f0c2845c1aa41525701f010cebc4416e8",
+      "candidateSha256": "4a1b7ee93b106d1c5fd69075df38f47f0c2845c1aa41525701f010cebc4416e8",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/linux/purchase_filters_390.png",
+      "sourceSha256": "9c1802429efdc48eee6df62832521996226878b415d0b2b32cfa2e418fe1df90",
+      "candidateSha256": "9c1802429efdc48eee6df62832521996226878b415d0b2b32cfa2e418fe1df90",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/linux/purchase_invoice_form_1024.png",
+      "sourceSha256": "df6da5a4f89b868c219dbc1907325a7350e28a59d285f83e0d10da3b26fce195",
+      "candidateSha256": "df6da5a4f89b868c219dbc1907325a7350e28a59d285f83e0d10da3b26fce195",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/linux/purchase_invoice_form_1920.png",
+      "sourceSha256": "007f7880768c47e18979db16e556598871e883e452ea8fbd67c46ec1cf02effd",
+      "candidateSha256": "007f7880768c47e18979db16e556598871e883e452ea8fbd67c46ec1cf02effd",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/linux/purchase_invoice_form_390.png",
+      "sourceSha256": "fdb142cb31bb6d4e742561142f26557ceb36559ebdd566f2af7a4cd316843649",
+      "candidateSha256": "fdb142cb31bb6d4e742561142f26557ceb36559ebdd566f2af7a4cd316843649",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/linux/purchases_invoices_1024.png",
+      "sourceSha256": "0807252beb585f7aa60d77a1ff504cb10ae9dddfb0a3eeec8e826c6ffff971eb",
+      "candidateSha256": "0807252beb585f7aa60d77a1ff504cb10ae9dddfb0a3eeec8e826c6ffff971eb",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/linux/purchases_invoices_1920.png",
+      "sourceSha256": "549ba60d86035bfd0d319cdb76867e489c63c1d95260a01eb57c54552b55f816",
+      "candidateSha256": "549ba60d86035bfd0d319cdb76867e489c63c1d95260a01eb57c54552b55f816",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/linux/purchases_invoices_390.png",
+      "sourceSha256": "e2b900496ac767345379f202aa845d51dffb8046786b437f7a4f2c54bf43884e",
+      "candidateSha256": "e2b900496ac767345379f202aa845d51dffb8046786b437f7a4f2c54bf43884e",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/linux/purchases_new_1024.png",
+      "sourceSha256": "460675c61763a87b07a9d89b8fd9e5128f007c21d208710276cf7bb25be6d0d0",
+      "candidateSha256": "460675c61763a87b07a9d89b8fd9e5128f007c21d208710276cf7bb25be6d0d0",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/linux/purchases_new_1920.png",
+      "sourceSha256": "d01126999738440334288d45a4f4ef061fab0bfbf547f2dbcace89de1932436b",
+      "candidateSha256": "d01126999738440334288d45a4f4ef061fab0bfbf547f2dbcace89de1932436b",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/linux/purchases_new_390.png",
+      "sourceSha256": "9b9ae7b23315078f608deb0d6b9af1b075aabe54a94b03359ea1c7ac70405962",
+      "candidateSha256": "9b9ae7b23315078f608deb0d6b9af1b075aabe54a94b03359ea1c7ac70405962",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/linux/purchases_orders_1024.png",
+      "sourceSha256": "944547ff026f26d236ab5b1a5d2532eb4f5cb7ad3b447d6413f43029ad0f1bad",
+      "candidateSha256": "944547ff026f26d236ab5b1a5d2532eb4f5cb7ad3b447d6413f43029ad0f1bad",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/linux/purchases_orders_1920.png",
+      "sourceSha256": "4002335b4b242a4ab77224f231f043909eb185d4ef94382a4beb7813f22dbbc7",
+      "candidateSha256": "4002335b4b242a4ab77224f231f043909eb185d4ef94382a4beb7813f22dbbc7",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/linux/purchases_orders_390.png",
+      "sourceSha256": "9b83d9bd8faeefee02e6ce586fa0cc8bbae9434ee15a8593ac96aa209516e30a",
+      "candidateSha256": "9b83d9bd8faeefee02e6ce586fa0cc8bbae9434ee15a8593ac96aa209516e30a",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/linux/purchases_recommendations_1024.png",
+      "sourceSha256": "c705f2bf5788f66f585efd78fdb410c0aa998dd836f06b1dd6369c23061dd4c8",
+      "candidateSha256": "c705f2bf5788f66f585efd78fdb410c0aa998dd836f06b1dd6369c23061dd4c8",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/linux/purchases_recommendations_1920.png",
+      "sourceSha256": "22b07d58a28121f65c8dfb333534201536300f851c0f57da4b77c1572f6dfafd",
+      "candidateSha256": "22b07d58a28121f65c8dfb333534201536300f851c0f57da4b77c1572f6dfafd",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/linux/purchases_recommendations_390.png",
+      "sourceSha256": "cdfb6139445a1a38e002fa620fc22b2b129b7ac68d163ba94b6dd5f5695a5a4e",
+      "candidateSha256": "cdfb6139445a1a38e002fa620fc22b2b129b7ac68d163ba94b6dd5f5695a5a4e",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/linux/purchases_suppliers_1024.png",
+      "sourceSha256": "ed215c07b5ae8242b504c2eff153ed825cc477a3be006239b1cb67fdf0a01d86",
+      "candidateSha256": "ed215c07b5ae8242b504c2eff153ed825cc477a3be006239b1cb67fdf0a01d86",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/linux/purchases_suppliers_1920.png",
+      "sourceSha256": "e4f2197067191255b2166b3ab26ab758a6d914b226e9c91f01f147df0f8c7a87",
+      "candidateSha256": "e4f2197067191255b2166b3ab26ab758a6d914b226e9c91f01f147df0f8c7a87",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/linux/purchases_suppliers_390.png",
+      "sourceSha256": "75b13f2826a4a19e2723f1527c23847c1f770f9987471d0c098f9e1b6f62eac7",
+      "candidateSha256": "75b13f2826a4a19e2723f1527c23847c1f770f9987471d0c098f9e1b6f62eac7",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/linux/supplier_detail_1024.png",
+      "sourceSha256": "2e199c486508fa9f65caae949e6f01d378cda4dd7ee8b123a0aa0a65196fe696",
+      "candidateSha256": "2e199c486508fa9f65caae949e6f01d378cda4dd7ee8b123a0aa0a65196fe696",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/linux/supplier_detail_1920.png",
+      "sourceSha256": "9b61de938fee15dc16df524046e4d89e933d6d35f01bf573b9eddf5a09b692b9",
+      "candidateSha256": "9b61de938fee15dc16df524046e4d89e933d6d35f01bf573b9eddf5a09b692b9",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/linux/supplier_detail_390.png",
+      "sourceSha256": "10093ae509e9fb40b7f3452364fe403f47c4191b503102d6dc4afce994631e5d",
+      "candidateSha256": "10093ae509e9fb40b7f3452364fe403f47c4191b503102d6dc4afce994631e5d",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/linux/supplier_form_1024.png",
+      "sourceSha256": "d9208b206d10a485bb2d36267d54239da9ade2cb93fbc1c924358c975289d4c5",
+      "candidateSha256": "d9208b206d10a485bb2d36267d54239da9ade2cb93fbc1c924358c975289d4c5",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/linux/supplier_form_1920.png",
+      "sourceSha256": "88200684ccea90fd1541c3014f1a63ea63def628c5bca1d5f47ab6e05f1b9982",
+      "candidateSha256": "88200684ccea90fd1541c3014f1a63ea63def628c5bca1d5f47ab6e05f1b9982",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/linux/supplier_form_390.png",
+      "sourceSha256": "4956558e92130dc0bb33326f0995c4fa2632d01010858ce53fc4e615caf22e9b",
+      "candidateSha256": "4956558e92130dc0bb33326f0995c4fa2632d01010858ce53fc4e615caf22e9b",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/purchase_detail_1024.png",
+      "sourceSha256": "7008691115f7bf64105b391355d3a8ee9df07ce00c36e4860378e7695add08ea",
+      "candidateSha256": "7008691115f7bf64105b391355d3a8ee9df07ce00c36e4860378e7695add08ea",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/purchase_detail_1920.png",
+      "sourceSha256": "cc7302c9921dc846a9bd072625a61c26e7aa76fa972fe7be416da9ce584941d7",
+      "candidateSha256": "cc7302c9921dc846a9bd072625a61c26e7aa76fa972fe7be416da9ce584941d7",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/purchase_filters_1024.png",
+      "sourceSha256": "6801d330b7b39d0d186781fb37ff454afd6778524efc67d9bd76865504a9cad2",
+      "candidateSha256": "6801d330b7b39d0d186781fb37ff454afd6778524efc67d9bd76865504a9cad2",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/purchase_filters_1920.png",
+      "sourceSha256": "ae21e01c3abab954f8d8d6234dfd8fdf995e325eb66a24bbc5c892b05bae5730",
+      "candidateSha256": "ae21e01c3abab954f8d8d6234dfd8fdf995e325eb66a24bbc5c892b05bae5730",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/purchase_filters_390.png",
+      "sourceSha256": "c4661ecc6df6b7d3c849db8ea7cdeffb0416cb94ad8ea5cb25be69b593266a12",
+      "candidateSha256": "c4661ecc6df6b7d3c849db8ea7cdeffb0416cb94ad8ea5cb25be69b593266a12",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/purchase_invoice_form_1024.png",
+      "sourceSha256": "efcf0436712de3b7b58a74f03ea549f63e690ee262df37e54886704c1ab3d1bf",
+      "candidateSha256": "efcf0436712de3b7b58a74f03ea549f63e690ee262df37e54886704c1ab3d1bf",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/purchase_invoice_form_1920.png",
+      "sourceSha256": "5a7cba1e909aacf5f7414a2761c2ca84389d413762c46a4509be4d09f5cc3950",
+      "candidateSha256": "5a7cba1e909aacf5f7414a2761c2ca84389d413762c46a4509be4d09f5cc3950",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/purchase_invoice_form_390.png",
+      "sourceSha256": "41301352d4697e4be39d10c752db01d44e3c2683adf1ff815beb2b88bcae3750",
+      "candidateSha256": "41301352d4697e4be39d10c752db01d44e3c2683adf1ff815beb2b88bcae3750",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/purchases_invoices_1024.png",
+      "sourceSha256": "b81fcb456a6d296aaaa00bbf84a88255b6062851981ddde1ead4bc66fd2e287b",
+      "candidateSha256": "b81fcb456a6d296aaaa00bbf84a88255b6062851981ddde1ead4bc66fd2e287b",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/purchases_invoices_1920.png",
+      "sourceSha256": "0594d7f6eef556acc1983743e8fd298f1ef1f7040559fef1ecaf833f08eb7393",
+      "candidateSha256": "0594d7f6eef556acc1983743e8fd298f1ef1f7040559fef1ecaf833f08eb7393",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/purchases_invoices_390.png",
+      "sourceSha256": "c5a7c5569dbc809ab1df5078193bc9d7fbd7c80bca85bc1791ceb7e490a554de",
+      "candidateSha256": "c5a7c5569dbc809ab1df5078193bc9d7fbd7c80bca85bc1791ceb7e490a554de",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/purchases_new_1024.png",
+      "sourceSha256": "9a9eb1ed7b5520a24eacb549d7aca699240280ce5c30bb3c3288cd2c19a6a5fe",
+      "candidateSha256": "9a9eb1ed7b5520a24eacb549d7aca699240280ce5c30bb3c3288cd2c19a6a5fe",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/purchases_new_1920.png",
+      "sourceSha256": "96c1dda1d104e2219bed7fc4f65a7ec97d89efe7be4a197b349bffad8b196ecd",
+      "candidateSha256": "96c1dda1d104e2219bed7fc4f65a7ec97d89efe7be4a197b349bffad8b196ecd",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/purchases_new_390.png",
+      "sourceSha256": "d6780bdbc57c88be712885616db3fc4b941ecac10bfdb5aa11dc79478385b872",
+      "candidateSha256": "d6780bdbc57c88be712885616db3fc4b941ecac10bfdb5aa11dc79478385b872",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/purchases_orders_1024.png",
+      "sourceSha256": "e6de3c739733d34ef38ec8eb83aacb607eb684b8472534d6b8496182005d695a",
+      "candidateSha256": "e6de3c739733d34ef38ec8eb83aacb607eb684b8472534d6b8496182005d695a",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/purchases_orders_1920.png",
+      "sourceSha256": "6c83ad59da58ee32ad35cc0d77034a778d37d4d256081a4e059245c56adcd88d",
+      "candidateSha256": "6c83ad59da58ee32ad35cc0d77034a778d37d4d256081a4e059245c56adcd88d",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/purchases_orders_390.png",
+      "sourceSha256": "b1f07744cab68fca8acd0867e1d41c95a65ea18f309281b88f0164cce68103eb",
+      "candidateSha256": "b1f07744cab68fca8acd0867e1d41c95a65ea18f309281b88f0164cce68103eb",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/purchases_recommendations_1024.png",
+      "sourceSha256": "c87ca57a77a3e5d3ec10c6415225daead99d5895c28894634ff6d9819292380e",
+      "candidateSha256": "c87ca57a77a3e5d3ec10c6415225daead99d5895c28894634ff6d9819292380e",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/purchases_recommendations_1920.png",
+      "sourceSha256": "ec85d607103cab16b60cb657a37f8fb38fb276b5288950a513dfda9f9a88af55",
+      "candidateSha256": "ec85d607103cab16b60cb657a37f8fb38fb276b5288950a513dfda9f9a88af55",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/purchases_recommendations_390.png",
+      "sourceSha256": "d08e307392a821689a5d2d3a799b8d4a279b5aca28ceed40edc211847fe142c3",
+      "candidateSha256": "d08e307392a821689a5d2d3a799b8d4a279b5aca28ceed40edc211847fe142c3",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/purchases_suppliers_1024.png",
+      "sourceSha256": "399ef1a7f5f08cd491a2bdcd1358e67abc241492ff860e823147c6aa2e479dae",
+      "candidateSha256": "399ef1a7f5f08cd491a2bdcd1358e67abc241492ff860e823147c6aa2e479dae",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/purchases_suppliers_1920.png",
+      "sourceSha256": "6a64609a57e9f5874fa5677c8634f61373c82a3d256f0b538e1fd9395187694b",
+      "candidateSha256": "6a64609a57e9f5874fa5677c8634f61373c82a3d256f0b538e1fd9395187694b",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/purchases_suppliers_390.png",
+      "sourceSha256": "027c149a576d0f7d0078a873a39ab83fbbfd732498124d4624f971eda0ef1838",
+      "candidateSha256": "027c149a576d0f7d0078a873a39ab83fbbfd732498124d4624f971eda0ef1838",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/supplier_detail_1024.png",
+      "sourceSha256": "5481f524be0b3155ae820fe4b90ff2563d4634401385e037fbb4f83e42fbf46c",
+      "candidateSha256": "5481f524be0b3155ae820fe4b90ff2563d4634401385e037fbb4f83e42fbf46c",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/supplier_detail_1920.png",
+      "sourceSha256": "3d513315ad0e38dc3ba00a238ddccd621fe5f020b6f6d3d1e49e17feaebeb672",
+      "candidateSha256": "3d513315ad0e38dc3ba00a238ddccd621fe5f020b6f6d3d1e49e17feaebeb672",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/supplier_detail_390.png",
+      "sourceSha256": "3dc4dadca4efa7298bbe2cfc2e865e53dfd2b2c1afe00e7aa58de941f64ef246",
+      "candidateSha256": "3dc4dadca4efa7298bbe2cfc2e865e53dfd2b2c1afe00e7aa58de941f64ef246",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/supplier_form_1024.png",
+      "sourceSha256": "88e3ba773a1fd2c77068e718356282662f936f918e3a0cd6d3f5baeae6e62965",
+      "candidateSha256": "88e3ba773a1fd2c77068e718356282662f936f918e3a0cd6d3f5baeae6e62965",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/supplier_form_1920.png",
+      "sourceSha256": "da3a8e005e7d37bee1300b23c312cf68352aa987aae4d81dc3842a5c2584229f",
+      "candidateSha256": "da3a8e005e7d37bee1300b23c312cf68352aa987aae4d81dc3842a5c2584229f",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/goldens/supplier_form_390.png",
+      "sourceSha256": "e9226670f41ff38751dddc50baae1be7c4faf8dd3a7edcea8692e1670227e623",
+      "candidateSha256": "e9226670f41ff38751dddc50baae1be7c4faf8dd3a7edcea8692e1670227e623",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/purchase_invoice_upload_test.dart",
+      "sourceSha256": "1afd0788196ed82010f8236a6ad916623e1b693bba66682dbc547333227085cd",
+      "candidateSha256": "1afd0788196ed82010f8236a6ad916623e1b693bba66682dbc547333227085cd",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/purchase_order_pdf_service_test.dart",
+      "sourceSha256": "8b5055cf6a917c4b37dc4cf1f0d8664bfdf98b929490a2bf34f47d53d586b279",
+      "candidateSha256": "8b5055cf6a917c4b37dc4cf1f0d8664bfdf98b929490a2bf34f47d53d586b279",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/compras/purchases_design_test.dart",
+      "sourceSha256": "59c6bca2a48f9639d994dfff683100f942d09ed4edc77d12b86238299985482c",
+      "candidateSha256": "59c6bca2a48f9639d994dfff683100f942d09ed4edc77d12b86238299985482c",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/cotizaciones/goldens/linux/sales_detail_header_1280.png",
+      "sourceSha256": "b8bf38c3d2c3c0de235047512bc521d412e2904fd5515808b4f00934f3fc4d19",
+      "candidateSha256": "f99428c1874798cef5b2a6dafe78cd84a76d7e818be1e767fa1fb11bbf99a8d7",
+      "status": "merged-or-validated-generated"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/cotizaciones/goldens/linux/sales_detail_header_1920.png",
+      "sourceSha256": "4892dbe734014895eb3673710e78a19fce725099d9520af78dd82c2ae6ca4360",
+      "candidateSha256": "71f19d28ebd9bb9cb6887453b3acbd7e165f59cc6dd982ec7a27f43be3cd7623",
+      "status": "merged-or-validated-generated"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/cotizaciones/goldens/linux/sales_detail_header_900.png",
+      "sourceSha256": "a52dff162614b9e85cfc6913e8645b44c683fdd378cfb08982fa15aeed1783f9",
+      "candidateSha256": "d562dbdc6c4e0c96e7fc45392df00edee2a32a1a854916dccd1c9752c420c6e7",
+      "status": "merged-or-validated-generated"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/cotizaciones/goldens/linux/sales_detail_header_960.png",
+      "sourceSha256": "a52dff162614b9e85cfc6913e8645b44c683fdd378cfb08982fa15aeed1783f9",
+      "candidateSha256": "d562dbdc6c4e0c96e7fc45392df00edee2a32a1a854916dccd1c9752c420c6e7",
+      "status": "merged-or-validated-generated"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/cotizaciones/goldens/sales_detail_header_1280.png",
+      "sourceSha256": "45fd9c4ca86f982b43a8284ccf3e8bb3fb838e1629504f571e25e7198b167270",
+      "candidateSha256": "45fd9c4ca86f982b43a8284ccf3e8bb3fb838e1629504f571e25e7198b167270",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/cotizaciones/goldens/sales_detail_header_1920.png",
+      "sourceSha256": "1cb5da980e0934d01041226ce777ad2628c72c68d124b454dfb0b13c21e69982",
+      "candidateSha256": "1cb5da980e0934d01041226ce777ad2628c72c68d124b454dfb0b13c21e69982",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/cotizaciones/goldens/sales_detail_header_900.png",
+      "sourceSha256": "28288daa49f091fa74fd2fddca17ccdc53bf3b8ad7d18635b59884d4396b8904",
+      "candidateSha256": "28288daa49f091fa74fd2fddca17ccdc53bf3b8ad7d18635b59884d4396b8904",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/cotizaciones/goldens/sales_detail_header_960.png",
+      "sourceSha256": "28288daa49f091fa74fd2fddca17ccdc53bf3b8ad7d18635b59884d4396b8904",
+      "candidateSha256": "28288daa49f091fa74fd2fddca17ccdc53bf3b8ad7d18635b59884d4396b8904",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/cotizaciones/sales_client_selector_test.dart",
+      "sourceSha256": "0c42de1d99ac24ac2647c9009fc2cc5960f4da945d3b17593ee1ecb62fd03ce8",
+      "candidateSha256": "0c42de1d99ac24ac2647c9009fc2cc5960f4da945d3b17593ee1ecb62fd03ce8",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/cotizaciones/sales_detail_panel_test.dart",
+      "sourceSha256": "9a673021f170cecf6fc18a57621b4e7032ba8a63329b6cad9c1beb4b72873eef",
+      "candidateSha256": "9a673021f170cecf6fc18a57621b4e7032ba8a63329b6cad9c1beb4b72873eef",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/goldens/credit_empty_1024.png",
+      "sourceSha256": "b12b429cd5cc52432fc525fccfa9aa5487cc282a456c04c13be1b231f7dad376",
+      "candidateSha256": "b12b429cd5cc52432fc525fccfa9aa5487cc282a456c04c13be1b231f7dad376",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/goldens/credit_empty_1920.png",
+      "sourceSha256": "4b7b41a41b90db255ee270ffbd14b3642cafc805debca7ec57af8da68f533d6c",
+      "candidateSha256": "4b7b41a41b90db255ee270ffbd14b3642cafc805debca7ec57af8da68f533d6c",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/goldens/credit_filter_1024.png",
+      "sourceSha256": "3ed27936a8e5a80ad7c50a95efee4247564a09cd37e23193dba50afc49e3e0b0",
+      "candidateSha256": "3ed27936a8e5a80ad7c50a95efee4247564a09cd37e23193dba50afc49e3e0b0",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/goldens/credit_filter_1920.png",
+      "sourceSha256": "86aa79c62927a6f6a4576b3f92177693e7edd5d60f9f6b203ba00bb59d49adf3",
+      "candidateSha256": "86aa79c62927a6f6a4576b3f92177693e7edd5d60f9f6b203ba00bb59d49adf3",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/goldens/credit_history_1024.png",
+      "sourceSha256": "63a87dcededc6855e5d92289a5d664c6797119b97275c513eaf030cb0f38c872",
+      "candidateSha256": "63a87dcededc6855e5d92289a5d664c6797119b97275c513eaf030cb0f38c872",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/goldens/credit_history_1920.png",
+      "sourceSha256": "7cdb367a3c1546a5b7c32b0f851b6a346db6e6183539e872f8dcb06927e3cb9a",
+      "candidateSha256": "7cdb367a3c1546a5b7c32b0f851b6a346db6e6183539e872f8dcb06927e3cb9a",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/goldens/credit_history_2560.png",
+      "sourceSha256": "cc06c2f637335bd10ca6dd85dad994be29e1940380b7d38ed2316e2188924b27",
+      "candidateSha256": "cc06c2f637335bd10ca6dd85dad994be29e1940380b7d38ed2316e2188924b27",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/goldens/credit_history_390.png",
+      "sourceSha256": "c9c391a224164d81a499f429f4299bf0ec8a3aedbcf8b19b7b500410819a48f0",
+      "candidateSha256": "c9c391a224164d81a499f429f4299bf0ec8a3aedbcf8b19b7b500410819a48f0",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/goldens/linux/credit_empty_1024.png",
+      "sourceSha256": "c8d6b58444c42bb7d7b28a702398884efee3daac80717150cfe6894eb67dd168",
+      "candidateSha256": "c8d6b58444c42bb7d7b28a702398884efee3daac80717150cfe6894eb67dd168",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/goldens/linux/credit_empty_1920.png",
+      "sourceSha256": "039081c1780503620e04463148a8e9fd3fa36532b5efa6624d653a4bf3ad1626",
+      "candidateSha256": "039081c1780503620e04463148a8e9fd3fa36532b5efa6624d653a4bf3ad1626",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/goldens/linux/credit_filter_1024.png",
+      "sourceSha256": "0dff178d4eeb23c2d68f93f45bf29d4a2b140623fb2501e0856e4417b7a0ecf7",
+      "candidateSha256": "0dff178d4eeb23c2d68f93f45bf29d4a2b140623fb2501e0856e4417b7a0ecf7",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/goldens/linux/credit_filter_1920.png",
+      "sourceSha256": "60d2c3d101fb1459dec364e963a10059279e0a5d571a75aa418aee2cdc9c5252",
+      "candidateSha256": "60d2c3d101fb1459dec364e963a10059279e0a5d571a75aa418aee2cdc9c5252",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/goldens/linux/credit_history_1024.png",
+      "sourceSha256": "76449c19811d4a20f3f8c51ad3366b185aa7d488daf133739806de52b8844840",
+      "candidateSha256": "76449c19811d4a20f3f8c51ad3366b185aa7d488daf133739806de52b8844840",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/goldens/linux/credit_history_1920.png",
+      "sourceSha256": "9347f2f3a01d5051d16b492e40b9d3dfb69af0e494aa136bc16d5653a0a04ab6",
+      "candidateSha256": "9347f2f3a01d5051d16b492e40b9d3dfb69af0e494aa136bc16d5653a0a04ab6",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/goldens/linux/credit_history_2560.png",
+      "sourceSha256": "bbbb97c5e99e62604be70e9974488bb6b5de75ab585670555c87be5c884c1f6f",
+      "candidateSha256": "bbbb97c5e99e62604be70e9974488bb6b5de75ab585670555c87be5c884c1f6f",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/goldens/linux/credit_history_390.png",
+      "sourceSha256": "d9ecbc5de1644b28065567f6edacee0c7b7d5e6885681ba52a3ebccbc285d02b",
+      "candidateSha256": "d9ecbc5de1644b28065567f6edacee0c7b7d5e6885681ba52a3ebccbc285d02b",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/goldens/linux/quote_empty_1024.png",
+      "sourceSha256": "2f9c216a876d90d32a89b7ee7a9722b1be231fc1a981d84bd429c3c2f5f17c60",
+      "candidateSha256": "2f9c216a876d90d32a89b7ee7a9722b1be231fc1a981d84bd429c3c2f5f17c60",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/goldens/linux/quote_empty_1920.png",
+      "sourceSha256": "4b2b92fb549e960b3eaefd47eaa3f208725207d25261befb2d1e27378c78b633",
+      "candidateSha256": "4b2b92fb549e960b3eaefd47eaa3f208725207d25261befb2d1e27378c78b633",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/goldens/linux/quote_filter_1024.png",
+      "sourceSha256": "4ec5d43d504cfb868d52fe9a984d87629903076e24137f9c286e4fa9541cdd35",
+      "candidateSha256": "4ec5d43d504cfb868d52fe9a984d87629903076e24137f9c286e4fa9541cdd35",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/goldens/linux/quote_filter_1920.png",
+      "sourceSha256": "78d4ee076ee8ab75b983490d7844ce95c5cd80ea24394aedb59a41eeb06c9c02",
+      "candidateSha256": "78d4ee076ee8ab75b983490d7844ce95c5cd80ea24394aedb59a41eeb06c9c02",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/goldens/linux/quote_history_1024.png",
+      "sourceSha256": "cf39963aa983f3fa321cd65b41b2ff3ba8d895277559b5690021285b4fd18f98",
+      "candidateSha256": "cf39963aa983f3fa321cd65b41b2ff3ba8d895277559b5690021285b4fd18f98",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/goldens/linux/quote_history_1920.png",
+      "sourceSha256": "dc6d4dc1fa4b13d4ada430739f3872dcbb4cf1bdb5c2da812cb73de8ea825da9",
+      "candidateSha256": "dc6d4dc1fa4b13d4ada430739f3872dcbb4cf1bdb5c2da812cb73de8ea825da9",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/goldens/linux/quote_history_2560.png",
+      "sourceSha256": "f4b07eda757a515f127183c51e40002e59b46a65b55eb101cc194f75a67b95eb",
+      "candidateSha256": "f4b07eda757a515f127183c51e40002e59b46a65b55eb101cc194f75a67b95eb",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/goldens/linux/quote_history_390.png",
+      "sourceSha256": "23baa0ccaae753c526534bc82de98f8a12d0863ca79a91bcdbef75c36c20887c",
+      "candidateSha256": "23baa0ccaae753c526534bc82de98f8a12d0863ca79a91bcdbef75c36c20887c",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/goldens/linux/sales_history_1280.png",
+      "sourceSha256": "cf23f94e0bdfaeef1576b90e2561e9ef99216f4b868473c73fcb3e7d78d2f35a",
+      "candidateSha256": "cf23f94e0bdfaeef1576b90e2561e9ef99216f4b868473c73fcb3e7d78d2f35a",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/goldens/linux/sales_history_1920.png",
+      "sourceSha256": "43c5d2b03539d5a4dd04c1978a4fa5a581594d66d1e4b6067ca3e49fca922bfd",
+      "candidateSha256": "43c5d2b03539d5a4dd04c1978a4fa5a581594d66d1e4b6067ca3e49fca922bfd",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/goldens/linux/sales_history_390.png",
+      "sourceSha256": "da44db448952ddcec85c5c0c56cd40bbd7423ef401cd859c0d049f76d87ce0c8",
+      "candidateSha256": "da44db448952ddcec85c5c0c56cd40bbd7423ef401cd859c0d049f76d87ce0c8",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/goldens/linux/sales_history_760.png",
+      "sourceSha256": "675ab956845b4f8e73f03b74f56ae5dd5e2e702e915428958e0d40ecffb4c0d7",
+      "candidateSha256": "675ab956845b4f8e73f03b74f56ae5dd5e2e702e915428958e0d40ecffb4c0d7",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/goldens/linux/sales_history_960.png",
+      "sourceSha256": "9aec53a1ade5a07a60ba4432934e37de071a992857b695f3cb858d5305c3398e",
+      "candidateSha256": "9aec53a1ade5a07a60ba4432934e37de071a992857b695f3cb858d5305c3398e",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/goldens/quote_empty_1024.png",
+      "sourceSha256": "b276904c96b0ba335d15c413ba2fa1cb833612e688f20f3796c986b1a4044c45",
+      "candidateSha256": "b276904c96b0ba335d15c413ba2fa1cb833612e688f20f3796c986b1a4044c45",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/goldens/quote_empty_1920.png",
+      "sourceSha256": "30ba12518fc0784d444e66ee404d0a543659f3e6e4a027de1932c98567b495d6",
+      "candidateSha256": "30ba12518fc0784d444e66ee404d0a543659f3e6e4a027de1932c98567b495d6",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/goldens/quote_filter_1024.png",
+      "sourceSha256": "cd121b2817356a88f6ebbbf82059a30e924b13091d391689beac1282f273dbde",
+      "candidateSha256": "cd121b2817356a88f6ebbbf82059a30e924b13091d391689beac1282f273dbde",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/goldens/quote_filter_1920.png",
+      "sourceSha256": "79eadfce12e4b9ef7b7d695eb82b632d17419c2f8f44e50db56e71a041539e5b",
+      "candidateSha256": "79eadfce12e4b9ef7b7d695eb82b632d17419c2f8f44e50db56e71a041539e5b",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/goldens/quote_history_1024.png",
+      "sourceSha256": "adf7c1f6cf0cc511ab9c2f165a879a6939d90020ac4fe6a0534006522f7aa34b",
+      "candidateSha256": "adf7c1f6cf0cc511ab9c2f165a879a6939d90020ac4fe6a0534006522f7aa34b",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/goldens/quote_history_1920.png",
+      "sourceSha256": "04f94261ca2f10fb859753d2128a517abb9fa029a03f423f334443d343231dfc",
+      "candidateSha256": "04f94261ca2f10fb859753d2128a517abb9fa029a03f423f334443d343231dfc",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/goldens/quote_history_2560.png",
+      "sourceSha256": "32a8f08233bae76734a694b5f950d0d2963a65b085fcfb88396c0bf86ad7d257",
+      "candidateSha256": "32a8f08233bae76734a694b5f950d0d2963a65b085fcfb88396c0bf86ad7d257",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/goldens/quote_history_390.png",
+      "sourceSha256": "d5bf609e4ce3acb382b074e6a6de7c7b025e413ab705b437b95e58305ba7d419",
+      "candidateSha256": "d5bf609e4ce3acb382b074e6a6de7c7b025e413ab705b437b95e58305ba7d419",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/goldens/sales_history_1280.png",
+      "sourceSha256": "64b402ad7a64ba9bd4daf5f222598a423e683e0a327f1bc6b19c58cb4ab93a9a",
+      "candidateSha256": "64b402ad7a64ba9bd4daf5f222598a423e683e0a327f1bc6b19c58cb4ab93a9a",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/goldens/sales_history_1920.png",
+      "sourceSha256": "ffac5b46cb28e0f292c811c889bf424a3c78d26ed661705b5cabdcbcac05b4b0",
+      "candidateSha256": "ffac5b46cb28e0f292c811c889bf424a3c78d26ed661705b5cabdcbcac05b4b0",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/goldens/sales_history_390.png",
+      "sourceSha256": "62f2b966e1311de3527c98ef09ea059a8986bc16441da017df78c3305c041cf1",
+      "candidateSha256": "62f2b966e1311de3527c98ef09ea059a8986bc16441da017df78c3305c041cf1",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/goldens/sales_history_760.png",
+      "sourceSha256": "c3fe35bce1826465d475ab8b823e681da7c7aad6f867d398c3fe342a886e2489",
+      "candidateSha256": "c3fe35bce1826465d475ab8b823e681da7c7aad6f867d398c3fe342a886e2489",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/goldens/sales_history_960.png",
+      "sourceSha256": "77b5dd275f39cf752b608853ee52b049a5e58ec06e085635ba28cc535b1ab778",
+      "candidateSha256": "77b5dd275f39cf752b608853ee52b049a5e58ec06e085635ba28cc535b1ab778",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/related_history_design_test.dart",
+      "sourceSha256": "b0985ad4f28098d1126db8c2e1be78c9b4c7d07fab9f22469a7352760658aca5",
+      "candidateSha256": "b0985ad4f28098d1126db8c2e1be78c9b4c7d07fab9f22469a7352760658aca5",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/reports_models_test.dart",
+      "sourceSha256": "f830367e1ba6d5d9a1699d620ef6c6dc8d6b260f56b71d2ccf84aaff3bf16ab3",
+      "candidateSha256": "f830367e1ba6d5d9a1699d620ef6c6dc8d6b260f56b71d2ccf84aaff3bf16ab3",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "apps/fulltech_app/test/modules/ventas/sales_history_design_test.dart",
+      "sourceSha256": "146f12a91e57a56d8eb8ba856e490a717af4b294a65d5155010c142119abdfb6",
+      "candidateSha256": "146f12a91e57a56d8eb8ba856e490a717af4b294a65d5155010c142119abdfb6",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "docs/ARCHITECTURE.md",
+      "sourceSha256": "66e341a9010fbbc7e25daa9915f41e820a48a2bf429617914df097796c88e48d",
+      "candidateSha256": "f93d2b86b03d89fb1c2bda956649bb954a993f4d5af630e7bea2f926762029a7",
+      "status": "merged-or-validated-generated"
+    },
+    {
+      "source": "design",
+      "path": "docs/DETALLES_VISUALES_FACTURACION_20261112.md",
+      "sourceSha256": "e1054fae48e6e12ae3a34a4b196ebf24a336ca460cf744e7a19e62f18497a76f",
+      "candidateSha256": "e1054fae48e6e12ae3a34a4b196ebf24a336ca460cf744e7a19e62f18497a76f",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "output/pdf/reporte-prueba-extenso.pdf",
+      "sourceSha256": "ba90acf2ac1fb2a1af72c3cc83f48420cd7015d0e9bd0ca3514fc746244448c1",
+      "candidateSha256": "ba90acf2ac1fb2a1af72c3cc83f48420cd7015d0e9bd0ca3514fc746244448c1",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "output/pdf/reporte_ventas_20260101_20261114.pdf",
+      "sourceSha256": "800ff6eb2958c5f462468edc1631a8c29b0a0f6d5089962e6cf2e027d6281495",
+      "candidateSha256": "800ff6eb2958c5f462468edc1631a8c29b0a0f6d5089962e6cf2e027d6281495",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "website/src/config/site.ts",
+      "sourceSha256": "39066fad064e763da1905c3f0ff38b6a2e6b6da079bbbcacde02c62cbaff77bc",
+      "candidateSha256": "39066fad064e763da1905c3f0ff38b6a2e6b6da079bbbcacde02c62cbaff77bc",
+      "status": "byte-identical"
+    },
+    {
+      "source": "design",
+      "path": "website/tests/android-download.test.mjs",
+      "sourceSha256": "28d49e9e25d229b6df4168651bd318b9249973b38f3c29dffe557b9d04256eac",
+      "candidateSha256": "28d49e9e25d229b6df4168651bd318b9249973b38f3c29dffe557b9d04256eac",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/api/src/ecf/documents/ecf-credit-note-postgres.integration-spec.ts",
+      "sourceSha256": "5ac91ecddc5b491502134c12cff8af400c79e38f00874cf4b0eaa75b716149c7",
+      "candidateSha256": "5ac91ecddc5b491502134c12cff8af400c79e38f00874cf4b0eaa75b716149c7",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/api/src/ecf/documents/ecf-dgii-authorized-sequences.policy.spec.ts",
+      "sourceSha256": "3b214350b56b00563b3aa514cea347e89351123a80068c007f7eadc37b6304f8",
+      "candidateSha256": "3b214350b56b00563b3aa514cea347e89351123a80068c007f7eadc37b6304f8",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/api/src/ecf/documents/ecf-dgii-authorized-sequences.policy.ts",
+      "sourceSha256": "efb18fc6e164864fd7a3a6fff7abc2b96d3d6a5ceef1f003a18bef5a52fa430c",
+      "candidateSha256": "efb18fc6e164864fd7a3a6fff7abc2b96d3d6a5ceef1f003a18bef5a52fa430c",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/api/src/ecf/documents/ecf-document-query-postgres.integration-spec.ts",
+      "sourceSha256": "cb5351b1846f3a7c33df32aed741cffabf6ee3a690b8e643184aa18af94cf683",
+      "candidateSha256": "cb5351b1846f3a7c33df32aed741cffabf6ee3a690b8e643184aa18af94cf683",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/api/src/ecf/documents/ecf-document-query.service.ts",
+      "sourceSha256": "1262ac03860ad6a536b6f41bae2c0bd846f85fc47e001236b21ef9d81054e6f3",
+      "candidateSha256": "1262ac03860ad6a536b6f41bae2c0bd846f85fc47e001236b21ef9d81054e6f3",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/api/src/ecf/documents/ecf-e32-consumo-postgres.integration-spec.ts",
+      "sourceSha256": "dfafa3971a0bc5e6cca8745108d8158353fe3fd324e073b681acbd4a0918bfb0",
+      "candidateSha256": "dfafa3971a0bc5e6cca8745108d8158353fe3fd324e073b681acbd4a0918bfb0",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/api/src/ecf/documents/ecf-emission.service.ts",
+      "sourceSha256": "2add91208b8366294e17017499b8961a2b359a7ba753d67450617248f84edba4",
+      "candidateSha256": "2add91208b8366294e17017499b8961a2b359a7ba753d67450617248f84edba4",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/api/src/ecf/documents/ecf-fiscal-document-persistence-postgres.integration-spec.ts",
+      "sourceSha256": "38b458d402282d54e3c715618c05722476daa06704f2b0ca1a83108aa93c667d",
+      "candidateSha256": "38b458d402282d54e3c715618c05722476daa06704f2b0ca1a83108aa93c667d",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/api/src/ecf/documents/ecf-legacy-test-classification-postgres.integration-spec.ts",
+      "sourceSha256": "ab2d0dba74a8fadd041e2ec711d900ce179df4f987014f305cf1aacfbb18a858",
+      "candidateSha256": "ab2d0dba74a8fadd041e2ec711d900ce179df4f987014f305cf1aacfbb18a858",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/api/src/ecf/documents/ecf-pos-readiness-postgres.integration-spec.ts",
+      "sourceSha256": "c2e6510f206c349b6d90317720f2ae351b3de3698f8d423c9a1edd4b3bbfd068",
+      "candidateSha256": "c2e6510f206c349b6d90317720f2ae351b3de3698f8d423c9a1edd4b3bbfd068",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/api/src/ecf/documents/ecf-pos-readiness.spec.ts",
+      "sourceSha256": "7f5389abe8667a6e1289088c48e95a939fc20d61d2bb0119ee804fb6654b42b6",
+      "candidateSha256": "7f5389abe8667a6e1289088c48e95a939fc20d61d2bb0119ee804fb6654b42b6",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/api/src/ecf/documents/ecf-preparation-postgres.integration-spec.ts",
+      "sourceSha256": "2fc72f5492fd46a58cbc11adbf35bf34b9403185920506992507e17b7aa7eb1c",
+      "candidateSha256": "2fc72f5492fd46a58cbc11adbf35bf34b9403185920506992507e17b7aa7eb1c",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/api/src/ecf/documents/ecf-preparation.service.ts",
+      "sourceSha256": "3306c7ef73c8704fe7ae5b9882c3a57f143e43c35c4c2ca94c7430c421d18e14",
+      "candidateSha256": "3306c7ef73c8704fe7ae5b9882c3a57f143e43c35c4c2ca94c7430c421d18e14",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/api/src/ecf/documents/ecf-sequence-postgres.integration-spec.ts",
+      "sourceSha256": "5a3e341bc07cd68863f21bb57fbe23e87ffd9d945ca840018378b3aa5491eab3",
+      "candidateSha256": "5a3e341bc07cd68863f21bb57fbe23e87ffd9d945ca840018378b3aa5491eab3",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/api/src/ecf/documents/ecf-sequence.service.ts",
+      "sourceSha256": "079ac594a18482c2de6fc577af2c84b580d52c8099a9a359d980bcbdd8b1d8d2",
+      "candidateSha256": "079ac594a18482c2de6fc577af2c84b580d52c8099a9a359d980bcbdd8b1d8d2",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/api/src/ecf/ecf-documents-http.e2e-spec.ts",
+      "sourceSha256": "0dcb6e430c49a70bbd755de5ed0dc41ae8d77a79ee171f21938307cd2f566750",
+      "candidateSha256": "0dcb6e430c49a70bbd755de5ed0dc41ae8d77a79ee171f21938307cd2f566750",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/api/src/ecf/integration/multi-company-e2e.integration-spec.ts",
+      "sourceSha256": "e9b4c5f4461877e91c8e5809ab7089b1e02fb620d14ffae3f11ac7a6118cebf3",
+      "candidateSha256": "e9b4c5f4461877e91c8e5809ab7089b1e02fb620d14ffae3f11ac7a6118cebf3",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/api/src/ecf/portal/ecf-portal-enrollment-postgres.integration-spec.ts",
+      "sourceSha256": "4defb57a8491cb911124b92e54575165a575a94074d507b1fd256cb0b6629c3d",
+      "candidateSha256": "4defb57a8491cb911124b92e54575165a575a94074d507b1fd256cb0b6629c3d",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/api/src/ecf/portal/ecf-portal-enrollment.service.spec.ts",
+      "sourceSha256": "a5f3a4b25ea1abab4a30c8ad41c54b26a9ab4eecacd9082557b942adbf90f175",
+      "candidateSha256": "a5f3a4b25ea1abab4a30c8ad41c54b26a9ab4eecacd9082557b942adbf90f175",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/api/src/ecf/portal/ecf-portal-enrollment.service.ts",
+      "sourceSha256": "b28cfdaba1d109d00db750a6bcd5ac203a8d3cdcdb04ce2825d41f5e4fa7c50b",
+      "candidateSha256": "b28cfdaba1d109d00db750a6bcd5ac203a8d3cdcdb04ce2825d41f5e4fa7c50b",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/api/src/ecf/provider/dosa/dosa-emission-dispatch-http.e2e-spec.ts",
+      "sourceSha256": "ac23a3b8fe5a2d01aa7d92f0fa2af3e54888a1a0acd149af88142d10efb01b5a",
+      "candidateSha256": "ac23a3b8fe5a2d01aa7d92f0fa2af3e54888a1a0acd149af88142d10efb01b5a",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/api/src/sales/sales-ecf-atomic-postgres.integration-spec.ts",
+      "sourceSha256": "5cfc33dff83127fa494753cd54a33448f5e74e52cba9cb27eae826be5055c7f5",
+      "candidateSha256": "5cfc33dff83127fa494753cd54a33448f5e74e52cba9cb27eae826be5055c7f5",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/api/src/sales/sales.service.ts",
+      "sourceSha256": "07325c0d4fb69b621966b67487a8d3c5c9432c868a89ddb89d9840a575628101",
+      "candidateSha256": "07325c0d4fb69b621966b67487a8d3c5c9432c868a89ddb89d9840a575628101",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/fulltech_app/lib/core/widgets/compact_square_switch.dart",
+      "sourceSha256": "6f1dbdb042f5bd3e1c86a438972a0bc6f5f1307d6038199960ec16596e501263",
+      "candidateSha256": "6f1dbdb042f5bd3e1c86a438972a0bc6f5f1307d6038199960ec16596e501263",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/fulltech_app/lib/features/account/account_menu_screens.dart",
+      "sourceSha256": "0592cff5f4f9212bf17e8e9e7764595ab2cf45a9c980fa62d0fc1facb3d29e5b",
+      "candidateSha256": "0592cff5f4f9212bf17e8e9e7764595ab2cf45a9c980fa62d0fc1facb3d29e5b",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/fulltech_app/lib/features/ecf/data/ecf_repository.dart",
+      "sourceSha256": "2e74866346ece068f7e5616b50d84eb5d7bceffe7f9181325df1f24ab9075814",
+      "candidateSha256": "2e74866346ece068f7e5616b50d84eb5d7bceffe7f9181325df1f24ab9075814",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/fulltech_app/lib/features/ecf/dosa/dosa_assistant_section.dart",
+      "sourceSha256": "b29fba66a5c00d1840cd0c54bc86da6cb030351248764990dd336331249ad2ce",
+      "candidateSha256": "b29fba66a5c00d1840cd0c54bc86da6cb030351248764990dd336331249ad2ce",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/fulltech_app/lib/features/ecf/ecf_models.dart",
+      "sourceSha256": "376ca932fed31781599fb2a1ebff951ffd80dec2afe345fb303db1820cb5a0c5",
+      "candidateSha256": "376ca932fed31781599fb2a1ebff951ffd80dec2afe345fb303db1820cb5a0c5",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/fulltech_app/lib/features/ecf/ui/ecf_config_page.dart",
+      "sourceSha256": "66b72bd4f163a43d04170b0396971e05d7a3455fbf5b5d9a268a828f08b3ba46",
+      "candidateSha256": "66b72bd4f163a43d04170b0396971e05d7a3455fbf5b5d9a268a828f08b3ba46",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/fulltech_app/lib/features/ecf/ui/ecf_dgii_habilitation_page.dart",
+      "sourceSha256": "410d0594b069271ac789a2722e8d33092495122ba363159afedecca2842ab84a",
+      "candidateSha256": "410d0594b069271ac789a2722e8d33092495122ba363159afedecca2842ab84a",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/fulltech_app/lib/features/ecf/ui/ecf_documents_page.dart",
+      "sourceSha256": "c4ed27316faac285852ee4400f0cec010963d85df1fcff07acd920c1ecbacfe0",
+      "candidateSha256": "c4ed27316faac285852ee4400f0cec010963d85df1fcff07acd920c1ecbacfe0",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/fulltech_app/lib/features/ecf/ui/ecf_habilitacion_video_card.dart",
+      "sourceSha256": "24f4bf57db8509f8db3c893274e21467961a01ed07d7eebda276a0c4318e9290",
+      "candidateSha256": "24f4bf57db8509f8db3c893274e21467961a01ed07d7eebda276a0c4318e9290",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/fulltech_app/lib/features/ecf/ui/flow/ecf_completed_view.dart",
+      "sourceSha256": "6fce3e6aefa20224eeade5e6bcaf46f0db1ad55a0a79a92406c51b70c64f4b64",
+      "candidateSha256": "6fce3e6aefa20224eeade5e6bcaf46f0db1ad55a0a79a92406c51b70c64f4b64",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/fulltech_app/lib/features/ecf/ui/flow/ecf_dosa_activation_status.dart",
+      "sourceSha256": "f120412abe219e537acd4f5cda93f40da772882e3032bd7be896f5d5a5591d92",
+      "candidateSha256": "f120412abe219e537acd4f5cda93f40da772882e3032bd7be896f5d5a5591d92",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/fulltech_app/lib/features/ecf/ui/flow/ecf_dosa_tracking_step.dart",
+      "sourceSha256": "62a6aef17342f95418b27f83f5391285e29a8fe09bedf4a1258a6b0aaf864ea7",
+      "candidateSha256": "62a6aef17342f95418b27f83f5391285e29a8fe09bedf4a1258a6b0aaf864ea7",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/fulltech_app/lib/features/ecf/ui/flow/ecf_flow_kit.dart",
+      "sourceSha256": "0358cda01e4900c65216f3ef7fc67e13fd8cba4c3047697b157969a076c5b30a",
+      "candidateSha256": "0358cda01e4900c65216f3ef7fc67e13fd8cba4c3047697b157969a076c5b30a",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/fulltech_app/lib/features/ecf/ui/flow/ecf_managed_setup_offer.dart",
+      "sourceSha256": "51163d8c07010bcf11b28f098cf098779263381fb9115f368d2dbf74449a93f2",
+      "candidateSha256": "51163d8c07010bcf11b28f098cf098779263381fb9115f368d2dbf74449a93f2",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/fulltech_app/lib/features/ecf/ui/flow/ecf_preparation_step.dart",
+      "sourceSha256": "da287d3f6cdc429a8b6e2f30dc94957657e687128c91b15ba2f976abd478c3ab",
+      "candidateSha256": "da287d3f6cdc429a8b6e2f30dc94957657e687128c91b15ba2f976abd478c3ab",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/fulltech_app/lib/features/ecf/ui/flow/ecf_sequence_range_section.dart",
+      "sourceSha256": "0863815e8a76ab117a0eeff639bca5403822fa1d2a066acb4167b117a2285ff6",
+      "candidateSha256": "0863815e8a76ab117a0eeff639bca5403822fa1d2a066acb4167b117a2285ff6",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/fulltech_app/lib/features/ecf/ui/flow/ecf_welcome_step.dart",
+      "sourceSha256": "82996d85198835d660ef34e026fb26e489d5bfa581626721b0c04e12f6d333c5",
+      "candidateSha256": "82996d85198835d660ef34e026fb26e489d5bfa581626721b0c04e12f6d333c5",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/fulltech_app/lib/modules/cotizaciones/cotizaciones_screen.dart",
+      "sourceSha256": "58e14963bf1671acb335782cf5aed5b9c6a4e1a124284a5124d68c7eb5df46bf",
+      "candidateSha256": "64112d34c88071f3e8939508a8b8da9fba3b83935af2191105c9a4a660c3d139",
+      "status": "merged-or-validated-generated"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/fulltech_app/test/core/widgets/compact_square_switch_test.dart",
+      "sourceSha256": "0604905ab1fceefc7040f73bb862c346be0d7ff9556fd7b11f718634af976469",
+      "candidateSha256": "0604905ab1fceefc7040f73bb862c346be0d7ff9556fd7b11f718634af976469",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/fulltech_app/test/features/account/account_settings_navigation_test.dart",
+      "sourceSha256": "0e357d0f873fe2b86d0ee1d4807f2bb29bdbdfc12eb187060645daa3da1fb097",
+      "candidateSha256": "270b79bbb228fe13cb75e1d226fe2f1b594e1d456dd84890d48e66d309c4543a",
+      "status": "merged-or-validated-generated"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/fulltech_app/test/features/account/ecf_company_toggle_drawer_test.dart",
+      "sourceSha256": "f90da598f1c231c3cfc2a1660b3c06020fdd5850ae18f2e145e1804d44d51a2a",
+      "candidateSha256": "f90da598f1c231c3cfc2a1660b3c06020fdd5850ae18f2e145e1804d44d51a2a",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/fulltech_app/test/features/account/settings_notifications_visual_qa_test.dart",
+      "sourceSha256": "dbc779fa8c6bcfc9d62fa5bf4f58ca55cb22e57ef149f31d48638c73ad0d9ff4",
+      "candidateSha256": "85f1052104afd09f411165d39beabbd4779303f4d4f4e1716de48b022e494162",
+      "status": "merged-or-validated-generated"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/fulltech_app/test/features/ecf/ecf_certificate_card_test.dart",
+      "sourceSha256": "5de5036dc91171c47721b5d88ca19e4eb8342a728192462c3f63c1437c12f6e4",
+      "candidateSha256": "5de5036dc91171c47721b5d88ca19e4eb8342a728192462c3f63c1437c12f6e4",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/fulltech_app/test/features/ecf/ecf_completed_view_test.dart",
+      "sourceSha256": "cba181bded9ed1acc9e68babaf6d4e05b5f930eb2504c6404dfb47f08e5e4b0e",
+      "candidateSha256": "cba181bded9ed1acc9e68babaf6d4e05b5f930eb2504c6404dfb47f08e5e4b0e",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/fulltech_app/test/features/ecf/ecf_config_numbering_test.dart",
+      "sourceSha256": "22321a488f9e997065bc1eddae6edd41fb062ee02ff0badd39aa328c329a8313",
+      "candidateSha256": "22321a488f9e997065bc1eddae6edd41fb062ee02ff0badd39aa328c329a8313",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/fulltech_app/test/features/ecf/ecf_dgii_habilitation_page_test.dart",
+      "sourceSha256": "0385a0ac58f460cacd77be9d062c04c645628394565c74c9b7ee05a32cc2cb5d",
+      "candidateSha256": "8bf95bbf3ad889d6a6bdcad3ebf24f5815ffe4ebfa4ad26b4693f0b1e4add4b0",
+      "status": "merged-or-validated-generated"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/fulltech_app/test/features/ecf/ecf_documents_page_test.dart",
+      "sourceSha256": "23d447ea8279092b0896926e3fe697941a230b10c132828c250ee65163f1cfd1",
+      "candidateSha256": "23d447ea8279092b0896926e3fe697941a230b10c132828c250ee65163f1cfd1",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/fulltech_app/test/features/ecf/ecf_flow_steps_test.dart",
+      "sourceSha256": "01e3d957cf5daa339806589c17369ccae33e52210bdcd43d6d8e8f79e118048a",
+      "candidateSha256": "01e3d957cf5daa339806589c17369ccae33e52210bdcd43d6d8e8f79e118048a",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/fulltech_app/test/features/ecf/ecf_managed_setup_offer_test.dart",
+      "sourceSha256": "12b4a93c9658f96c6c465b7f0aaccd41144ee955f58297efcfcac7a59d2f6f3a",
+      "candidateSha256": "12b4a93c9658f96c6c465b7f0aaccd41144ee955f58297efcfcac7a59d2f6f3a",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/fulltech_app/test/features/ecf/ecf_repository_company_scope_test.dart",
+      "sourceSha256": "44eed6cdb5d9feb12aea49aae75f454c8f3acba6485306b960985b1e62c20a8f",
+      "candidateSha256": "44eed6cdb5d9feb12aea49aae75f454c8f3acba6485306b960985b1e62c20a8f",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/fulltech_app/test/features/ecf/ecf_repository_test.dart",
+      "sourceSha256": "475ad11fab06ebb865ea6cb7a9e164f387fb58e345ada4463a3f9c724109c1db",
+      "candidateSha256": "475ad11fab06ebb865ea6cb7a9e164f387fb58e345ada4463a3f9c724109c1db",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/fulltech_app/test/features/ecf/ecf_sales_without_document_section_test.dart",
+      "sourceSha256": "853b8a51799e7e26a29c11b9ad4ab9e541da6cd5993406fdf5b591878398fd89",
+      "candidateSha256": "853b8a51799e7e26a29c11b9ad4ab9e541da6cd5993406fdf5b591878398fd89",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/fulltech_app/test/features/ecf/ecf_sequence_range_section_test.dart",
+      "sourceSha256": "fc93190e1fae3dccd6565ab5624bc938f61e5e1795b25126647ef53b559b3c8b",
+      "candidateSha256": "fc93190e1fae3dccd6565ab5624bc938f61e5e1795b25126647ef53b559b3c8b",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/fulltech_app/test/preview/ecf_design_gallery.dart",
+      "sourceSha256": "718dde28a19ebbb5fbc657f072f21a5565270ef7edaff3d3c333fcf52efea495",
+      "candidateSha256": "718dde28a19ebbb5fbc657f072f21a5565270ef7edaff3d3c333fcf52efea495",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/fulltech_app/test/preview/ecf_design_preview.dart",
+      "sourceSha256": "784b348c268e3cc3e733730222c342af4b6857ea6822d1c794d383d1e5958193",
+      "candidateSha256": "784b348c268e3cc3e733730222c342af4b6857ea6822d1c794d383d1e5958193",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/fulltech_app/test/preview/ecf_design_preview_browser_test.dart",
+      "sourceSha256": "30803d9e8cf06312c7f86ab8a649620d55feadb96205237bbca5f49172395ffc",
+      "candidateSha256": "30803d9e8cf06312c7f86ab8a649620d55feadb96205237bbca5f49172395ffc",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/fulltech_app/test/preview/ecf_design_preview_test.dart",
+      "sourceSha256": "95347666b8ed54a0aaf8312e1a1beabe914da1e1814508c45416f3c82a05283d",
+      "candidateSha256": "95347666b8ed54a0aaf8312e1a1beabe914da1e1814508c45416f3c82a05283d",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "apps/fulltech_app/test/preview/ecf_selfservice_preview.dart",
+      "sourceSha256": "fd5fe5ffc7736bd2f3c4e66ed6cdafe9502bf68a8c07c4a7772ae38978d51314",
+      "candidateSha256": "fd5fe5ffc7736bd2f3c4e66ed6cdafe9502bf68a8c07c4a7772ae38978d51314",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ARCHITECTURE.md",
+      "sourceSha256": "a035838ac542d2494b756f95f788193a59ab5100f370410d2ec7c1da0f3c328e",
+      "candidateSha256": "f93d2b86b03d89fb1c2bda956649bb954a993f4d5af630e7bea2f926762029a7",
+      "status": "merged-or-validated-generated"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/DESIGN_SYSTEM.md",
+      "sourceSha256": "75ec07694128f71ff15758c501588a33781e9f4af9f540a6f34a444d8dab6baa",
+      "candidateSha256": "75ec07694128f71ff15758c501588a33781e9f4af9f540a6f34a444d8dab6baa",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/EXECUTION_STATE.md",
+      "sourceSha256": "241b89541dd08dd18f853cc2c113e4d65007114236c2a9d2631f307ba6ba69e9",
+      "candidateSha256": "d0316a9c67878e40a96fbb53de6eb427ca9822f78b89686e8f9091e51214653f",
+      "status": "merged-or-validated-generated"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/PRODUCT_SPEC.md",
+      "sourceSha256": "8aede39999ae60853dcc93e1bf8c8a8cf4011a1c1ef2796742d388e4a43ff341",
+      "candidateSha256": "8aede39999ae60853dcc93e1bf8c8a8cf4011a1c1ef2796742d388e4a43ff341",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/ECF_SELF_SERVICE_HARDENING_2026-11-14.md",
+      "sourceSha256": "d05d6473dd7e3b9fbae99013278c242aade5a1215ff5ce59824a98be25e32328",
+      "candidateSha256": "d05d6473dd7e3b9fbae99013278c242aade5a1215ff5ce59824a98be25e32328",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/FISCAL_DESIGN_REVIEW_2026-11-14.md",
+      "sourceSha256": "02a2a1941de74d1055a33b926a83bbf7a28ce5de3328019afe7a5846bdc7a80d",
+      "candidateSha256": "02a2a1941de74d1055a33b926a83bbf7a28ce5de3328019afe7a5846bdc7a80d",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/compact-fiscal-design-2026-11-14/galeria-15-1280.png",
+      "sourceSha256": "c7afabaf70695fc22a4dbb0fe3efb9458481ed76c36e63628ed6fa105218a32e",
+      "candidateSha256": "c7afabaf70695fc22a4dbb0fe3efb9458481ed76c36e63628ed6fa105218a32e",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/compact-fiscal-design-2026-11-14/galeria-15-390.png",
+      "sourceSha256": "5b544ca00f9c6ebf34920c01b15cbeeb650d15c17f33edfbae0806ce09367d92",
+      "candidateSha256": "5b544ca00f9c6ebf34920c01b15cbeeb650d15c17f33edfbae0806ce09367d92",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/compact-fiscal-design-2026-11-14/galeria-16-1280.png",
+      "sourceSha256": "2f3887f64dd23e6c66f91b13ec6a3ee53002bfc37bf0fdbc58d8d7003de1d760",
+      "candidateSha256": "2f3887f64dd23e6c66f91b13ec6a3ee53002bfc37bf0fdbc58d8d7003de1d760",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/compact-fiscal-design-2026-11-14/galeria-16-390.png",
+      "sourceSha256": "a0e6986e3a416bcbbd09c5a4bb0a67c65dfd0f9dc12595cf5d0e5e2c8f030477",
+      "candidateSha256": "a0e6986e3a416bcbbd09c5a4bb0a67c65dfd0f9dc12595cf5d0e5e2c8f030477",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/compact-fiscal-design-2026-11-14/galeria-17-1280.png",
+      "sourceSha256": "9aba243ca2a030a4d6e55cb2dcdafcb66714c83bf9aa136b61180a03a880d472",
+      "candidateSha256": "9aba243ca2a030a4d6e55cb2dcdafcb66714c83bf9aa136b61180a03a880d472",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/compact-fiscal-design-2026-11-14/galeria-17-390.png",
+      "sourceSha256": "129006e0ba4ad067baafa9cc387e63b64a5e54137f0204b82f2ec5cbb3911235",
+      "candidateSha256": "129006e0ba4ad067baafa9cc387e63b64a5e54137f0204b82f2ec5cbb3911235",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/compact-fiscal-design-2026-11-14/galeria-18-1280.png",
+      "sourceSha256": "34fcf3008d380281ca881d653abbf184a6d201bf76eb9ffcc4e887c1629dacc1",
+      "candidateSha256": "34fcf3008d380281ca881d653abbf184a6d201bf76eb9ffcc4e887c1629dacc1",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/compact-fiscal-design-2026-11-14/galeria-18-390.png",
+      "sourceSha256": "b4859b839d168c6679a6a7f1d65b49c1a69265dc6dee708c40665c7a0bcc517f",
+      "candidateSha256": "b4859b839d168c6679a6a7f1d65b49c1a69265dc6dee708c40665c7a0bcc517f",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/compact-fiscal-design-2026-11-14/galeria-4-1280.png",
+      "sourceSha256": "d1111d0f4740aa3467863dfe3fff02ed6da1b8275a9a3996f655f74bae924ad8",
+      "candidateSha256": "d1111d0f4740aa3467863dfe3fff02ed6da1b8275a9a3996f655f74bae924ad8",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/compact-fiscal-design-2026-11-14/galeria-4-390.png",
+      "sourceSha256": "be7fea9ef28b6694c7868604d70c2c662c5f1bfc825caa71788f3ebaa9dc4eba",
+      "candidateSha256": "be7fea9ef28b6694c7868604d70c2c662c5f1bfc825caa71788f3ebaa9dc4eba",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/compact-fiscal-design-2026-11-14/galeria-5-1280.png",
+      "sourceSha256": "0d7f4ebad4a25f7eaeed3b4e5c408c54bfd02499668f52e0a315878a2566e36d",
+      "candidateSha256": "0d7f4ebad4a25f7eaeed3b4e5c408c54bfd02499668f52e0a315878a2566e36d",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/compact-fiscal-design-2026-11-14/galeria-5-390.png",
+      "sourceSha256": "ad7dbf2272b4ebf6ca35a4d92052a96412dbbc43799712e4cdedc8ae5a61be32",
+      "candidateSha256": "ad7dbf2272b4ebf6ca35a4d92052a96412dbbc43799712e4cdedc8ae5a61be32",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/compact-fiscal-design-2026-11-14/galeria-6-1280.png",
+      "sourceSha256": "58b3dd8443594b78fb4fa0a832a1ea53c67dbe4d2149f2a18a435e65557d2c52",
+      "candidateSha256": "58b3dd8443594b78fb4fa0a832a1ea53c67dbe4d2149f2a18a435e65557d2c52",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/compact-fiscal-design-2026-11-14/galeria-6-390.png",
+      "sourceSha256": "d6f6195373e928d6cdca59ddd8f61cd4a3075cfa5880ac386c41e17ed4132475",
+      "candidateSha256": "d6f6195373e928d6cdca59ddd8f61cd4a3075cfa5880ac386c41e17ed4132475",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/company-design-2026-11-14/empresa-android.png",
+      "sourceSha256": "60ca875258f9704f519c4fb47fd700a1fd1d8a6d740e2929dc8b00a6a0133e1b",
+      "candidateSha256": "60ca875258f9704f519c4fb47fd700a1fd1d8a6d740e2929dc8b00a6a0133e1b",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/company-design-2026-11-14/empresa-escritorio-compacta.png",
+      "sourceSha256": "b585fec29a772e86bf21f797421ad11c13d406320b8353aabd48f9573edb3f2f",
+      "candidateSha256": "b585fec29a772e86bf21f797421ad11c13d406320b8353aabd48f9573edb3f2f",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/company-design-2026-11-14/empresa-iphone.png",
+      "sourceSha256": "d0934c2042426450770f3e234d26f04a29db6c2788ad18e6d438f64e6215bf17",
+      "candidateSha256": "d0934c2042426450770f3e234d26f04a29db6c2788ad18e6d438f64e6215bf17",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/config-compact-design-2026-11-14/configuracion19-escritorio-compacto.png",
+      "sourceSha256": "221ec5b6a09816731ea30fb12559c32c0e2fd5835b03f01aed77e2b160959961",
+      "candidateSha256": "221ec5b6a09816731ea30fb12559c32c0e2fd5835b03f01aed77e2b160959961",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/config-compact-design-2026-11-14/galeria-19-1280.png",
+      "sourceSha256": "da9c022e436ebb555aa2247e19ad815350e27491c0e2c5bb1bb102d1b0961c9c",
+      "candidateSha256": "da9c022e436ebb555aa2247e19ad815350e27491c0e2c5bb1bb102d1b0961c9c",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/config-compact-design-2026-11-14/galeria-19-390.png",
+      "sourceSha256": "f44dbb264f2768f87c679d44030f8988a0d63a565dbaac3106e5a5e05f6af75f",
+      "candidateSha256": "f44dbb264f2768f87c679d44030f8988a0d63a565dbaac3106e5a5e05f6af75f",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/gallery-design-2026-11-14/galeria-10-1280.png",
+      "sourceSha256": "e9dc920bf11379d91072b775ca9b78c2272aeae56192e02db1555dc508522797",
+      "candidateSha256": "e9dc920bf11379d91072b775ca9b78c2272aeae56192e02db1555dc508522797",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/gallery-design-2026-11-14/galeria-10-390.png",
+      "sourceSha256": "def1d4bb20f86015de49ec3734e3bba7b49e04a84a30fbc800fc26870266c459",
+      "candidateSha256": "def1d4bb20f86015de49ec3734e3bba7b49e04a84a30fbc800fc26870266c459",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/gallery-design-2026-11-14/galeria-11-1280.png",
+      "sourceSha256": "012e3cb3bb9b4d585719a50dd356af729734ace659182afb01ea71084eb199d0",
+      "candidateSha256": "012e3cb3bb9b4d585719a50dd356af729734ace659182afb01ea71084eb199d0",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/gallery-design-2026-11-14/galeria-11-390.png",
+      "sourceSha256": "0614bcf653782cbb6b69e71cdc5dd8f0e8a251ce605070758940cd6587f2d1f1",
+      "candidateSha256": "0614bcf653782cbb6b69e71cdc5dd8f0e8a251ce605070758940cd6587f2d1f1",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/gallery-design-2026-11-14/galeria-12-1280.png",
+      "sourceSha256": "87f75e1b6939a03f24da71ed5967f6b2ca5dec32824443208b0daea1c81dbf08",
+      "candidateSha256": "87f75e1b6939a03f24da71ed5967f6b2ca5dec32824443208b0daea1c81dbf08",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/gallery-design-2026-11-14/galeria-12-390.png",
+      "sourceSha256": "e65188fa632d2d8156061c2a819240b385e5aa0975060bdce65183202f0b3132",
+      "candidateSha256": "e65188fa632d2d8156061c2a819240b385e5aa0975060bdce65183202f0b3132",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/gallery-design-2026-11-14/galeria-13-1280.png",
+      "sourceSha256": "0306aa54147b2ac92275e27efe57a7a466c3356111dc45c3981f27e478ca50a4",
+      "candidateSha256": "0306aa54147b2ac92275e27efe57a7a466c3356111dc45c3981f27e478ca50a4",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/gallery-design-2026-11-14/galeria-13-390.png",
+      "sourceSha256": "19fbaee45705fa3ace4958b6196cc2a17d2513ba70937c1fff684c69ea2a30b0",
+      "candidateSha256": "19fbaee45705fa3ace4958b6196cc2a17d2513ba70937c1fff684c69ea2a30b0",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/gallery-design-2026-11-14/galeria-14-1280.png",
+      "sourceSha256": "10a046736b9b151ab07b79670fca42b66faf1fcc6243df68162a93482f8f83b9",
+      "candidateSha256": "10a046736b9b151ab07b79670fca42b66faf1fcc6243df68162a93482f8f83b9",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/gallery-design-2026-11-14/galeria-14-390.png",
+      "sourceSha256": "1761810d442d6a64ccdc141e58a23b0924698037cb81232df32b3f8d2540aad3",
+      "candidateSha256": "1761810d442d6a64ccdc141e58a23b0924698037cb81232df32b3f8d2540aad3",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/gallery-design-2026-11-14/galeria-15-1280.png",
+      "sourceSha256": "af79f2c6135c9caa5dccfcf699dfaabc9421a074a36131ef0de1420ccc20a6fb",
+      "candidateSha256": "af79f2c6135c9caa5dccfcf699dfaabc9421a074a36131ef0de1420ccc20a6fb",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/gallery-design-2026-11-14/galeria-15-390.png",
+      "sourceSha256": "5feff9974ae2a2619ca6266f6d27d64b33f26fd3b01a50eeabd1128dbad66b08",
+      "candidateSha256": "5feff9974ae2a2619ca6266f6d27d64b33f26fd3b01a50eeabd1128dbad66b08",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/gallery-design-2026-11-14/galeria-16-1280.png",
+      "sourceSha256": "8233ddd4a3e7b25b26721871e8da3ca2daaa306921cd9999dd1041e0bf3d022a",
+      "candidateSha256": "8233ddd4a3e7b25b26721871e8da3ca2daaa306921cd9999dd1041e0bf3d022a",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/gallery-design-2026-11-14/galeria-16-390.png",
+      "sourceSha256": "2b804323865a94f4b176d26f62348664526d15fcafe6f9fbc623044d7ae8e7fb",
+      "candidateSha256": "2b804323865a94f4b176d26f62348664526d15fcafe6f9fbc623044d7ae8e7fb",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/gallery-design-2026-11-14/galeria-17-1280.png",
+      "sourceSha256": "9aba243ca2a030a4d6e55cb2dcdafcb66714c83bf9aa136b61180a03a880d472",
+      "candidateSha256": "9aba243ca2a030a4d6e55cb2dcdafcb66714c83bf9aa136b61180a03a880d472",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/gallery-design-2026-11-14/galeria-17-390.png",
+      "sourceSha256": "129006e0ba4ad067baafa9cc387e63b64a5e54137f0204b82f2ec5cbb3911235",
+      "candidateSha256": "129006e0ba4ad067baafa9cc387e63b64a5e54137f0204b82f2ec5cbb3911235",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/gallery-design-2026-11-14/galeria-18-1280.png",
+      "sourceSha256": "aaaa524c18baf45f6a700d169066c42a2f80b5ab93cf136dd8d5a553c4933a80",
+      "candidateSha256": "aaaa524c18baf45f6a700d169066c42a2f80b5ab93cf136dd8d5a553c4933a80",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/gallery-design-2026-11-14/galeria-18-390.png",
+      "sourceSha256": "389a3ab7beea5b7f1d13eba50bd953cf78d2b2648f7b53b8db86a305a6bd4c3e",
+      "candidateSha256": "389a3ab7beea5b7f1d13eba50bd953cf78d2b2648f7b53b8db86a305a6bd4c3e",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/gallery-design-2026-11-14/galeria-19-1280.png",
+      "sourceSha256": "d4f0fd317db3ae4c25ed267a3239a2d4be651894aaa40756021b190a8291ff72",
+      "candidateSha256": "d4f0fd317db3ae4c25ed267a3239a2d4be651894aaa40756021b190a8291ff72",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/gallery-design-2026-11-14/galeria-19-390.png",
+      "sourceSha256": "d5a4cf4f2001d82ed43a31a5393a75e9e01caec43329a1269b4f08fdfc92e520",
+      "candidateSha256": "d5a4cf4f2001d82ed43a31a5393a75e9e01caec43329a1269b4f08fdfc92e520",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/gallery-design-2026-11-14/galeria-4-1280.png",
+      "sourceSha256": "2abb7ce1c5966e12cceee744bb81d69e09297f7e0b10d964561d0061b30ac9ca",
+      "candidateSha256": "2abb7ce1c5966e12cceee744bb81d69e09297f7e0b10d964561d0061b30ac9ca",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/gallery-design-2026-11-14/galeria-4-390.png",
+      "sourceSha256": "ea56390fcb477a36117acad17aa11985c0eaa2818e1ed6164ee5cbb4c9226fbe",
+      "candidateSha256": "ea56390fcb477a36117acad17aa11985c0eaa2818e1ed6164ee5cbb4c9226fbe",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/gallery-design-2026-11-14/galeria-5-1280.png",
+      "sourceSha256": "aee12cba5b7becff367ad4877978db3ccb82697a964455207b2bc97923896a22",
+      "candidateSha256": "aee12cba5b7becff367ad4877978db3ccb82697a964455207b2bc97923896a22",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/gallery-design-2026-11-14/galeria-5-390.png",
+      "sourceSha256": "c95f3f6dc2f9461405030026b99a767eb861a98c4eac31afe07b8a76c665c533",
+      "candidateSha256": "c95f3f6dc2f9461405030026b99a767eb861a98c4eac31afe07b8a76c665c533",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/gallery-design-2026-11-14/galeria-6-1280.png",
+      "sourceSha256": "c89e592b7573f6e2ebb1131769e27faaefb1aa1225da698910e5caeecbdad1a1",
+      "candidateSha256": "c89e592b7573f6e2ebb1131769e27faaefb1aa1225da698910e5caeecbdad1a1",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/gallery-design-2026-11-14/galeria-6-390.png",
+      "sourceSha256": "5fe197a030675b9badb2e823a07164024ffe260b372e31ca2a437d0475c38209",
+      "candidateSha256": "5fe197a030675b9badb2e823a07164024ffe260b372e31ca2a437d0475c38209",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/gallery-design-2026-11-14/galeria-7-1280.png",
+      "sourceSha256": "8e0987c9c35a750d3ea7615998cd8fd19cbfb5f0a5f19ae0640c158b4611ea8c",
+      "candidateSha256": "8e0987c9c35a750d3ea7615998cd8fd19cbfb5f0a5f19ae0640c158b4611ea8c",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/gallery-design-2026-11-14/galeria-7-390.png",
+      "sourceSha256": "324e153099b3044df8285e15b6364a68572f4ee9ded25e01d06e1fa3e9894990",
+      "candidateSha256": "324e153099b3044df8285e15b6364a68572f4ee9ded25e01d06e1fa3e9894990",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/gallery-design-2026-11-14/galeria-8-1280.png",
+      "sourceSha256": "6bec08424d7ebd22f0bd797f6126e4646b2a3ce461cafa19054db8ba406e9d01",
+      "candidateSha256": "6bec08424d7ebd22f0bd797f6126e4646b2a3ce461cafa19054db8ba406e9d01",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/gallery-design-2026-11-14/galeria-8-390.png",
+      "sourceSha256": "7951187d3a4dbdfe27f9e876ed6cf9b3a1328474b758f4b1ebb558a93c9fd9ec",
+      "candidateSha256": "7951187d3a4dbdfe27f9e876ed6cf9b3a1328474b758f4b1ebb558a93c9fd9ec",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/gallery-design-2026-11-14/galeria-9-1280.png",
+      "sourceSha256": "1023ec791c6e1ee97aa3c704ddf762cdbff498bd1bd65a5a708ac66c0f60a849",
+      "candidateSha256": "1023ec791c6e1ee97aa3c704ddf762cdbff498bd1bd65a5a708ac66c0f60a849",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/gallery-design-2026-11-14/galeria-9-390.png",
+      "sourceSha256": "34ce319b2afc628f393b02dfb772530c859391ab8cc0eb84d40082d8181ccec5",
+      "candidateSha256": "34ce319b2afc628f393b02dfb772530c859391ab8cc0eb84d40082d8181ccec5",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/managed-setup-design-2026-11-14/preparacion-1280.png",
+      "sourceSha256": "23fd2539157241819fab91134c87830ed98eaeed4a9657905cd1ade215404951",
+      "candidateSha256": "23fd2539157241819fab91134c87830ed98eaeed4a9657905cd1ade215404951",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/managed-setup-design-2026-11-14/preparacion-320.png",
+      "sourceSha256": "dcba9596b20ebbfe3a9fe9f3f8756624b5b7eb8808292c57baa13d7c9f2b2f29",
+      "candidateSha256": "dcba9596b20ebbfe3a9fe9f3f8756624b5b7eb8808292c57baa13d7c9f2b2f29",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/managed-setup-design-2026-11-14/preparacion-390.png",
+      "sourceSha256": "2a384281e930fd18d16e90d3c7bdd750ec4cf618986472c240c2fb2e975cc776",
+      "candidateSha256": "2a384281e930fd18d16e90d3c7bdd750ec4cf618986472c240c2fb2e975cc776",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/selfservice-visual-2026-11-14/production-e31-1280.png",
+      "sourceSha256": "1560a7527fcca2ab08057d9a36e72598a49a8723ec7da0b17424b319e8c9fcef",
+      "candidateSha256": "1560a7527fcca2ab08057d9a36e72598a49a8723ec7da0b17424b319e8c9fcef",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/selfservice-visual-2026-11-14/production-e31-320.png",
+      "sourceSha256": "832b2e3772600a1ee8ddd725975c3bf2848d49ae945aecf70b7de602ef851eff",
+      "candidateSha256": "832b2e3772600a1ee8ddd725975c3bf2848d49ae945aecf70b7de602ef851eff",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/selfservice-visual-2026-11-14/production-e31-390.png",
+      "sourceSha256": "710d6eea5df8959b5e4183994a5c591099d72d7d2269ebf1d1c176491e54d9f6",
+      "candidateSha256": "710d6eea5df8959b5e4183994a5c591099d72d7d2269ebf1d1c176491e54d9f6",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/selfservice-visual-2026-11-14/test-numbering-1280.png",
+      "sourceSha256": "5ab526177057de152867740386865f44315585a99699f8333da1b4589c93800d",
+      "candidateSha256": "5ab526177057de152867740386865f44315585a99699f8333da1b4589c93800d",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/selfservice-visual-2026-11-14/test-numbering-390.png",
+      "sourceSha256": "3901c4cfe8b3611b57035a89be469ba7f0c8b91bb6afcaefd609672dcd22c370",
+      "candidateSha256": "3901c4cfe8b3611b57035a89be469ba7f0c8b91bb6afcaefd609672dcd22c370",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/selfservice-visual-2026-11-14/test-numbering-834.png",
+      "sourceSha256": "7db981444ad67f84f750bdecd38d4a9a914d6956c66fa932c566eae875f096e4",
+      "candidateSha256": "7db981444ad67f84f750bdecd38d4a9a914d6956c66fa932c566eae875f096e4",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/welcome-design-2026-11-14/entrada-320.png",
+      "sourceSha256": "b68bd83fbcc7648bc5211b13841e27e5698b5783eb49cff8993e5458bfdaaf00",
+      "candidateSha256": "b68bd83fbcc7648bc5211b13841e27e5698b5783eb49cff8993e5458bfdaaf00",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/welcome-design-2026-11-14/entrada-390.png",
+      "sourceSha256": "ff794d9a69842f2cf0552ead7c29140fbbf229f0ea9b4c8cb335fcbd3646fd48",
+      "candidateSha256": "ff794d9a69842f2cf0552ead7c29140fbbf229f0ea9b4c8cb335fcbd3646fd48",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/welcome-design-2026-11-14/entrada-escritorio-compacta.png",
+      "sourceSha256": "3c5f08870abc4a8c286415c5963bf515d57b4a3e039b8a1c422c0d66ef33c2f4",
+      "candidateSha256": "3c5f08870abc4a8c286415c5963bf515d57b4a3e039b8a1c422c0d66ef33c2f4",
+      "status": "byte-identical"
+    },
+    {
+      "source": "fiscal",
+      "path": "docs/ecf/welcome-design-2026-11-14/preparacion-1280.png",
+      "sourceSha256": "ee9c5e065f7a8e2f28b6b4e208428c5e21718a8be7117f09396af9602903a7dc",
+      "candidateSha256": "ee9c5e065f7a8e2f28b6b4e208428c5e21718a8be7117f09396af9602903a7dc",
+      "status": "byte-identical"
+    }
+  ],
+  "missing": [],
+  "sourceChangesSinceSnapshot": [],
+  "highConfidenceSecretCandidates": []
+}

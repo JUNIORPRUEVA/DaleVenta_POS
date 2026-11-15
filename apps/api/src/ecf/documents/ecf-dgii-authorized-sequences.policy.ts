@@ -45,6 +45,8 @@ export const ECF_DGII_DECLARATION_ERRORS = {
   rangeInvalid: "ECF_DGII_SEQUENCE_RANGE_INVALID",
   quantityMismatch: "ECF_DGII_SEQUENCE_QUANTITY_MISMATCH",
   expired: "ECF_DGII_SEQUENCE_EXPIRED",
+  expiryRequired: "ECF_E31_EXPIRY_REQUIRED",
+  expiryInvalid: "ECF_SEQUENCE_EXPIRY_INVALID",
   notAuthorized: "ECF_SEQUENCE_NOT_AUTHORIZED",
   exceedsAuthorized: "ECF_SEQUENCE_EXCEEDS_AUTHORIZED",
 } as const;
@@ -144,6 +146,14 @@ export function validateAuthorizationDeclaration(
   }
 
   const expiresAt = parseExpiry(input.expiresAt);
+  if (input.expiresAt?.trim() && expiresAt === null) {
+    return { ok: false, code: ECF_DGII_DECLARATION_ERRORS.expiryInvalid,
+      message: "Escribe una fecha de vencimiento válida, tal como aparece en la autorización." };
+  }
+  if (documentType === "E31" && expiresAt === null) {
+    return { ok: false, code: ECF_DGII_DECLARATION_ERRORS.expiryRequired,
+      message: "Registra el vencimiento de la autorización E31 de esta empresa." };
+  }
   if (expiresAt instanceof Date && expiresAt.getTime() <= now.getTime()) {
     return {
       ok: false,
@@ -231,6 +241,10 @@ function parseExpiry(value: string | null | undefined): Date | null {
   if (value === null || value === undefined) return null;
   const trimmed = `${value}`.trim();
   if (trimmed.length === 0) return null;
+  const day = trimmed.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return null;
+  const calendar = new Date(`${day}T00:00:00.000Z`);
+  if (Number.isNaN(calendar.getTime()) || calendar.toISOString().slice(0, 10) !== day) return null;
   // Fecha sin hora: la DGII autoriza hasta el ÚLTIMO día inclusive, así que se
   // interpreta como fin de ese día. Parsearla a medianoche bloquearía la
   // emisión justo ese día.

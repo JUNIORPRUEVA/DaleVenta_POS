@@ -10,7 +10,21 @@ import 'package:go_router/go_router.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUp(MarketingAnalytics.debugResetForTests);
+  final browserLaunches = <MethodCall>[];
+  const launcher = MethodChannel('plugins.flutter.io/url_launcher');
+  setUp(() {
+    MarketingAnalytics.debugResetForTests();
+    browserLaunches.clear();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(launcher, (call) async {
+          if (call.method == 'launch') browserLaunches.add(call);
+          return true;
+        });
+  });
+  tearDown(
+    () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(launcher, null),
+  );
 
   test('landing optimized image assets are bundled', () async {
     const assetPaths = [
@@ -37,7 +51,7 @@ void main() {
     );
     expect(
       AppAccessLinks.androidReleaseUri.toString(),
-      'https://github.com/JUNIORPRUEVA/fullpos_cluouds/releases/latest/download/app-release.apk',
+      'https://play.google.com/store/apps/details?id=com.daleventa.pos',
     );
     expect(
       AppAccessLinks.iosAppStoreUri.toString(),
@@ -128,70 +142,98 @@ void main() {
     expect(find.textContaining('te ayuda remotamente'), findsNothing);
   });
 
-  testWidgets('landing account CTAs route to register and login', (
-    tester,
-  ) async {
-    final router = _landingRouter();
-    addTearDown(router.dispose);
+  testWidgets(
+    'landing account CTAs open web registration and navigate to login',
+    (tester) async {
+      final router = _landingRouter();
+      addTearDown(router.dispose);
 
-    await tester.pumpWidget(
-      ProviderScope(child: MaterialApp.router(routerConfig: router)),
-    );
-    await tester.pumpAndSettle();
+      await tester.pumpWidget(
+        ProviderScope(child: MaterialApp.router(routerConfig: router)),
+      );
+      await tester.pumpAndSettle();
 
-    expect(
-      MarketingAnalytics.debugEventsForTests.where(
-        (event) => event.name == 'ViewContent',
-      ),
-      hasLength(1),
-    );
+      expect(
+        MarketingAnalytics.debugEventsForTests.where(
+          (event) => event.name == 'ViewContent',
+        ),
+        hasLength(1),
+      );
 
-    await tester.tap(find.text(LandingScreen.primaryCtaLabel).first);
-    await tester.pumpAndSettle();
-    expect(find.text('Register'), findsOneWidget);
-    expect(
-      MarketingAnalytics.debugEventsForTests.where(
-        (event) => event.name == 'ClickCreateAccount',
-      ),
-      hasLength(1),
-    );
-    expect(
-      MarketingAnalytics.debugEventsForTests.last.parameters,
-      containsPair('cta_name', 'Regístrate gratis ahora - hero'),
-    );
+      await tester.tap(find.text(LandingScreen.primaryCtaLabel).first);
+      await tester.pumpAndSettle();
+      expect(browserLaunches, hasLength(1));
+      expect(
+        browserLaunches.single.arguments,
+        containsPair('url', 'https://fullposcloud.fulltechrd.com/registro'),
+      );
+      expect(
+        browserLaunches.single.arguments,
+        containsPair('useWebView', false),
+      );
+      expect(
+        browserLaunches.single.arguments,
+        containsPair('useSafariVC', false),
+      );
+      expect(find.text('Register'), findsNothing);
+      expect(
+        MarketingAnalytics.debugEventsForTests.where(
+          (event) => event.name == 'ClickCreateAccount',
+        ),
+        hasLength(1),
+      );
+      expect(
+        MarketingAnalytics.debugEventsForTests.last.parameters,
+        containsPair('cta_name', 'Regístrate gratis ahora - hero'),
+      );
 
-    router.go('/');
-    await tester.pumpAndSettle();
+      router.go('/');
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Ya tengo cuenta').first);
-    await tester.pumpAndSettle();
-    expect(find.text('Login'), findsOneWidget);
-  });
+      await tester.tap(find.text('Ya tengo cuenta').first);
+      await tester.pumpAndSettle();
+      expect(find.text('Login'), findsOneWidget);
+    },
+  );
 
-  testWidgets('landing pricing CTA routes to register with its own cta_name', (
-    tester,
-  ) async {
-    final router = _landingRouter();
-    addTearDown(router.dispose);
-    _setPhoneViewport(tester, const Size(1024, 900));
+  testWidgets(
+    'landing pricing CTA opens web registration with its own cta_name',
+    (tester) async {
+      final router = _landingRouter();
+      addTearDown(router.dispose);
+      _setPhoneViewport(tester, const Size(1024, 900));
 
-    await tester.pumpWidget(
-      ProviderScope(child: MaterialApp.router(routerConfig: router)),
-    );
-    await tester.pumpAndSettle();
+      await tester.pumpWidget(
+        ProviderScope(child: MaterialApp.router(routerConfig: router)),
+      );
+      await tester.pumpAndSettle();
 
-    final pricingCta = find.text(LandingScreen.primaryCtaLabel).last;
-    await tester.ensureVisible(pricingCta);
-    await tester.pumpAndSettle();
-    await tester.tap(pricingCta);
-    await tester.pumpAndSettle();
+      final pricingCta = find.text(LandingScreen.primaryCtaLabel).last;
+      await tester.ensureVisible(pricingCta);
+      await tester.pumpAndSettle();
+      await tester.tap(pricingCta);
+      await tester.pumpAndSettle();
 
-    expect(find.text('Register'), findsOneWidget);
-    expect(
-      MarketingAnalytics.debugEventsForTests.last.parameters,
-      containsPair('cta_name', 'Regístrate gratis ahora - planes'),
-    );
-  });
+      expect(browserLaunches, hasLength(1));
+      expect(
+        browserLaunches.single.arguments,
+        containsPair('url', 'https://fullposcloud.fulltechrd.com/registro'),
+      );
+      expect(
+        browserLaunches.single.arguments,
+        containsPair('useWebView', false),
+      );
+      expect(
+        browserLaunches.single.arguments,
+        containsPair('useSafariVC', false),
+      );
+      expect(find.text('Register'), findsNothing);
+      expect(
+        MarketingAnalytics.debugEventsForTests.last.parameters,
+        containsPair('cta_name', 'Regístrate gratis ahora - planes'),
+      );
+    },
+  );
 
   testWidgets('landing renders without layout errors on responsive widths', (
     tester,
@@ -416,7 +458,17 @@ void main() {
     await tester.tap(barCta);
     await tester.pumpAndSettle();
 
-    expect(find.text('Register'), findsOneWidget);
+    expect(browserLaunches, hasLength(1));
+    expect(
+      browserLaunches.single.arguments,
+      containsPair('url', 'https://fullposcloud.fulltechrd.com/registro'),
+    );
+    expect(browserLaunches.single.arguments, containsPair('useWebView', false));
+    expect(
+      browserLaunches.single.arguments,
+      containsPair('useSafariVC', false),
+    );
+    expect(find.text('Register'), findsNothing);
     expect(
       MarketingAnalytics.debugEventsForTests.last.parameters,
       containsPair('cta_name', 'Regístrate gratis - CTA fijo móvil'),

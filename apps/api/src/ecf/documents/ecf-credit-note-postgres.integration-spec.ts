@@ -72,6 +72,7 @@ uat("E34 desde una venta original (nota de crédito) on PostgreSQL", () => {
           approvedQuantity: 10_000,
           declarationVersion: "v1",
           declaredByUserId: userId,
+          expiresAt: documentType === "E31" ? new Date("2026-12-31T23:59:59.999Z") : null,
         },
       });
     }

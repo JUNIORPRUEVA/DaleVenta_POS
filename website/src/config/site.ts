@@ -30,7 +30,7 @@ export const appLinks = {
   windows:
     'https://daleventapos-backend.gcdndd.easypanel.host/api/app-updates/windows/latest/download',
   android:
-    'https://github.com/JUNIORPRUEVA/fullpos_cluouds/releases/latest/download/app-release.apk',
+    'https://play.google.com/store/apps/details?id=com.daleventa.pos',
   ios: 'https://apps.apple.com/do/app/fullpos-cloud/id6801349002',
 } as const;
 
@@ -486,8 +486,7 @@ export type Download = {
 /**
  * Canales oficiales reales (AppAccessLinks de la app).
  * Windows descarga el instalador publicado; iOS y Web abren su canal.
- * Android: Google Play esta anunciado pero aun no hay URL verificada; el APK
- * publicado se conserva como canal aparte para no romper una descarga real.
+ * Android abre la ficha oficial en Google Play.
  */
 export const downloads: Download[] = [
   {
@@ -505,15 +504,6 @@ export const downloads: Download[] = [
     icon: icons.smartphone,
     status: 'Google Play',
     detail: 'Disponible en Google Play',
-    url: '',
-    pending: true,
-  },
-  {
-    id: 'android',
-    name: 'Android (APK)',
-    icon: icons.smartphone,
-    status: 'Descargar APK',
-    detail: 'Instalador directo',
     url: appLinks.android,
   },
   {

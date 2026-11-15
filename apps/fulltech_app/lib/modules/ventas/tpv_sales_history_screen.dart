@@ -19,6 +19,9 @@ import '../../features/ecf/ecf_sale_fiscal.dart';
 import '../../features/ecf/ui/ecf_sale_history_panel.dart';
 import '../../core/utils/app_feedback.dart';
 import '../../core/realtime/operations_refresh_signals.dart';
+import '../../core/routing/app_navigator.dart';
+import '../../core/routing/route_access.dart';
+import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/time/business_time.dart';
 import '../../core/uom/uom_formatters.dart';
@@ -519,9 +522,7 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
         .read(unifiedTicketPrinterProvider)
         .reprintSale(sale: sale, items: sale.items);
     if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(result.message)));
+    showCashToast(context, result.message);
   }
 
   Future<Uint8List> _buildInvoicePdf(SaleModel sale) async {
@@ -712,7 +713,7 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
 
       appBar: isMobile
           ? CustomAppBar(
-              title: 'Facturas',
+              title: 'Historial de ventas',
               titleWidget: _searchOpen ? _buildAppBarSearchField() : null,
               actions: [
                 IconButton(
@@ -744,7 +745,7 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
               showDepartmentLabel: false,
             )
           : FullTechPageHeader(
-              title: 'Facturacion',
+              title: 'Historial de ventas',
               actions: [
                 _MetricBadge(
                   icon: Icons.receipt_long_outlined,
@@ -806,6 +807,7 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
                       dateFmt: _dateFmt,
                       invoiceNumber: _invoiceNumber,
                       onReload: _load,
+                      onStartSale: _startSale,
                       onLoadMore: _loadMoreInvoices,
                       onSelect: _openMobileDetail,
                       onPdf: _sharePdf,
@@ -830,6 +832,7 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
                             dateFmt: _dateFmt,
                             invoiceNumber: _invoiceNumber,
                             onReload: _load,
+                            onStartSale: _startSale,
                             onLoadMore: _loadMoreInvoices,
                             onSelect: (sale) =>
                                 setState(() => _selected = sale),
@@ -870,6 +873,18 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _startSale() async {
+    final allowed = await ensureAdminAuthorization(
+      context,
+      ref,
+      permission: RouteAccess.permissionForLocation(Routes.cotizaciones),
+      routeLocation: Routes.cotizaciones,
+      reason: 'Entrar a Facturación',
+    );
+    if (!allowed || !mounted) return;
+    AppNavigator.go(context, Routes.cotizaciones);
   }
 
   Widget _buildAppBarSearchField() {
@@ -1036,33 +1051,33 @@ class _Toolbar extends StatelessWidget {
         paymentFilter != _PaymentFilter.all ||
         (cashierFilter ?? '').trim().isNotEmpty;
     final searchField = SizedBox(
-      height: 46,
+      height: 36,
       child: TextField(
         controller: controller,
         decoration: InputDecoration(
-          prefixIcon: const Icon(Icons.search_rounded),
+          prefixIcon: const Icon(Icons.search_rounded, size: 22),
           hintText: 'Buscar factura, cliente o total',
           filled: true,
           fillColor: Colors.white,
           contentPadding: const EdgeInsets.symmetric(horizontal: 12),
           enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Color(0xFFC9DAE6)),
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: AppColors.border),
           ),
           focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(8),
             borderSide: const BorderSide(
               color: AppColors.secondary,
               width: 1.3,
             ),
           ),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
         ),
       ),
     );
     if (mobile && !hasActiveFilters) return const SizedBox.shrink();
     return Container(
-      padding: EdgeInsets.fromLTRB(mobile ? 12 : 24, 12, mobile ? 12 : 24, 10),
+      padding: EdgeInsets.symmetric(horizontal: mobile ? 12 : 24, vertical: 8),
       decoration: const BoxDecoration(
         color: AppColors.surfaceSubtle,
         border: Border(bottom: BorderSide(color: Color(0xFFD8E5EE))),
@@ -1090,37 +1105,26 @@ class _Toolbar extends StatelessWidget {
             )
           : Row(
               children: [
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 720),
-                  child: searchField,
-                ),
+                Expanded(child: searchField),
                 const SizedBox(width: 10),
                 InkWell(
                   onTap: onOpenFilters,
-                  borderRadius: BorderRadius.circular(9),
+                  borderRadius: BorderRadius.circular(8),
                   child: Container(
-                    height: 42,
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    height: 34,
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
                     decoration: BoxDecoration(
                       color: AppColors.secondary,
-                      borderRadius: BorderRadius.circular(9),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(
-                            0xFF1957E6,
-                          ).withValues(alpha: 0.18),
-                          blurRadius: 14,
-                          offset: const Offset(0, 5),
-                        ),
-                      ],
+                      borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(
                       children: [
                         const Icon(
                           Icons.filter_alt_outlined,
+                          size: 18,
                           color: Colors.white,
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 6),
                         Text(
                           _filterButtonLabel(
                             filter,
@@ -1129,7 +1133,8 @@ class _Toolbar extends StatelessWidget {
                           ),
                           style: const TextStyle(
                             color: Colors.white,
-                            fontWeight: FontWeight.w800,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ],
@@ -1144,14 +1149,19 @@ class _Toolbar extends StatelessWidget {
                   style: OutlinedButton.styleFrom(
                     foregroundColor: const Color(0xFF334155),
                     backgroundColor: Colors.white,
-                    side: const BorderSide(color: Color(0xFFC9DAE6)),
-                    minimumSize: const Size(116, 42),
+                    side: const BorderSide(color: AppColors.border),
+                    minimumSize: const Size(80, 34),
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    textStyle: Theme.of(context).textTheme.labelMedium
+                        ?.copyWith(fontSize: 12, fontWeight: FontWeight.w600),
+                    visualDensity: VisualDensity.standard,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(9),
+                      borderRadius: BorderRadius.circular(8),
                     ),
                   ),
                 ),
-                const Spacer(),
+                const SizedBox(width: 16),
                 Text(
                   '${DateFormat('dd/MM/yyyy').format(fromDate)} - ${DateFormat('dd/MM/yyyy').format(toDate)}',
                   style: const TextStyle(
@@ -1239,6 +1249,7 @@ class _InvoiceListCard extends StatelessWidget {
     required this.dateFmt,
     required this.invoiceNumber,
     required this.onReload,
+    required this.onStartSale,
     required this.onLoadMore,
     required this.onSelect,
     required this.onPdf,
@@ -1258,6 +1269,7 @@ class _InvoiceListCard extends StatelessWidget {
   final DateFormat dateFmt;
   final String Function(SaleModel sale) invoiceNumber;
   final VoidCallback onReload;
+  final VoidCallback onStartSale;
   final VoidCallback onLoadMore;
   final ValueChanged<SaleModel> onSelect;
   final ValueChanged<SaleModel> onPdf;
@@ -1280,38 +1292,40 @@ class _InvoiceListCard extends StatelessWidget {
       elevation: 0,
       color: Colors.white,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(mobile ? 0 : 8),
-        side: const BorderSide(color: Color(0xFFC9D9E4)),
+        borderRadius: BorderRadius.circular(mobile ? 0 : 10),
+        side: const BorderSide(color: AppColors.border),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
           if (!mobile) ...[
-            Padding(
-              padding: EdgeInsets.fromLTRB(18, 12, 14, 10),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SizedBox(height: 2),
-                        Text(
-                          statusText,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textMuted,
-                          ),
+            SizedBox(
+              height: 40,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        statusText,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textMuted,
                         ),
-                      ],
+                      ),
                     ),
-                  ),
-                  IconButton(
-                    tooltip: 'Actualizar',
-                    onPressed: onReload,
-                    icon: const Icon(Icons.refresh_rounded),
-                  ),
-                ],
+                    IconButton(
+                      tooltip: 'Actualizar',
+                      onPressed: onReload,
+                      constraints: const BoxConstraints.tightFor(
+                        width: 32,
+                        height: 32,
+                      ),
+                      padding: EdgeInsets.zero,
+                      icon: const Icon(Icons.refresh_rounded, size: 18),
+                    ),
+                  ],
+                ),
               ),
             ),
             const Divider(height: 1),
@@ -1362,6 +1376,9 @@ class _InvoiceListCard extends StatelessWidget {
                     ),
                   );
                 }
+                if (loading && sales.isEmpty) {
+                  return const Center(child: CircularProgressIndicator());
+                }
                 if (sales.isEmpty) {
                   return Center(
                     child: Padding(
@@ -1376,7 +1393,8 @@ class _InvoiceListCard extends StatelessWidget {
                           ),
                           const SizedBox(height: 10),
                           const Text(
-                            'No hay facturas para mostrar',
+                            'No hay ventas con estos filtros',
+                            textAlign: TextAlign.center,
                             style: TextStyle(
                               fontWeight: FontWeight.w800,
                               color: AppColors.textPrimary,
@@ -1384,7 +1402,7 @@ class _InvoiceListCard extends StatelessWidget {
                           ),
                           const SizedBox(height: 4),
                           const Text(
-                            'Ajusta los filtros o el rango de fechas.',
+                            'Ajusta los filtros o comienza una nueva venta.',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               color: AppColors.textMuted,
@@ -1392,10 +1410,32 @@ class _InvoiceListCard extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: 14),
-                          OutlinedButton.icon(
-                            onPressed: onReload,
-                            icon: const Icon(Icons.refresh_rounded),
-                            label: const Text('Actualizar'),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            alignment: WrapAlignment.center,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              FilledButton.icon(
+                                onPressed: onStartSale,
+                                icon: const Icon(
+                                  Icons.point_of_sale_outlined,
+                                  size: 18,
+                                ),
+                                label: const Text('Vender ahora'),
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: AppColors.primary,
+                                  foregroundColor: AppColors.surface,
+                                  minimumSize: const Size(140, 40),
+                                  visualDensity: VisualDensity.standard,
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                  shape: const RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.zero,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -1974,97 +2014,95 @@ class _InvoiceRow extends StatelessWidget {
         onReturn: onReturn,
       );
     }
-    return InkWell(
-      onTap: onTap,
-      mouseCursor: SystemMouseCursors.click,
-      child: Container(
-        color: selected ? const Color(0xFFF0F6FF) : Colors.white,
-        padding: EdgeInsets.symmetric(
-          horizontal: mobile ? 12 : 18,
-          vertical: mobile ? 12 : 11,
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              flex: 18,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Factura ${invoiceNumber(sale)}',
-                    style: const TextStyle(fontWeight: FontWeight.w800),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final showCashier =
+            constraints.maxWidth /
+                (MediaQuery.textScalerOf(context).scale(12) / 12) >=
+            1000;
+        return InkWell(
+          onTap: onTap,
+          mouseCursor: SystemMouseCursors.click,
+          child: Container(
+            color: selected ? const Color(0xFFF0F6FF) : Colors.white,
+            padding: EdgeInsets.symmetric(
+              horizontal: mobile ? 12 : 18,
+              vertical: mobile ? 12 : 11,
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  flex: 18,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Factura ${invoiceNumber(sale)}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      EcfSaleHistoryBadge(fiscal: fiscal, intent: sale.fiscalVoucherType),
+                    ],
                   ),
-                  EcfSaleHistoryBadge(fiscal: fiscal, intent: sale.fiscalVoucherType),
-                  const SizedBox(height: 4),
-                  Text(
-                    sale.userName ?? sale.userId,
+                ),
+                Expanded(
+                  flex: 18,
+                  child: Text(
+                    sale.customerName ?? 'Consumidor Final',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Expanded(
+                  flex: 14,
+                  child: Text(
+                    dateFmt
+                        .format(sale.saleDate ?? DateTime.now())
+                        .replaceFirst(' ', '\n'),
                     style: const TextStyle(color: AppColors.textMuted),
                   ),
-                ],
-              ),
+                ),
+                if (showCashier)
+                  Expanded(
+                    flex: 16,
+                    child: Text(
+                      sale.userName ?? sale.userId,
+                      key: ValueKey('history-cashier-${sale.id}'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: AppColors.textMuted),
+                    ),
+                  ),
+                Expanded(
+                  flex: 12,
+                  child: Text(
+                    formatRdCurrencyAccounting(sale.netActiveAmount),
+                    textAlign: TextAlign.right,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                IconButton(
+                  tooltip: 'Imprimir',
+                  onPressed: onPrint,
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.print_outlined, size: 19),
+                ),
+                IconButton(
+                  tooltip: sale.canReturn ? 'Devolver' : 'Factura devuelta',
+                  onPressed: onReturn,
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.assignment_return_outlined, size: 19),
+                  color: AppColors.warning,
+                ),
+              ],
             ),
-            Expanded(
-              flex: 18,
-              child: Text(
-                sale.customerName ?? 'Consumidor Final',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            Expanded(
-              flex: 14,
-              child: Text(
-                dateFmt.format(sale.saleDate ?? DateTime.now()),
-                style: const TextStyle(color: AppColors.textMuted),
-              ),
-            ),
-            Expanded(
-              flex: 10,
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: _StatusPill(returnStatus: sale.returnStatus),
-              ),
-            ),
-            Expanded(
-              flex: 12,
-              child: Text(
-                formatRdCurrencyAccounting(sale.netActiveAmount),
-                textAlign: TextAlign.right,
-                style: const TextStyle(fontWeight: FontWeight.w800),
-              ),
-            ),
-            const SizedBox(width: 10),
-            IconButton(
-              tooltip: 'Ver detalle',
-              onPressed: onTap,
-              visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.visibility_outlined, size: 19),
-            ),
-            IconButton(
-              tooltip: 'Imprimir',
-              onPressed: onPrint,
-              visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.print_outlined, size: 19),
-            ),
-            IconButton(
-              tooltip: 'PDF',
-              onPressed: onPdf,
-              visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.picture_as_pdf_outlined, size: 19),
-              color: AppColors.error,
-            ),
-            IconButton(
-              tooltip: sale.canReturn ? 'Devolver' : 'Factura devuelta',
-              onPressed: onReturn,
-              visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.assignment_return_outlined, size: 19),
-              color: AppColors.warning,
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }
@@ -2380,116 +2418,147 @@ class _InvoiceDetailPanel extends StatelessWidget {
       color: Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
-        side: const BorderSide(color: Color(0xFFC9D9E4)),
+        side: const BorderSide(color: AppColors.border),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(18, 14, 10, 10),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    sale.customerName ?? 'Consumidor Final',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                      color: Color(0xFF23384A),
-                    ),
-                  ),
-                ),
-                _StatusPill(returnStatus: sale.returnStatus),
-                IconButton(
-                  tooltip: 'Cerrar',
-                  onPressed: onClose,
-                  icon: const Icon(Icons.close_rounded),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 18),
-            child: Column(
-              children: [
-                _DetailLine('Factura', invoiceNumber(sale)),
-                _DetailLine(
-                  'Fecha',
-                  dateFmt.format(sale.saleDate ?? DateTime.now()),
-                ),
-                _DetailLine('Cajero', sale.userName ?? sale.userId),
-                _DetailLine('Pago', _paymentLabel(sale.paymentMethod)),
-                if ((sale.ncf ?? '').trim().isNotEmpty) ...[
-                  _DetailLine(
-                    'Comprobante',
-                    fiscalVoucherLabel(sale.fiscalVoucherType),
-                  ),
-                  _DetailLine('NCF', sale.ncf!.trim()),
-                ],
-                if ((sale.fiscalCustomerTaxId ?? '').trim().isNotEmpty)
-                  _DetailLine('RNC/Cédula', sale.fiscalCustomerTaxId!.trim()),
-                if ((sale.fiscalCustomerName ?? '').trim().isNotEmpty)
-                  _DetailLine(
-                    'Cliente fiscal',
-                    sale.fiscalCustomerName!.trim(),
-                  ),
-              ],
-            ),
-          ),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(18, 16, 18, 8),
-            child: Divider(height: 1),
-          ),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 18),
-            child: Text(
-              'DETALLE',
-              style: TextStyle(
-                color: AppColors.textMuted,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 0.6,
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 18),
-              itemCount: sale.items.length + 1,
-              itemBuilder: (context, index) {
-                if (index == 0) return EcfSaleHistoryPanel(key: ValueKey('ecf-history-${sale.id}'), sale: sale);
-                final item = sale.items[index - 1];
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 5),
-                  child: Row(
+            child: CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(
+                  child: EcfSaleHistoryPanel(key: ValueKey('ecf-history-${sale.id}'), sale: sale),
+                ),
+                SliverToBoxAdapter(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Expanded(
-                        child: Text(
-                          item.productNameSnapshot,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(18, 14, 10, 10),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                sale.customerName ?? 'Consumidor Final',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                            ),
+                            _StatusPill(returnStatus: sale.returnStatus),
+                            IconButton(
+                              tooltip: 'Cerrar',
+                              onPressed: onClose,
+                              icon: const Icon(Icons.close_rounded),
+                            ),
+                          ],
                         ),
                       ),
-                      Text(
-                        '${qty(item)} x ${formatRdCurrencyAccounting(item.priceSoldUnit)}',
-                        style: const TextStyle(color: AppColors.textMuted),
-                      ),
-                      const SizedBox(width: 12),
-                      SizedBox(
-                        width: 96,
-                        child: Text(
-                          formatRdCurrencyAccounting(item.subtotalSold),
-                          textAlign: TextAlign.right,
-                          style: const TextStyle(fontWeight: FontWeight.w800),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 18),
+                        child: Column(
+                          children: [
+                            _DetailLine('Factura', invoiceNumber(sale)),
+                            _DetailLine(
+                              'Fecha',
+                              dateFmt.format(sale.saleDate ?? DateTime.now()),
+                            ),
+                            _DetailLine('Cajero', sale.userName ?? sale.userId),
+                            _DetailLine(
+                              'Pago',
+                              _paymentLabel(sale.paymentMethod),
+                            ),
+                            if ((sale.ncf ?? '').trim().isNotEmpty) ...[
+                              _DetailLine(
+                                'Comprobante',
+                                fiscalVoucherLabel(sale.fiscalVoucherType),
+                              ),
+                              _DetailLine('NCF', sale.ncf!.trim()),
+                            ],
+                            if ((sale.fiscalCustomerTaxId ?? '')
+                                .trim()
+                                .isNotEmpty)
+                              _DetailLine(
+                                'RNC/Cédula',
+                                sale.fiscalCustomerTaxId!.trim(),
+                              ),
+                            if ((sale.fiscalCustomerName ?? '')
+                                .trim()
+                                .isNotEmpty)
+                              _DetailLine(
+                                'Cliente fiscal',
+                                sale.fiscalCustomerName!.trim(),
+                              ),
+                          ],
                         ),
                       ),
+                      const Padding(
+                        padding: EdgeInsets.fromLTRB(18, 16, 18, 8),
+                        child: Divider(height: 1),
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 18),
+                        child: Text(
+                          'DETALLE',
+                          style: TextStyle(
+                            color: AppColors.textMuted,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0.6,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
                     ],
                   ),
-                );
-              },
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 18),
+                  sliver: SliverList.builder(
+                    itemCount: sale.items.length,
+                    itemBuilder: (context, index) {
+                      final item = sale.items[index];
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 5),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                item.productNameSnapshot,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            Flexible(
+                              child: Text(
+                                '${qty(item)} x ${formatRdCurrencyAccounting(item.priceSoldUnit)}',
+                                style: const TextStyle(
+                                  color: AppColors.textMuted,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            SizedBox(
+                              width: 96,
+                              child: Text(
+                                formatRdCurrencyAccounting(item.subtotalSold),
+                                textAlign: TextAlign.right,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
           ),
           const Divider(height: 1),
@@ -2517,7 +2586,16 @@ class _InvoiceDetailPanel extends StatelessWidget {
                     label: Text(sale.canReturn ? 'Devolver' : 'Devuelta'),
                     style: FilledButton.styleFrom(
                       backgroundColor: AppColors.secondary,
-                      padding: const EdgeInsets.symmetric(vertical: 15),
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.zero,
+                      ),
+                      minimumSize: const Size(0, 40),
+                      visualDensity: VisualDensity.standard,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 0,
+                      ),
                     ),
                   ),
                 ),
@@ -2528,16 +2606,37 @@ class _InvoiceDetailPanel extends StatelessWidget {
                     icon: const Icon(Icons.print_outlined),
                     label: const Text('Imprimir'),
                     style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 15),
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.zero,
+                      ),
+                      minimumSize: const Size(0, 40),
+                      visualDensity: VisualDensity.standard,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 0,
+                      ),
                     ),
                   ),
                 ),
                 const SizedBox(width: 10),
                 SizedBox(
-                  height: 50,
-                  child: OutlinedButton(
-                    onPressed: onPdf,
-                    child: const Icon(Icons.picture_as_pdf_outlined),
+                  height: 40,
+                  child: Tooltip(
+                    message: 'PDF',
+                    child: OutlinedButton(
+                      onPressed: onPdf,
+                      style: OutlinedButton.styleFrom(
+                        shape: const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.zero,
+                        ),
+                        minimumSize: const Size(40, 40),
+                        visualDensity: VisualDensity.standard,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                      ),
+                      child: const Icon(Icons.picture_as_pdf_outlined),
+                    ),
                   ),
                 ),
               ],
@@ -2567,22 +2666,22 @@ class _MetricBadge extends StatelessWidget {
     final isMobile = MediaQuery.sizeOf(context).width < 760;
     final boxColor = isMobile
         ? Colors.white.withValues(alpha: 0.10)
-        : const Color(0xFFEAF1FF);
+        : AppColors.surfaceAlt;
     final borderColor = isMobile
         ? Colors.white.withValues(alpha: 0.22)
-        : const Color(0xFFCFE0FF);
+        : AppColors.border;
     final iconBoxColor = isMobile
         ? Colors.white.withValues(alpha: 0.16)
         : const Color(0xFF1957E6).withValues(alpha: 0.10);
     final iconColor = isMobile ? Colors.white : const Color(0xFF1957E6);
     final labelColor = isMobile
         ? const Color(0xFFCFE8F2)
-        : const Color(0xFF1957E6).withValues(alpha: 0.80);
+        : AppColors.textSecondary;
     final valueColor = isMobile ? Colors.white : const Color(0xFF111827);
 
     return Container(
       constraints: const BoxConstraints(minWidth: 124, minHeight: 46),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
       decoration: BoxDecoration(
         color: boxColor,
         borderRadius: BorderRadius.circular(9),
@@ -2610,7 +2709,7 @@ class _MetricBadge extends StatelessWidget {
                 label.toUpperCase(),
                 style: TextStyle(
                   fontSize: 9.5,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w700,
                   color: labelColor,
                 ),
               ),
@@ -2619,8 +2718,8 @@ class _MetricBadge extends StatelessWidget {
                 value,
                 style: TextStyle(
                   color: valueColor,
-                  fontWeight: FontWeight.w900,
-                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
                 ),
               ),
             ],
@@ -2806,10 +2905,10 @@ class _SalesSummaryDialog extends StatelessWidget {
                 children: [
                   Container(
                     width: 42,
-                    height: 42,
+                    height: 40,
                     decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: 0.18),
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(8),
                     ),
                     child: const Icon(
                       Icons.summarize_rounded,
@@ -2936,7 +3035,7 @@ class _SummaryMetric extends StatelessWidget {
             height: 40,
             decoration: BoxDecoration(
               color: accent.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(icon, color: accent, size: 20),
           ),
