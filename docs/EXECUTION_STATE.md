@@ -20,6 +20,16 @@ No production migration, data/configuration change, deployment or real emission.
 Main merge and deployment remain review gates; further requested design edits
 can be added to this same PR before release.
 
+Local results: API build/schema PASS, migrations only on disposable local DBs
+PASS, backend3362 PASS/101 conditional skips, fiscal PostgreSQL32 PASS,
+HTTP56 PASS, Flutter767 PASS, analysis PASS89.1s, real app web build PASS80.7s.
+Published draft PR47 targets production-main and has22 changed paths with a
+matching remote/local inventory. The synthetic browser harness compiles, but
+its header action labels were not rendered, preventing navigation validation
+by accessible name. The completed-view screenshot was inspected; this does not
+grant visual PASS. Further design changes/review remain in the same PR.
+NO-GO for main merge/deploy until visual acceptance and final GitHub gates.
+
 ## Current work — consolidate deployed CRM licenses and PR45 (2026-11-15)
 
 Owner authorized local consolidation after the deployed backend changed to

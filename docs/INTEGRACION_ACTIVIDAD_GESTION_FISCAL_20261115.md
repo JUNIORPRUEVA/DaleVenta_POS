@@ -79,7 +79,11 @@ Evidencia privada sin credenciales publicadas:
 - HTTP:56 PASS en5 suites; la nueva frontera de actividad usa guard JWT
   simulado, mientras las suites PostgreSQL prueban el servicio real.
 - `flutter build web --release`: PASS,80.7s, destino UAT local.
-- Navegador: harness sintético con las vistas reales, validación final en curso.
+- Navegador: harness sintético con las vistas reales compilado correctamente.
+  Captura de la vista completada inspeccionada, pero las etiquetas de los botones
+  de la barra no se visualizaron en el harness y la navegación por su nombre no
+  pudo validarse. No se atribuye este resultado al entorno productivo ni se
+  presenta como PASS visual. La revisión queda pendiente antes de aprobar merge.
 
 Los primeros intentos del harness visual privado fallaron por un import faltante;
 el harness es externo al repositorio. La primera invocación de la regresión
@@ -100,4 +104,13 @@ separadamente su instalación y configuración.
 Una publicación del código no activa por sí misma la nueva medición.
 El propietario aún puede añadir las ediciones visuales pendientes al mismo PR.
 
-Estado de deploy: **NO-GO**, hasta cerrar validaciones y autorización de publicación.
+PR47: https://github.com/JUNIORPRUEVA/DaleVenta_POS/pull/47, en borrador hacia
+production-main, sin merge. Inventario remoto/local de22 archivos coincidente.
+La rama contiene los dos commits originales, el merge y las correcciones de
+integración. Bundle de respaldo verificado en la carpeta privada de evidencia.
+GitHub Actions del checkpoint8a57ad0d: sitio público y GitGuardian PASS;
+API/Flutter/Windows seguían ejecutándose al comprobarlos. No se infiere su resultado.
+
+Estado de merge/deploy: **NO-GO**, hasta cerrar la revisión visual, los controles
+del head final y las ediciones pendientes del propietario. No se necesita que el
+propietario fusione este borrador para continuar trabajando en el diseño.
