@@ -243,12 +243,16 @@ void main() {
     for (final size in [const Size(1024, 600), const Size(1920, 1080)]) {
       testWidgets('$name panel de filtros coherente en $size', (tester) async {
         await _pump(tester, credit, size, live: credit);
+        expect(
+          tester.getSize(find.byType(TextField).first).width,
+          lessThanOrEqualTo(560),
+        );
         await tester.tap(find.text('Filtro'));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 500));
         await tester.pump(const Duration(milliseconds: 500));
         expect(find.byType(HistoryFilterPanel), findsOneWidget);
-        expect(tester.getSize(find.byType(HistoryFilterPanel)).width, 430);
+        expect(tester.getSize(find.byType(HistoryFilterPanel)).width, 380);
         expect(find.text('Cancelar').hitTestable(), findsOneWidget);
         expect(find.text('Aplicar').hitTestable(), findsOneWidget);
         await expectLater(

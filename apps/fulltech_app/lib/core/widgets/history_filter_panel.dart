@@ -6,7 +6,7 @@ InputDecoration historyFilterInputDecoration(String label) => InputDecoration(
   filled: true,
   fillColor: const Color(0xFFF0F5FA),
   isDense: true,
-  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
   border: const OutlineInputBorder(
     borderRadius: BorderRadius.zero,
     borderSide: BorderSide(color: AppColors.border),
@@ -33,7 +33,7 @@ class HistoryFilterPanel extends StatelessWidget {
     color: Colors.white,
     elevation: 18,
     child: SizedBox(
-      width: (MediaQuery.sizeOf(context).width * .6).clamp(300, 430),
+      width: (MediaQuery.sizeOf(context).width * .6).clamp(300, 380),
       height: MediaQuery.sizeOf(context).height,
       child: SafeArea(
         left: false,
@@ -41,15 +41,15 @@ class HistoryFilterPanel extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 18, 12, 14),
+              padding: const EdgeInsets.fromLTRB(16, 14, 8, 12),
               child: Row(
                 children: [
                   Container(
-                    width: 42,
-                    height: 42,
+                    width: 32,
+                    height: 32,
                     decoration: BoxDecoration(
                       color: AppColors.primarySoft,
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(6),
                     ),
                     child: const Icon(
                       Icons.filter_alt_rounded,
@@ -64,7 +64,7 @@ class HistoryFilterPanel extends StatelessWidget {
                         Text(
                           title,
                           style: const TextStyle(
-                            fontSize: 20,
+                            fontSize: 17,
                             fontWeight: FontWeight.w900,
                             color: AppColors.textPrimary,
                           ),
@@ -97,7 +97,7 @@ class HistoryFilterPanel extends StatelessWidget {
               ),
             ),
             Container(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 18),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
               decoration: const BoxDecoration(
                 color: AppColors.surfaceAlt,
                 border: Border(top: BorderSide(color: AppColors.border)),
@@ -108,7 +108,10 @@ class HistoryFilterPanel extends StatelessWidget {
                     child: OutlinedButton(
                       onPressed: () => Navigator.pop(context),
                       style: OutlinedButton.styleFrom(
-                        minimumSize: const Size.fromHeight(46),
+                        minimumSize: const Size.fromHeight(40),
+                        shape: const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.all(Radius.circular(6)),
+                        ),
                       ),
                       child: const Text('Cancelar'),
                     ),
@@ -118,7 +121,10 @@ class HistoryFilterPanel extends StatelessWidget {
                     child: FilledButton.icon(
                       onPressed: onApply,
                       style: FilledButton.styleFrom(
-                        minimumSize: const Size.fromHeight(46),
+                        minimumSize: const Size.fromHeight(40),
+                        shape: const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.all(Radius.circular(6)),
+                        ),
                       ),
                       icon: const Icon(Icons.check_rounded),
                       label: const Text('Aplicar'),

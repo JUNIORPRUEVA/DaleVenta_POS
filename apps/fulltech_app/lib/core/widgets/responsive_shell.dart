@@ -750,7 +750,10 @@ class _DesktopShellActionGroup extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         minimumSize: const Size(0, 36),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        textStyle: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
+        textStyle: Theme.of(context).textTheme.labelMedium?.copyWith(
+          fontSize: 13.5,
+          fontWeight: FontWeight.w600,
+        ),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
       ),
     );

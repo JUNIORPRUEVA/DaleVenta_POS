@@ -66,7 +66,7 @@
     html, body {
       margin: 0;
       min-height: 100%;
-      background: var(--soft);
+      background: #f8fafc;
       color: var(--ink);
       font-family: "Manrope", "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
       letter-spacing: 0;
@@ -106,52 +106,6 @@
       pointer-events: none;
     }
 
-    .loader-brand {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 4px;
-      text-align: center;
-    }
-
-    .loader-logo {
-      width: 72px;
-      height: 72px;
-      object-fit: contain;
-    }
-
-    .loader-name {
-      margin: 10px 0 0;
-      color: var(--ink);
-      font-size: 20px;
-      font-weight: 900;
-    }
-
-    .loader-company {
-      margin: 0;
-      color: var(--muted);
-      font-size: 12px;
-      font-weight: 800;
-      letter-spacing: 0.08em;
-    }
-
-    .loader-bar {
-      width: min(220px, 60vw);
-      height: 4px;
-      border-radius: 999px;
-      background: #dfe8f2;
-      overflow: hidden;
-    }
-
-    .loader-progress {
-      display: block;
-      width: 40%;
-      height: 100%;
-      border-radius: inherit;
-      background: linear-gradient(90deg, var(--primary) 0%, var(--accent) 100%);
-      animation: loader-track 1.15s ease-in-out infinite;
-    }
-
     .loader-copy {
       margin: 0;
       color: var(--muted);
@@ -178,11 +132,6 @@
       font-size: 15.5px;
       line-height: 1.5;
       font-weight: 600;
-    }
-
-    @keyframes loader-track {
-      0% { transform: translateX(-120%); }
-      100% { transform: translateX(290%); }
     }
 
     #pwa-banner {
@@ -272,8 +221,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
   <link rel="preload" href="main.dart.js" as="script">
-  <link rel="preload" href="assets/assets/image/logo-web.webp" as="image">
-  <link rel="preload" href="assets/assets/image/fullpos-windows-ios-android.webp" as="image" type="image/webp">
+  <link rel="preload" href="assets/assets/image/logo.png" as="image">
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -362,13 +310,7 @@
   </noscript>
 
   <div id="app-loader" role="status" aria-live="polite" aria-label="Cargando FullPOS Cloud">
-    <div class="loader-brand">
-      <img class="loader-logo" src="assets/assets/image/logo-web.webp" alt="" width="72" height="72">
-      <p class="loader-name">FullPOS Cloud</p>
-      <p class="loader-company">FULLTECH SRL</p>
-    </div>
-    <div class="loader-bar"><span class="loader-progress"></span></div>
-    <p class="loader-copy">Cargando FullPOS Cloud…</p>
+    <p class="loader-copy">Iniciando…</p>
   </div>
 
   <div id="pwa-banner" aria-live="polite">
@@ -557,6 +499,7 @@
     };
     window.addEventListener('flutter-first-frame', function () {
       document.body.classList.add('has-flutter');
+      window.fullposCompleteWebStartup();
     });
 
     (function () {

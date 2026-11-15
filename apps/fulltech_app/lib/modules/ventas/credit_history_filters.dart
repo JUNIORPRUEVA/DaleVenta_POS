@@ -97,7 +97,7 @@ class _CreditHistoryFilterPanelState extends State<CreditHistoryFilterPanel> {
         segments: const [
           ButtonSegment(value: 0, label: Text('Hoy')),
           ButtonSegment(value: 1, label: Text('Ayer')),
-          ButtonSegment(value: 2, label: Text('Intervalo')),
+          ButtonSegment(value: 2, label: Text('Rango', maxLines: 1)),
         ],
         selected: {quick},
         onSelectionChanged: (values) => setState(() {
@@ -113,6 +113,10 @@ class _CreditHistoryFilterPanelState extends State<CreditHistoryFilterPanel> {
           }
         }),
         style: ButtonStyle(
+          visualDensity: VisualDensity.compact,
+          padding: const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+          ),
           shape: WidgetStatePropertyAll(
             RoundedRectangleBorder(borderRadius: BorderRadius.zero),
           ),
