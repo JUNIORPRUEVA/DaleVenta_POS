@@ -9,7 +9,7 @@ export class UsageTelemetryInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const request = context.switchToHttp().getRequest();
     const path = request?.path || request?.url || '';
-    if (!path.startsWith('/internal/usage-telemetry') && path !== '/health') {
+    if (!path.startsWith('/internal/usage-telemetry') && !path.startsWith('/activity/') && path !== '/health') {
       this.telemetry.recordRequestUsage(request);
     }
     return next.handle();
