@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 
 import 'package:daleventa_pos/features/ecf/data/ecf_repository.dart';
 import 'package:daleventa_pos/features/ecf/ecf_models.dart';
@@ -278,7 +279,7 @@ void main() {
     // La bandeja es secundaria: el proceso de habilitación vive en /ecf.
     expect(find.text('Puesta en marcha'), findsNothing);
     expect(
-      find.text('Todavía no hay comprobantes electrónicos.'),
+      find.text('Todavía no hay facturas electrónicas de prueba.'),
       findsOneWidget,
     );
     expect(find.text('Aceptado DGII'), findsNothing);
@@ -302,9 +303,64 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Ir a ventas'), findsOneWidget);
+    expect(find.text('Numeración fiscal'), findsOneWidget);
     // Con la bandeja vacía de verdad no hay filtros que quitar.
     expect(find.text('Quitar filtros'), findsNothing);
   });
+
+  for (final environment in ['PRODUCTION', 'SANDBOX']) {
+    testWidgets(
+      'empty $environment tray links to existing numbering without emitting',
+      (tester) async {
+        final dio = Dio()
+          ..httpClientAdapter = _FakeAdapter(
+            tray(
+              (_) => {'total': 0, 'items': <Object>[]},
+              capabilities: {...capabilitiesJson(), 'environment': environment},
+            ),
+          );
+        final router = GoRouter(
+          initialLocation: '/ecf/documents',
+          routes: [
+            GoRoute(
+              path: '/ecf/documents',
+              builder: (_, __) => const EcfDocumentsPage(),
+            ),
+            GoRoute(
+              path: '/ecf/config',
+              builder: (_, __) =>
+                  const Scaffold(body: Text('Rangos autorizados')),
+            ),
+          ],
+        );
+        addTearDown(router.dispose);
+        await pumpTray(
+          tester,
+          ProviderScope(
+            overrides: [
+              ecfRepositoryProvider.overrideWithValue(EcfRepository(dio)),
+            ],
+            child: MaterialApp.router(routerConfig: router),
+          ),
+        );
+        expect(
+          find.text(
+            environment == 'PRODUCTION'
+                ? 'Todavía no hay facturas electrónicas en producción.'
+                : 'Todavía no hay facturas electrónicas de prueba.',
+          ),
+          findsOneWidget,
+        );
+        await tester.tap(
+          find.byKey(const ValueKey('ecf_documents_empty_numbering')),
+        );
+        await tester.pumpAndSettle();
+        expect(router.routeInformationProvider.value.uri.path, '/ecf/config');
+        expect(find.text('Rangos autorizados'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
 
   testWidgets('a filter with no matches offers to clear the filters', (
     tester,

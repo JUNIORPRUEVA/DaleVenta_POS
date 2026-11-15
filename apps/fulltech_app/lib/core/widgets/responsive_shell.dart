@@ -288,8 +288,8 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
         ? <DesktopShellActionItem>[
             DesktopShellActionItem(
               icon: Icons.receipt_long_outlined,
-              tooltip: 'Comprobantes electrónicos',
-              label: 'Comprobantes',
+              tooltip: 'Facturas electrónicas generadas',
+              label: 'Facturas electrónicas',
               onPressed: () => context.go(Routes.ecfDocuments),
             ),
             // Cuando la postulación termina, el módulo deja de mostrar el
@@ -297,8 +297,8 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
             // la configuración— vive aquí, en la barra, en un solo sitio.
             DesktopShellActionItem(
               icon: Icons.verified_outlined,
-              tooltip: 'Postulación',
-              label: 'Postulación',
+              tooltip: 'Numeración y configuración fiscal',
+              label: 'Gestión fiscal',
               onPressed: () => _openEcfPostulationMenu(context),
             ),
           ]
@@ -403,7 +403,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
               const Padding(
                 padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
                 child: Text(
-                  'Postulación electrónica',
+                  'Gestión fiscal',
                   style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
                 ),
               ),
@@ -415,13 +415,16 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
               ),
               ListTile(
                 leading: const Icon(Icons.receipt_long_outlined),
-                title: const Text('Comprobantes electrónicos'),
+                title: const Text('Facturas electrónicas'),
                 subtitle: const Text('Ver lo emitido y lo pendiente de envío'),
                 onTap: () => go(Routes.ecfDocuments),
               ),
               ListTile(
                 leading: const Icon(Icons.tune_outlined),
-                title: const Text('Configuración de facturación'),
+                title: const Text('Numeración y configuración fiscal'),
+                subtitle: const Text(
+                  'Consultar y administrar los rangos autorizados',
+                ),
                 onTap: () => go(Routes.ecfConfig),
               ),
               const SizedBox(height: 8),

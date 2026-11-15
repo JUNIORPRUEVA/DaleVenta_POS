@@ -1,5 +1,25 @@
 # Execution State
 
+## Current work — fiscal navigation and company activity integration (2026-11-15)
+
+Owner confirmed the activity writer finished and authorized integration of the
+pending work. Own worktree C:/src/fullpos-fiscal-activity-integration-20261115,
+branch agent/fiscal-activity-integration-20261115, base origin/production-main
+859bc5a9. Source worktree is clean at0576cfd0. Merge5db36b6b preserves commits
+ec6c2b05/0576cfd0 and the entire existing fiscal/design ancestry. The only merge
+conflict was main.dart: retain the current login-aware AppErrorOverlay and add
+the default-disabled UsageActivityBoundary around the existing stack.
+
+Plan: audit activity authentication, company isolation, optional-table behavior
+and retention; integrate source commits; clarify fiscal navigation and the empty
+invoice tray; validate backend, real disposable PostgreSQL, Flutter, browser
+layout and regressions; review provenance and publish one reviewable PR.
+The client reporting build flag and server collection flag stay off by default.
+The new additive migration is tested only on dedicated local fixtures56701.
+No production migration, data/configuration change, deployment or real emission.
+Main merge and deployment remain review gates; further requested design edits
+can be added to this same PR before release.
+
 ## Current work — consolidate deployed CRM licenses and PR45 (2026-11-15)
 
 Owner authorized local consolidation after the deployed backend changed to

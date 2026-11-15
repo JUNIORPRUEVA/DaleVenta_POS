@@ -219,6 +219,8 @@ class _EcfDocumentsPageState extends ConsumerState<EcfDocumentsPage> {
                       moreError: _moreError,
                       onLoadMore: () => _loadMore(items.length),
                       onGoToSales: _goToSales,
+                      onViewNumbering: () => context.go(Routes.ecfConfig),
+                      environment: capabilities.valueOrNull?.environment,
                       filtered: _filter != EcfDocumentFilter.all,
                       onClearFilters: () {
                         _searchController.clear();
@@ -488,6 +490,8 @@ class _DocumentList extends StatelessWidget {
     required this.moreError,
     required this.onLoadMore,
     required this.onGoToSales,
+    required this.onViewNumbering,
+    required this.environment,
     required this.filtered,
     required this.onClearFilters,
   });
@@ -501,6 +505,8 @@ class _DocumentList extends StatelessWidget {
 
   /// Salida cuando todavía no existe ningún comprobante.
   final VoidCallback onGoToSales;
+  final VoidCallback onViewNumbering;
+  final String? environment;
   final bool filtered;
   final VoidCallback onClearFilters;
 
@@ -521,6 +527,10 @@ class _DocumentList extends StatelessWidget {
             Text(
               filtered
                   ? 'Ningún comprobante coincide con los filtros aplicados.'
+                  : environment == 'PRODUCTION'
+                  ? 'Todavía no hay facturas electrónicas en producción.'
+                  : environment == 'SANDBOX'
+                  ? 'Todavía no hay facturas electrónicas de prueba.'
                   : 'Todavía no hay comprobantes electrónicos.',
               textAlign: TextAlign.center,
               style: theme.textTheme.bodyMedium,
@@ -530,9 +540,8 @@ class _DocumentList extends StatelessWidget {
               ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 460),
                 child: Text(
-                  'Al cobrar una venta eliges el comprobante (E31 o E32). El '
-                  'sistema toma el siguiente número de tu secuencia y lo envía '
-                  'al proveedor; aquí verás el estado de cada uno.',
+                  'Aquí aparecerán las facturas que generes al cobrar con E31 o E32. '
+                  'Los rangos autorizados se consultan en Numeración fiscal.',
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
@@ -545,6 +554,13 @@ class _DocumentList extends StatelessWidget {
                 onPressed: onGoToSales,
                 icon: const Icon(Icons.point_of_sale_outlined, size: 18),
                 label: const Text('Ir a ventas'),
+              ),
+              const SizedBox(height: 6),
+              TextButton.icon(
+                key: const ValueKey('ecf_documents_empty_numbering'),
+                onPressed: onViewNumbering,
+                icon: const Icon(Icons.format_list_numbered, size: 18),
+                label: const Text('Numeración fiscal'),
               ),
             ],
             if (filtered) ...[

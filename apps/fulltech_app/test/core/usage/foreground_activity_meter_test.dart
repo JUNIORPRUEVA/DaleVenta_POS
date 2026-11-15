@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import '../../../lib/core/usage/foreground_activity_meter.dart';
+import 'package:daleventa_pos/core/usage/foreground_activity_meter.dart';
 
 void main() {
   test('counts foreground elapsed time and excludes background', () {

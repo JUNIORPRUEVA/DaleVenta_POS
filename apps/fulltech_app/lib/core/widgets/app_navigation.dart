@@ -297,8 +297,8 @@ String resolveNavigationTitle(
   // Nivel dentro del módulo e-CF: el título del módulo no explica qué se está
   // editando, y el botón de volver regresa a la puesta en marcha.
   if (path == Routes.ecfFiscalData) return 'Datos fiscales';
-  if (path == Routes.ecfDocuments) return 'Comprobantes electrónicos';
-  if (path == Routes.ecfConfig) return 'Estado del módulo e-CF';
+  if (path == Routes.ecfDocuments) return 'Facturas electrónicas';
+  if (path == Routes.ecfConfig) return 'Numeración y configuración fiscal';
   if (path == Routes.ecfDgii) return 'Habilitación DGII';
 
   for (final section in sections) {
