@@ -1,5 +1,51 @@
 # Execution State
 
+## Current work — public website, startup and three histories (2026-11-15)
+
+Owner requests a separate electronic-invoicing announcement above the public
+navigation, Dominican-only positioning and bank-transfer-only plan payment copy;
+remove the old branded HTML access cover so the existing large-logo/ring Flutter
+splash becomes visible at the first frame; narrow history search and square
+filter controls/panels for sales, quotations and credit; preview together locally.
+Own worktree C:/src/fullpos-web-history-polish-20261115, own branch
+agent/web-history-polish-20261115, base production-main deb96f86 (merged PR47).
+No production changes, deploy, migration, real invoice or shared worktree edits.
+
+Audit: the HTML cover hid Flutter until completion instead of its first frame.
+Astro login added another handoff cover; its busy button already covers waiting.
+Desktop history search had unbounded width; quote/credit share HistoryToolbar
+with an existing maxSearchWidth property, while sales has a separate toolbar.
+Mobile auth fixed-height nested scrolling prevented document-level scrolling.
+Browser chrome belongs to Chrome/Safari: document scrolling can be repaired,
+but hiding an address bar cannot be guaranteed by page CSS or headless emulation.
+
+Plan/acceptance: implement only copy/layout/loading-cover changes, keep auth
+ticket/session logic and fiscal/business operations intact; run website unit,
+check/build, Flutter analysis and targeted history/fiscal regression; inspect
+desktop/mobile visual artifacts and serve a local synthetic preview for owner
+review. Existing approved design/fiscal history is preserved. No auto merge/deploy.
+
+Local acceptance: website13 tests PASS, Astro check0 errors/0 warnings with one
+pre-existing returnValue hint, website14 routes built. Flutter full analysis
+PASS118s; final three affected control files analyze PASS. Final full-app web
+release build PASS96.8s, private synthetic gallery build PASS. Broad sales,
+quotation, startup and fiscal history regression391 PASS; final Windows39 and
+Linux39 history tests PASS without updating references. Browser10 checks PASS
+at1440/390, zero page errors, all external requests blocked except locally served
+CanvasKit; fiscal action text visible/clickable with external fonts blocked.
+Private preview fixture/session and mobile accessibility selectors were corrected
+without changing product authentication. Intentional scoped PNG baselines
+updated on Windows/Linux and sampled visually. No test tolerances relaxed.
+
+Local previews remain available: website127.0.0.1:49975, gallery127.0.0.1:59627.
+Gallery tabs: sales, quotations, credit, actual Flutter splash and fiscal toolbar.
+No API/schema/migration/lockfile change. No SSH, production access or real billing.
+Owner reviewed the design on 2026-11-15 and approved it without further changes.
+Integration continues as a new PR to production-main; deployment, the optional
+activity migration and its flags remain separate decisions. Previews were
+restarted on the same local ports after the earlier servers stopped replying.
+NO-GO for deployment until the owner authorizes it explicitly.
+
 ## Current work — fiscal navigation and company activity integration (2026-11-15)
 
 Owner confirmed the activity writer finished and authorized integration of the
