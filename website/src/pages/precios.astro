@@ -19,7 +19,7 @@ const schema = {
 
 <BaseLayout
   title="Precios"
-  description="Planes de FullPOS Cloud desde RD$1,000 al mes. Incluye 7 días de prueba gratis; el pago se realiza con tarjeta al terminar la prueba."
+  description="Planes de FullPOS Cloud para República Dominicana desde RD$1,000 al mes. Incluye 7 días de prueba gratis; pago por transferencia bancaria."
   path="/precios"
   schema={[schema]}
 >
@@ -32,7 +32,7 @@ const schema = {
         </h1>
         <p class="lead">
           Todos los planes incluyen los mismos módulos en todos tus dispositivos. Empiezas
-          con la prueba gratuita y el pago se realiza con tarjeta al terminar.
+          con la prueba gratuita y pagas por transferencia bancaria al terminar.
         </p>
       </div>
 
@@ -194,11 +194,11 @@ const schema = {
               stroke-linecap="round"
               stroke-linejoin="round"
               aria-hidden="true"
-              set:html={icons.card}
+              set:html={icons.bank}
             />
           </div>
-          <h3>Pago con tarjeta</h3>
-          <p>Al terminar la prueba eliges tu plan y pagas con tarjeta.</p>
+          <h3>Pago por transferencia</h3>
+          <p>Al terminar la prueba eliges tu plan. El único medio de pago es la transferencia bancaria.</p>
         </article>
         <article class="card">
           <div class="icon-box">

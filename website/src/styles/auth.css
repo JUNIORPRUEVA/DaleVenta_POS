@@ -35,6 +35,7 @@ html[data-auth-motion='enter'] .auth-panel {
   background: #fff;
 }
 
+
 .auth-side {
   display: grid;
   grid-template-rows: minmax(0, 1fr);
@@ -1112,14 +1113,6 @@ body.reg-modal-open {
 .niche-empty { padding: 20px 0; color: var(--ink-2); font-size: .85rem; }
 .niche-picker-footer { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: .76rem; line-height: 1.5; }
 @keyframes niche-enter { from { opacity: 0; transform: translateY(8px) scale(.985); } }
-.app-handoff { position: fixed; inset: 0; z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; padding: 24px; background: #f3f7fa; color: var(--ink); text-align: center; }
-.app-handoff[hidden] { display: none; }
-.app-handoff-brand { display: grid; justify-items: center; gap: 12px; }
-.app-handoff-brand img { border-radius: var(--r-lg); }
-.app-handoff-brand strong { font-size: 1.2rem; letter-spacing: -.03em; }
-.app-handoff-brand span { font-size: .7rem; letter-spacing: .18em; color: var(--ink-3); }
-.app-handoff-spinner { width: 28px; height: 28px; border: 2px solid var(--blue-line); border-top-color: var(--blue); border-radius: 50%; animation: prepare-spin 900ms linear infinite; }
-.app-handoff p { margin: 0; color: var(--ink-2); font-size: .85rem; }
 @media (max-width: 480px) {
   .niche-picker { width: calc(100vw - 24px); max-height: 88dvh; }
   .niche-picker-content { padding: 20px; }
@@ -1128,5 +1121,18 @@ body.reg-modal-open {
 @media (prefers-reduced-motion: reduce) {
   html[data-auth-motion='enter'] .auth-panel, .niche-picker[open] .niche-picker-content,
   ::view-transition-old(auth-card), ::view-transition-new(auth-card) { animation: none !important; }
-  .app-handoff-spinner { animation: none; }
+}
+
+/* En móvil desplaza el documento, no una columna interna de altura fija.
+   El navegador conserva el control de sus barras y del teclado. */
+@media (max-width: 720px) {
+  .auth-shell {
+    height: auto;
+    min-height: 100svh;
+    overflow: clip;
+  }
+  .auth-side .auth-main {
+    overflow-y: visible;
+    min-height: 100svh;
+  }
 }

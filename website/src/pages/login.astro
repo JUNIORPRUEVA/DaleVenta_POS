@@ -97,7 +97,6 @@ const appUrl = import.meta.env.PUBLIC_APP_URL ?? '/home';
     const form = root.querySelector<HTMLFormElement>('[data-login-form]')!;
     const alertBox = root.querySelector<HTMLElement>('[data-form-alert]')!;
     const submitBtn = root.querySelector<HTMLButtonElement>('[data-submit]')!;
-    const handoff = document.querySelector<HTMLElement>('[data-app-handoff]')!;
     let submitting = false;
 
     const setError = (name: string, message: string | null): void => {
@@ -182,11 +181,9 @@ const appUrl = import.meta.env.PUBLIC_APP_URL ?? '/home';
         }
 
         saveSessionFromAuth(data, value('email').toLowerCase());
-        handoff.hidden = false;
         const target = await getAppHandoffUrl(apiBase, root.dataset.appUrl ?? '/home');
         window.location.replace(target);
       } catch (error) {
-        handoff.hidden = true;
         alertBox.textContent =
           error instanceof SiteSessionStorageError
             ? error.message

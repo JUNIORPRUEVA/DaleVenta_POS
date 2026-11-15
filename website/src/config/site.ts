@@ -7,11 +7,11 @@
 export const site = {
   name: 'FullPOS Cloud',
   company: 'FULLTECH SRL',
-  tagline: 'Sistema POS en la nube para ventas, inventario y caja',
+  tagline: 'Sistema POS en la nube para empresas de República Dominicana',
   /** Firma discreta bajo la marca. */
   byline: 'by FULLTECH SRL',
   description:
-    'Ventas, inventario, compras, contabilidad, clientes y facturación electrónica en un solo sistema. Rápido en caja y con hasta 48 horas de trabajo sin internet. Prueba gratis 7 días.',
+    'Sistema POS para empresas de República Dominicana. Ventas, inventario, compras, contabilidad, clientes y facturación electrónica en un solo sistema. Prueba gratis 7 días.',
   url: 'https://fullposcloud.fulltechrd.com',
   supportEmail: 'fulltechsd@gmail.com',
   supportPhoneLabel: '829-436-3936',
@@ -76,6 +76,7 @@ export const icons = {
   scale:
     '<path d="M12 4v16M7 20h10"/><path d="M4 9h16"/><path d="m4 9 3 5a3 3 0 0 1-6 0z"/><path d="m20 9-3 5a3 3 0 0 0 6 0z"/>',
   card: '<rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19"/><path d="M6.5 15h3"/>',
+  bank: '<path d="m3 9 9-6 9 6H3Z"/><path d="M5 10v8m5-8v8m4-8v8m5-8v8M3 21h18M3 18h18"/>',
   whatsapp:
     '<path d="M20.5 11.6a8.4 8.4 0 0 1-12.4 7.4L3.5 20.5l1.6-4.5a8.4 8.4 0 1 1 15.4-4.4z"/><path d="M8.7 8.6c.4-.1.8 0 1 .4l.7 1.2c.1.3.1.5-.1.7l-.5.5c-.1.2-.2.4-.1.6a6 6 0 0 0 2.8 2.5c.2.1.4 0 .6-.1l.5-.5c.2-.2.4-.2.7-.1l1.2.6c.4.2.5.6.4 1a2 2 0 0 1-1.6 1.4c-2.4.3-6.4-2.6-7-5.2a2 2 0 0 1 1-2.2z"/>',
   /** Glifo solido de WhatsApp para el boton flotante (viewBox 0 0 16 16). */
@@ -291,7 +292,7 @@ export const startSteps = [
   {
     n: '4',
     title: 'Activa el plan que necesites',
-    text: 'Al terminar la prueba eliges tu plan y el pago se realiza con tarjeta.',
+    text: 'Al terminar la prueba eliges tu plan y pagas por transferencia bancaria.',
   },
 ];
 
@@ -309,8 +310,8 @@ export const billing = [
   },
   {
     n: '03',
-    title: 'Pagas con tarjeta',
-    text: 'El pago del plan se realiza con tarjeta.',
+    title: 'Pagas por transferencia',
+    text: 'El único medio de pago del plan es la transferencia bancaria.',
   },
 ];
 
@@ -530,12 +531,12 @@ export const faqs = [
     a: 'Incluye el sistema completo: ventas, inventario, compras, caja, clientes, reportes y los demás módulos, en todos tus dispositivos. No se cobra nada durante esos 7 días.',
   },
   {
-    q: '¿Necesito tarjeta para empezar la prueba?',
-    a: 'No. Creas tu cuenta y empiezas a usar el sistema sin registrar ningún método de pago. La tarjeta se usa al terminar la prueba, solo si decides continuar.',
+    q: '¿Debo pagar para empezar la prueba?',
+    a: 'No. Creas tu cuenta y pruebas el sistema gratis durante 7 días. Si decides continuar, eliges tu plan y pagas por transferencia bancaria.',
   },
   {
     q: '¿Cómo se paga después de los 7 días?',
-    a: 'El pago del plan se realiza con tarjeta. Eliges el plan que vas a usar y desde ese momento queda activa tu suscripción.',
+    a: 'El único medio de pago es la transferencia bancaria. Elige tu plan y contacta con soporte para recibir las instrucciones y confirmar tu pago.',
   },
   {
     q: '¿Qué pasa si decido no continuar?',
