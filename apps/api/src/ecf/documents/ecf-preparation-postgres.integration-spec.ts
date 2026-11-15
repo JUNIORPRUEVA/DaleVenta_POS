@@ -59,21 +59,22 @@ uat("EcfPreparationService (venta → borrador e-CF) on PostgreSQL", () => {
       },
     });
     const user = { id: userId, role: "ADMIN", companyId } as TenantUser;
+    // Keep authorization and operational range independent in the fixture.
+    await prisma.ecfDgiiAuthorizedSequence.create({
+      data: {
+        environment: "SANDBOX",
+        companyId,
+        documentType: "E31",
+        authorizationNumber: "SYNTH-E31",
+        rangeFrom: 1,
+        rangeTo: 10_000,
+        approvedQuantity: 10_000,
+        declarationVersion: "v1",
+        declaredByUserId: userId,
+        expiresAt: new Date("2026-12-31T23:59:59.999Z"),
+      },
+    });
     if (options.withRange !== false) {
-      // La numeración exige autorización DGII declarada (fail-closed).
-      await prisma.ecfDgiiAuthorizedSequence.create({
-        data: {
-          environment: "SANDBOX",
-          companyId,
-          documentType: "E31",
-          authorizationNumber: "SYNTH-E31",
-          rangeFrom: 1,
-          rangeTo: 10_000,
-          approvedQuantity: 10_000,
-          declarationVersion: "v1",
-          declaredByUserId: userId,
-        },
-      });
       await new EcfSequenceService(prisma).register(user, {
         documentType: "E31",
         startNumber: 1,
@@ -168,6 +169,30 @@ uat("EcfPreparationService (venta → borrador e-CF) on PostgreSQL", () => {
     });
     expect(stored.sourceType).toBe("SALE");
     expect(stored.sourceId).toBe(sale.id);
+  });
+
+  it("refuses a changed E31 authorization between date resolution and standalone allocation", async () => {
+    const { companyId, user } = await tenant();
+    const sale = await createSale(companyId);
+    const original = EcfSequenceService.prototype.e31Expiry;
+    const hook = jest.spyOn(EcfSequenceService.prototype, "e31Expiry")
+      .mockImplementationOnce(async function (this: EcfSequenceService, scopedUser, tx) {
+        const expiry = await original.call(this, scopedUser, tx);
+        await prisma.ecfDgiiAuthorizedSequence.updateMany({
+          where: { companyId, documentType: "E31", environment: "SANDBOX" },
+          data: { expiresAt: new Date("2035-12-31T23:59:59.999Z") },
+        });
+        return expiry;
+      });
+    try {
+      await expect(preparation.prepareFromSale(user, baseInput(sale.id)))
+        .rejects.toThrow("ECF_SEQUENCE_EXPIRY_MISMATCH");
+      expect(await prisma.ecfElectronicDocument.count({ where: { companyId } })).toBe(0);
+      expect(await prisma.ecfSequenceAuditLog.count({ where: { companyId, action: "ALLOCATED" } })).toBe(0);
+      expect((await prisma.ecfSequence.findFirstOrThrow({ where: { companyId, active: true } })).nextNumber).toBe(1);
+    } finally {
+      hook.mockRestore();
+    }
   });
 
   it("preparing is NOT emitting: no provider id, no attempt, no evidence receipt", async () => {

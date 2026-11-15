@@ -17,6 +17,10 @@ describe("POS e-CF readiness", () => {
       ecfSequence: {
         findMany: jest.fn().mockResolvedValue([]),
       },
+      ecfDgiiAuthorizedSequence: { findMany: jest.fn().mockResolvedValue(
+        ["E31", "E32"].map(documentType => ({ documentType, authorizationNumber: "SYNTHETIC",
+          rangeFrom: 1, rangeTo: 100, approvedQuantity: 100, expiresAt: new Date("2035-12-31T23:59:59.999Z") }))),
+      },
       appConfig: { findFirst: jest.fn().mockResolvedValue({ rnc: "101000001" }) },
       ecfDosaCompanyCredential: { findFirst: jest.fn().mockResolvedValue({ present: { apiKeyTest: true } }) },
     };
@@ -62,5 +66,27 @@ describe("POS e-CF readiness", () => {
     const { service, prisma } = setup("AUTHORIZED_SANDBOX", false);
     expect((await service.capabilities(user)).posReady).toBe(false);
     expect(prisma.ecfSequence.findMany).not.toHaveBeenCalled();
+    expect(prisma.ecfDgiiAuthorizedSequence.findMany).not.toHaveBeenCalled();
+  });
+
+  it("requires this environment's valid authorization as well as its range", async () => {
+    const { prisma, service } = setup();
+    prisma.ecfSequence.findMany.mockResolvedValue([{ documentType: "E31", nextNumber: 1, endNumber: 10 }] as never);
+    prisma.ecfDgiiAuthorizedSequence.findMany.mockResolvedValue([]);
+    expect(await service.capabilities(user)).toMatchObject({ posReady: false, posAvailableTypes: [], e31SequenceDueDate: null });
+    expect(prisma.ecfDgiiAuthorizedSequence.findMany).toHaveBeenCalledWith({
+      where: { companyId: user.companyId, environment: "SANDBOX", documentType: { in: ["E31", "E32"] } },
+    });
+  });
+
+  it("projects the declared E31 date and rejects missing, expired or out-of-range authorizations", async () => {
+    const { prisma, service } = setup();
+    prisma.ecfSequence.findMany.mockResolvedValue([{ documentType: "E31", nextNumber: 5, endNumber: 10 }] as never);
+    expect(await service.capabilities(user)).toMatchObject({ posReady: true, e31SequenceDueDate: "2035-12-31" });
+    for (const override of [{ expiresAt: null }, { expiresAt: new Date("2000-01-01") }, { rangeTo: 4 }]) {
+      prisma.ecfDgiiAuthorizedSequence.findMany.mockResolvedValue([{ documentType: "E31", authorizationNumber: "SYNTHETIC",
+        rangeFrom: 1, rangeTo: 10, approvedQuantity: 10, expiresAt: new Date("2035-12-31"), ...override }]);
+      expect(await service.capabilities(user)).toMatchObject({ posReady: false, e31SequenceDueDate: null });
+    }
   });
 });

@@ -12,6 +12,7 @@ import 'package:daleventa_pos/features/auth/presentation/login_screen.dart';
 import 'package:daleventa_pos/features/auth/presentation/register_screen.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -45,6 +46,18 @@ void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
   });
+
+  for (final platform in [
+    TargetPlatform.windows,
+    TargetPlatform.android,
+    TargetPlatform.iOS,
+  ]) {
+    test('$platform disables native business registration', () {
+      debugDefaultTargetPlatformOverride = platform;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      expect(isBusinessRegistrationDisabledOnCurrentPlatform, isTrue);
+    });
+  }
 
   Future<void> pumpLogin(
     WidgetTester tester, {
@@ -105,7 +118,7 @@ void main() {
     return router;
   }
 
-  testWidgets('iOS login keeps access fields and hides business registration', (
+  testWidgets('iOS login keeps access fields and offers web registration', (
     tester,
   ) async {
     await pumpLogin(
@@ -122,30 +135,19 @@ void main() {
     expect(find.text('Crear mi negocio'), findsNothing);
     expect(find.text('Crear mi empresa'), findsNothing);
     expect(find.text('¿No tienes una cuenta?'), findsOneWidget);
-    expect(
-      find.text('Solicita acceso al administrador de tu empresa.'),
-      findsOneWidget,
-    );
-    expect(
-      find.text('FullPOS Cloud requiere una cuenta empresarial existente.'),
-      findsOneWidget,
-    );
+    expect(find.text('Crear cuenta'), findsOneWidget);
+
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Android login hides business registration and explains access', (
-    tester,
-  ) async {
+  testWidgets('Android login offers web registration', (tester) async {
     await pumpLogin(tester, registrationDisabled: true);
 
     expect(find.text('Iniciar sesión'), findsOneWidget);
     expect(find.text('Crear mi negocio'), findsNothing);
     expect(find.text('Crear mi empresa'), findsNothing);
     expect(find.text('¿No tienes una cuenta?'), findsOneWidget);
-    expect(
-      find.text('Solicita acceso al administrador de tu empresa.'),
-      findsOneWidget,
-    );
+    expect(find.text('Crear cuenta'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -159,8 +161,8 @@ void main() {
     );
 
     expect(find.text('Iniciar sesión'), findsOneWidget);
-    expect(find.text('Crear mi negocio'), findsOneWidget);
-    expect(find.text('¿No tienes una cuenta?'), findsNothing);
+    expect(find.text('Crear cuenta'), findsOneWidget);
+    expect(find.text('¿No tienes una cuenta?'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -188,20 +190,23 @@ void main() {
     expect(find.byType(RegisterScreen), findsNothing);
   });
 
-  testWidgets('Windows register route remains available', (tester) async {
-    final router = await pumpAppRouter(
-      tester,
-      registrationDisabled: false,
-      platform: TargetPlatform.windows,
-    );
+  testWidgets(
+    'Windows register route cannot create an account inside the app',
+    (tester) async {
+      final router = await pumpAppRouter(
+        tester,
+        registrationDisabled: false,
+        platform: TargetPlatform.windows,
+      );
 
-    router.go(Routes.register);
-    await tester.pumpAndSettle();
+      router.go(Routes.register);
+      await tester.pumpAndSettle();
 
-    expect(router.routeInformationProvider.value.uri.path, Routes.register);
-    expect(find.byType(RegisterScreen), findsOneWidget);
-    expect(find.text('Crear mi empresa'), findsOneWidget);
-  });
+      expect(router.routerDelegate.currentConfiguration.uri.path, Routes.login);
+      expect(find.byType(RegisterScreen), findsNothing);
+      expect(find.byType(LoginScreen), findsOneWidget);
+    },
+  );
 
   testWidgets('Windows root route opens login instead of public landing', (
     tester,

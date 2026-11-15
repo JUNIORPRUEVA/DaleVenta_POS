@@ -15,7 +15,7 @@ import {
   type RegisterEcfSequenceDto,
 } from "../dto/ecf-documents.dto";
 import { EcfDgiiAuthorizedSequencesService } from "./ecf-dgii-authorized-sequences.service";
-import { ECF_SEQUENCE_TYPES } from "./ecf-dgii-authorized-sequences.policy";
+import { ECF_SEQUENCE_TYPES, checkDeclaredRangeWithinAuthorization } from "./ecf-dgii-authorized-sequences.policy";
 import { ECF_WITHOUT_DOCUMENT_WARNING } from "./ecf-sales-without-document.policy";
 import { EcfE34CreditService } from "./ecf-e34-credit.service";
 import { EcfSequenceService } from "./ecf-sequence.service";
@@ -144,8 +144,16 @@ export class EcfDocumentQueryService {
           select: { documentType: true, nextNumber: true, endNumber: true },
         })
       : [];
+    const authorizations = config?.enabled ? await db.ecfDgiiAuthorizedSequence.findMany({
+      where: { companyId, environment: config.environment, documentType: { in: ["E31", "E32"] } },
+    }) : [];
     const posAvailableTypes = [...new Set(sequences
-      .filter((sequence) => sequence.nextNumber <= sequence.endNumber)
+      .filter((sequence) => {
+        const authorization = authorizations.find(row => row.documentType === sequence.documentType) ?? null;
+        return sequence.nextNumber <= sequence.endNumber &&
+          (sequence.documentType !== "E31" || authorization?.expiresAt != null) &&
+          checkDeclaredRangeWithinAuthorization({ startNumber: sequence.nextNumber, endNumber: sequence.nextNumber }, authorization, now).ok;
+      })
       .map((sequence) => sequence.documentType))];
     const posReady = access.allowed && posAvailableTypes.length > 0;
     const providerEmissionEnabled =
@@ -155,6 +163,8 @@ export class EcfDocumentQueryService {
       // Admission must agree with the guards enforced before persisting a sale.
       posReady,
       posAvailableTypes: access.allowed ? posAvailableTypes : [],
+      e31SequenceDueDate: access.allowed && posAvailableTypes.includes("E31")
+        ? authorizations.find(row => row.documentType === "E31")?.expiresAt?.toISOString().slice(0, 10) ?? null : null,
       posBlockingCode: access.code,
       environment: config?.environment ?? "SANDBOX",
       certificationStatus: config?.certificationStatus ?? "NOT_STARTED",

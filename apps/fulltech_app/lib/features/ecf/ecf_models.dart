@@ -410,11 +410,14 @@ class EcfCapabilities {
     this.salesWithoutEcfWarning = '',
     this.posReady = false,
     this.posAvailableTypes = const [],
+    this.e31SequenceDueDate,
   });
 
   final bool enabled;
   final bool posReady;
   final List<String> posAvailableTypes;
+  /// Fecha declarada de esta empresa/ambiente; los clientes antiguos pueden omitirla.
+  final String? e31SequenceDueDate;
   final String environment;
   final String certificationStatus;
   final bool productionEnabled;
@@ -443,6 +446,7 @@ class EcfCapabilities {
       posReady: json['posReady'] == true,
       posAvailableTypes: (json['posAvailableTypes'] as List?)
           ?.whereType<String>().toList(growable: false) ?? const [],
+      e31SequenceDueDate: json['e31SequenceDueDate'] as String?,
       environment: _string(json, 'environment').isEmpty
           ? 'SANDBOX'
           : _string(json, 'environment'),

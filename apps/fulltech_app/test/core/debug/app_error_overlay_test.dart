@@ -1,6 +1,7 @@
 import 'package:daleventa_pos/core/debug/app_error_overlay.dart';
 import 'package:daleventa_pos/core/debug/app_error_reporter.dart';
 import 'package:daleventa_pos/core/errors/api_exception.dart';
+import 'package:daleventa_pos/core/utils/app_feedback.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -27,12 +28,52 @@ void main() {
   Future<void> pumpOverlay(WidgetTester tester) async {
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(
-          body: Stack(children: const [AppErrorOverlay()]),
-        ),
+        home: Scaffold(body: Stack(children: const [AppErrorOverlay()])),
       ),
     );
   }
+
+  testWidgets('login incidents share the top-right paragraph above Navigator', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: const Scaffold(),
+        builder: (context, child) =>
+            Stack(children: [child!, const AppErrorOverlay(login: true)]),
+      ),
+    );
+    AppErrorReporter.instance.record(
+      const ApiException.detailed(
+        message: 'Sin conexión',
+        type: ApiErrorType.network,
+      ),
+      StackTrace.current,
+      context: 'login-test',
+    );
+    await tester.pump();
+    final notice = find.byType(AppFeedbackNotice);
+    expect(notice, findsOneWidget);
+    expect(
+      tester
+          .getTopLeft(find.byKey(const ValueKey('persistent_feedback_card')))
+          .dy,
+      lessThan(40),
+    );
+    expect(
+      tester
+          .getTopLeft(find.byKey(const ValueKey('persistent_feedback_card')))
+          .dx,
+      greaterThan(800),
+    );
+    await tester.tap(find.byIcon(Icons.close_rounded));
+    await tester.pump();
+    expect(AppErrorReporter.instance.lastError.value, isNull);
+    expect(tester.takeException(), isNull);
+  });
 
   void recordNetworkError({Future<void> Function()? onRetry}) {
     AppErrorReporter.instance.record(
@@ -67,7 +108,9 @@ void main() {
     final top = tester.getTopLeft(find.text('Sin conexión')).dy;
     expect(
       top,
-      lessThan(tester.view.physicalSize.height / tester.view.devicePixelRatio / 2),
+      lessThan(
+        tester.view.physicalSize.height / tester.view.devicePixelRatio / 2,
+      ),
       reason: 'The notification must appear at the top of the screen',
     );
 

@@ -1,5 +1,7 @@
 import 'dart:typed_data';
+import 'dart:math' as math;
 
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -7,6 +9,8 @@ import 'package:pdf/widgets.dart' as pw;
 import '../../../core/utils/money_formatters.dart';
 import '../../../core/utils/pdf_file_actions.dart';
 import '../../../core/time/business_time.dart';
+import '../../../core/company/company_settings_model.dart';
+import '../../../core/pdf/pdf_kit.dart';
 import '../../../modules/ventas/sales_models.dart';
 
 class SalesReportPdfKpis {
@@ -64,57 +68,88 @@ Future<Uint8List> buildProfessionalSalesReportPdf({
   required SalesReportPdfKpis kpis,
   required List<SalesReportPdfCategoryRow> categories,
   required List<SaleModel> sales,
+  CompanySettings? company,
 }) async {
   final dateFmt = DateFormat('dd/MM/yyyy', 'es_DO');
   final nowFmt = DateFormat('dd/MM/yyyy h:mm a', 'es_DO');
+  final generatedAt = businessNow();
+  final companyName = pdfFallback(
+    company?.companyName,
+    fallback: 'FullPOS Cloud',
+  );
+  final logo = await pdfResolveCompanyLogo(company);
+  final regular = pw.Font.ttf(
+    await rootBundle.load('assets/fonts/manrope/Manrope-Regular.ttf'),
+  );
+  final bold = pw.Font.ttf(
+    await rootBundle.load('assets/fonts/manrope/Manrope-Bold.ttf'),
+  );
   final doc = pw.Document(
-    title: 'Reporte profesional de ventas',
-    author: 'FullPOS Cloud',
+    title: 'Reporte de ventas y rentabilidad',
+    author: companyName,
+    theme: pw.ThemeData.withFont(base: regular, bold: bold),
   );
 
   doc.addPage(
     pw.MultiPage(
       pageFormat: PdfPageFormat.a4,
-      margin: const pw.EdgeInsets.fromLTRB(24, 22, 24, 22),
-      header: (_) => _header(
+      margin: const pw.EdgeInsets.fromLTRB(30, 28, 30, 28),
+      maxPages: 500,
+      header: (context) => _header(
+        company: company,
+        companyName: companyName,
+        logo: logo,
+        firstPage: context.pageNumber == 1,
+        generatedLabel: nowFmt.format(generatedAt),
         from: from,
         to: to,
         categoryLabel: categoryLabel,
         dateFmt: dateFmt,
-        nowFmt: nowFmt,
       ),
-      footer: (context) => pw.Row(
-        children: [
-          pw.Text(
-            'FullPOS Cloud',
-            style: pw.TextStyle(fontSize: 8, color: PdfColors.blueGrey500),
+      footer: (context) => pw.Container(
+        margin: const pw.EdgeInsets.only(top: 12),
+        padding: const pw.EdgeInsets.only(top: 8),
+        decoration: pw.BoxDecoration(
+          border: pw.Border(
+            top: pw.BorderSide(color: PdfKitColors.softLine, width: .5),
           ),
-          pw.Spacer(),
-          pw.Text(
-            'Pagina ${context.pageNumber} de ${context.pagesCount}',
-            style: pw.TextStyle(fontSize: 8, color: PdfColors.blueGrey500),
-          ),
-        ],
+        ),
+        child: pw.Row(
+          children: [
+            pw.Text(
+              'FullPOS Cloud | Reporte de gestión',
+              style: pw.TextStyle(fontSize: 8, color: PdfColors.blueGrey500),
+            ),
+            pw.Spacer(),
+            pw.Text(
+              'Página ${context.pageNumber} de ${context.pagesCount}',
+              style: pw.TextStyle(fontSize: 8, color: PdfColors.blueGrey500),
+            ),
+          ],
+        ),
       ),
       build: (_) => [
+        _sectionTitle('Resumen del período'),
         _kpiGrid(kpis),
-        if (kpis.totalExpenses > 0) ...[
-          pw.SizedBox(height: 10),
-          _profitBreakdown(kpis),
-        ],
+        pw.SizedBox(height: 12),
+        _profitBreakdown(kpis),
         pw.SizedBox(height: 16),
-        _sectionTitle('Ganancia por categoria'),
+        if (categories.isNotEmpty) ...[
+          _sectionTitle('Categorías con mayor utilidad'),
+          _categoryRanking(categories),
+          pw.NewPage(),
+        ],
+        _sectionTitle('Rentabilidad por categoría'),
         _categoryTable(categories),
         pw.SizedBox(height: 16),
-        _sectionTitle('Ventas incluidas'),
-        _salesTable(sales.take(30).toList(growable: false), dateFmt),
-        if (sales.length > 30) ...[
-          pw.SizedBox(height: 8),
-          pw.Text(
-            'Se muestran las primeras 30 ventas recientes de ${sales.length} registros filtrados.',
-            style: pw.TextStyle(fontSize: 8, color: PdfColors.blueGrey600),
-          ),
-        ],
+        _sectionTitle('Detalle de ventas'),
+        pw.Text(
+          'Resumen del período: ${kpis.salesCount} facturas. Detalle disponible: ${sales.length} registros. '
+          'Los indicadores resumen el período completo; la tabla presenta el detalle disponible.',
+          style: pw.TextStyle(fontSize: 8, color: PdfKitColors.textMuted),
+        ),
+        pw.SizedBox(height: 8),
+        _salesTable(sales, dateFmt),
       ],
     ),
   );
@@ -143,52 +178,179 @@ Future<bool> downloadProfessionalSalesReportPdf({
 }
 
 pw.Widget _header({
+  required CompanySettings? company,
+  required String companyName,
+  required pw.MemoryImage? logo,
+  required bool firstPage,
+  required String generatedLabel,
   required DateTime from,
   required DateTime to,
   required String categoryLabel,
   required DateFormat dateFmt,
-  required DateFormat nowFmt,
 }) {
   return pw.Container(
-    margin: const pw.EdgeInsets.only(bottom: 16),
-    padding: const pw.EdgeInsets.fromLTRB(14, 12, 14, 12),
+    margin: const pw.EdgeInsets.only(bottom: 18),
+    padding: const pw.EdgeInsets.only(bottom: 12),
     decoration: pw.BoxDecoration(
-      color: PdfColor.fromHex('#0F172A'),
-      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+      border: pw.Border(
+        bottom: pw.BorderSide(color: PdfKitColors.accentBlue, width: 2),
+      ),
     ),
-    child: pw.Row(
+    child: pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Expanded(
-          child: pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
+        pw.Row(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            if (firstPage) ...[
+              pdfLogoBox(companyName: companyName, logoImage: logo),
+              pw.SizedBox(width: 12),
+            ],
+            pw.Expanded(
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    companyName,
+                    style: pw.TextStyle(
+                      fontSize: firstPage ? 17 : 11,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfKitColors.headingBlack,
+                    ),
+                  ),
+                  if (firstPage)
+                    for (final line in [
+                      if (pdfClean(company?.rnc).isNotEmpty)
+                        'RNC: ${company!.rnc.trim()}',
+                      pdfClean(company?.address),
+                      [
+                        pdfClean(company?.phone),
+                        pdfClean(company?.websiteUrl),
+                      ].where((v) => v.isNotEmpty).join(' | '),
+                    ].where((v) => v.isNotEmpty))
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.only(top: 3),
+                        child: pw.Text(
+                          line,
+                          style: pw.TextStyle(
+                            fontSize: 8,
+                            color: PdfKitColors.textMuted,
+                          ),
+                        ),
+                      ),
+                ],
+              ),
+            ),
+            pw.SizedBox(width: 12),
+            pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.end,
+              children: [
+                pw.Text(
+                  'VENTAS Y RENTABILIDAD',
+                  style: pw.TextStyle(
+                    fontSize: 9,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfKitColors.accentBlue,
+                  ),
+                ),
+                pw.SizedBox(height: 4),
+                pw.Text(
+                  'Emitido: $generatedLabel',
+                  style: pw.TextStyle(
+                    fontSize: 7,
+                    color: PdfKitColors.textMuted,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        pw.SizedBox(height: firstPage ? 16 : 10),
+        if (firstPage) ...[
+          pw.Text(
+            'Reporte de ventas y rentabilidad',
+            style: pw.TextStyle(
+              fontSize: 20,
+              fontWeight: pw.FontWeight.bold,
+              color: PdfKitColors.headingBlack,
+            ),
+          ),
+          pw.SizedBox(height: 8),
+        ],
+        pw.Text(
+          'Período: ${dateFmt.format(from)} - ${dateFmt.format(to)}',
+          style: pw.TextStyle(fontSize: 9, color: PdfKitColors.textPrimary),
+        ),
+        pw.SizedBox(height: 3),
+        pw.Text(
+          'Categoría: $categoryLabel',
+          style: pw.TextStyle(fontSize: 8, color: PdfKitColors.textMuted),
+        ),
+      ],
+    ),
+  );
+}
+
+pw.Widget _categoryRanking(List<SalesReportPdfCategoryRow> categories) {
+  final ranked = [...categories]
+    ..sort((a, b) => b.totalProfit.compareTo(a.totalProfit));
+  final top = ranked.take(5).toList();
+  final maximum = top.fold<double>(
+    0,
+    (value, row) => math.max(value, row.totalProfit.abs()),
+  );
+  return pw.Column(
+    children: [
+      for (final row in top)
+        pw.Padding(
+          padding: const pw.EdgeInsets.only(bottom: 9),
+          child: pw.Row(
             children: [
-              pw.Text(
-                'Reporte profesional de ventas',
-                style: pw.TextStyle(
-                  fontSize: 18,
-                  fontWeight: pw.FontWeight.bold,
-                  color: PdfColors.white,
+              pw.Expanded(
+                flex: 3,
+                child: pw.Text(
+                  row.category,
+                  style: const pw.TextStyle(fontSize: 8),
                 ),
               ),
-              pw.SizedBox(height: 5),
-              pw.Text(
-                'Periodo: ${dateFmt.format(from)} - ${dateFmt.format(to)}',
-                style: pw.TextStyle(fontSize: 9, color: PdfColors.blueGrey100),
+              pw.SizedBox(width: 12),
+              pw.Expanded(
+                flex: 3,
+                child: pw.LayoutBuilder(
+                  builder: (context, constraints) => pw.Container(
+                    alignment: pw.Alignment.centerLeft,
+                    height: 7,
+                    color: PdfKitColors.softFill,
+                    child: pw.Container(
+                      width:
+                          (constraints!.maxWidth *
+                          (maximum == 0 ? 0 : row.totalProfit.abs() / maximum)),
+                      color: row.totalProfit < 0
+                          ? PdfKitColors.danger
+                          : PdfKitColors.accentBlue,
+                    ),
+                  ),
+                ),
               ),
-              pw.Text(
-                'Categoria: $categoryLabel',
-                style: pw.TextStyle(fontSize: 9, color: PdfColors.blueGrey100),
+              pw.SizedBox(width: 12),
+              pw.SizedBox(
+                width: 100,
+                child: pw.Text(
+                  formatRdCurrencyAccounting(row.totalProfit),
+                  textAlign: pw.TextAlign.right,
+                  style: pw.TextStyle(
+                    fontSize: 8,
+                    fontWeight: pw.FontWeight.bold,
+                    color: row.totalProfit < 0
+                        ? PdfKitColors.danger
+                        : PdfKitColors.textPrimary,
+                  ),
+                ),
               ),
             ],
           ),
         ),
-        pw.Text(
-          nowFmt.format(businessNow()),
-          style: pw.TextStyle(fontSize: 8, color: PdfColors.blueGrey200),
-        ),
-      ],
-    ),
+    ],
   );
 }
 
@@ -243,7 +405,7 @@ pw.Widget _profitBreakdown(SalesReportPdfKpis kpis) {
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         pw.Text(
-          'Como se calcula la utilidad',
+          'De la utilidad bruta a la utilidad neta',
           style: pw.TextStyle(
             fontSize: 9,
             fontWeight: pw.FontWeight.bold,
@@ -298,8 +460,9 @@ pw.Widget _metric(String label, String value) {
     padding: const pw.EdgeInsets.fromLTRB(10, 9, 10, 9),
     decoration: pw.BoxDecoration(
       color: PdfColor.fromHex('#F8FAFC'),
-      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(5)),
-      border: pw.Border.all(color: PdfColor.fromHex('#E2E8F0'), width: 0.5),
+      border: pw.Border(
+        left: pw.BorderSide(color: PdfKitColors.accentBlue, width: 2),
+      ),
     ),
     child: pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -314,7 +477,9 @@ pw.Widget _metric(String label, String value) {
           style: pw.TextStyle(
             fontSize: 11,
             fontWeight: pw.FontWeight.bold,
-            color: PdfColor.fromHex('#111827'),
+            color: value.startsWith('-')
+                ? PdfKitColors.danger
+                : PdfKitColors.accentBlue,
           ),
         ),
       ],
@@ -338,19 +503,36 @@ pw.Widget _sectionTitle(String text) {
 
 pw.Widget _categoryTable(List<SalesReportPdfCategoryRow> categories) {
   if (categories.isEmpty) {
-    return _emptyBox('No hay ventas por categoria en este rango.');
+    return _emptyBox('No hay ventas por categoría en este rango.');
   }
   return pw.TableHelper.fromTextArray(
-    border: pw.TableBorder.all(color: PdfColor.fromHex('#E2E8F0'), width: 0.45),
-    headerDecoration: pw.BoxDecoration(color: PdfColor.fromHex('#EAF1FF')),
-    headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
-    cellStyle: const pw.TextStyle(fontSize: 8),
+    border: pw.TableBorder(
+      horizontalInside: pw.BorderSide(color: PdfKitColors.softLine, width: .4),
+    ),
+    headerDecoration: pw.BoxDecoration(color: PdfKitColors.accentBlue),
+    oddRowDecoration: pw.BoxDecoration(color: PdfKitColors.softFill),
+    headerStyle: pw.TextStyle(
+      fontSize: 7,
+      fontWeight: pw.FontWeight.bold,
+      color: PdfColors.white,
+    ),
+    cellStyle: const pw.TextStyle(fontSize: 7),
+    cellPadding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 8),
+    columnWidths: const {
+      0: pw.FlexColumnWidth(2.3),
+      1: pw.FlexColumnWidth(1.5),
+      2: pw.FlexColumnWidth(1.5),
+      3: pw.FlexColumnWidth(1.5),
+      4: pw.FlexColumnWidth(1.15),
+      5: pw.FlexColumnWidth(.65),
+    },
+    cellAlignments: {for (var i = 1; i < 6; i++) i: pw.Alignment.centerRight},
     cellAlignment: pw.Alignment.centerLeft,
     headers: const [
-      'Categoria',
+      'Categoría',
       'Ventas',
       'Costo',
-      'Ganancia',
+      'Utilidad bruta',
       'Unidades',
       'Facturas',
     ],
@@ -374,10 +556,26 @@ pw.Widget _salesTable(List<SaleModel> sales, DateFormat dateFmt) {
     return _emptyBox('No hay ventas en el rango seleccionado.');
   }
   return pw.TableHelper.fromTextArray(
-    border: pw.TableBorder.all(color: PdfColor.fromHex('#E2E8F0'), width: 0.45),
-    headerDecoration: pw.BoxDecoration(color: PdfColor.fromHex('#F1F5F9')),
-    headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
-    cellStyle: const pw.TextStyle(fontSize: 7.6),
+    border: pw.TableBorder(
+      horizontalInside: pw.BorderSide(color: PdfKitColors.softLine, width: .4),
+    ),
+    headerDecoration: pw.BoxDecoration(color: PdfKitColors.accentBlue),
+    oddRowDecoration: pw.BoxDecoration(color: PdfKitColors.softFill),
+    headerStyle: pw.TextStyle(
+      fontSize: 7.5,
+      fontWeight: pw.FontWeight.bold,
+      color: PdfColors.white,
+    ),
+    cellStyle: const pw.TextStyle(fontSize: 7.5),
+    cellPadding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 7),
+    columnWidths: const {
+      0: pw.FlexColumnWidth(1.05),
+      1: pw.FlexColumnWidth(2.6),
+      2: pw.FlexColumnWidth(1.55),
+      3: pw.FlexColumnWidth(1.55),
+      4: pw.FlexColumnWidth(1.55),
+    },
+    cellAlignments: {for (var i = 2; i < 5; i++) i: pw.Alignment.centerRight},
     cellAlignment: pw.Alignment.centerLeft,
     headers: const ['Fecha', 'Cliente', 'Venta', 'Costo', 'Utilidad'],
     data: sales.map(

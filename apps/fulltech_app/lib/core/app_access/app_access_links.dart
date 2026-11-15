@@ -42,7 +42,7 @@ class AppAccessLinks {
   );
 
   static final Uri androidReleaseUri = Uri.parse(
-    'https://github.com/JUNIORPRUEVA/fullpos_cluouds/releases/latest/download/app-release.apk',
+    'https://play.google.com/store/apps/details?id=com.daleventa.pos',
   );
 
   static final Uri iosAppStoreUri = Uri.parse(
@@ -68,7 +68,7 @@ class AppAccessLinks {
     icon: Icons.desktop_windows_rounded,
     title: 'Windows',
     status: 'Instalador oficial',
-    description: 'Descarga e instala FullPOS Cloud en tu computadora.',
+    description: 'Descarga el instalador, ábrelo e inicia sesión.',
     actionLabel: 'Descargar',
     actionIcon: Icons.download_rounded,
     uri: windowsReleaseUri,
@@ -78,8 +78,8 @@ class AppAccessLinks {
     kind: AppAccessKind.android,
     icon: Icons.android_rounded,
     title: 'Android',
-    status: 'APK oficial',
-    description: 'Descarga la aplicación oficial para Android.',
+    status: 'Google Play',
+    description: 'Instala desde Google Play y entra con tu cuenta.',
     actionLabel: 'Descargar',
     actionIcon: Icons.download_rounded,
     uri: androidReleaseUri,
@@ -90,7 +90,7 @@ class AppAccessLinks {
     icon: Icons.phone_iphone_rounded,
     title: 'iPhone',
     status: 'App Store oficial',
-    description: 'Instala FullPOS Cloud desde App Store.',
+    description: 'Instala desde App Store y entra con tu cuenta.',
     actionLabel: 'Instalar',
     actionIcon: Icons.open_in_new_rounded,
     uri: iosAppStoreUri,
@@ -101,8 +101,7 @@ class AppAccessLinks {
     icon: Icons.public_rounded,
     title: 'Web / PWA',
     status: 'Versión web oficial',
-    description:
-        'Utiliza FullPOS Cloud desde el navegador o instala su versión web.',
+    description: 'Abre la web o instálala desde el navegador.',
     actionLabel: 'Abrir',
     actionIcon: Icons.open_in_new_rounded,
     uri: pwaUri,

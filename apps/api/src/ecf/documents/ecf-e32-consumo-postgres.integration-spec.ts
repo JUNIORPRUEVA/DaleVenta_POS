@@ -76,6 +76,7 @@ uat("E32 consumo (venta → borrador local numerado) on PostgreSQL", () => {
           rangeTo: 10_000,
           approvedQuantity: 10_000,
           declarationVersion: "v1",
+          expiresAt: documentType === "E31" ? new Date("2026-12-31T23:59:59.999Z") : null,
           declaredByUserId: userId,
         },
       });

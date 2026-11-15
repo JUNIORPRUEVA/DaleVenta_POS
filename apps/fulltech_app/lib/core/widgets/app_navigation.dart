@@ -55,6 +55,7 @@ List<AppNavigationSection> buildAppNavigationSections(
   // módulo: apagado significa que la empresa no ha solicitado facturación
   // electrónica y el menú queda exactamente como un POS tradicional.
   bool ecfEnabled = false,
+
   /// Piloto de certificación: el backend confirmó que ESTA empresa puede
   /// preparar su certificación aunque la emisión siga desactivada. Ya incluye
   /// la comprobación de permiso, así que aquí no se vuelve a evaluar.
@@ -83,14 +84,14 @@ List<AppNavigationSection> buildAppNavigationSections(
           const AppNavigationItem(
             icon: Icons.point_of_sale_outlined,
             appIcon: AppIcons.sales,
-            title: 'Facturación',
+            title: 'Facturar',
             route: Routes.cotizaciones,
           ),
         if (canOrAuthorize(AppPermission.viewSales))
           const AppNavigationItem(
             icon: Icons.receipt_long_outlined,
             appIcon: AppIcons.receipt,
-            title: 'Lista de ventas',
+            title: 'Historial de ventas',
             route: Routes.ventasLista,
           ),
         if (canOrAuthorize(AppPermission.viewSales))
@@ -313,7 +314,7 @@ String resolveNavigationTitle(
   if (path == Routes.catalogoStock) return 'Stock';
   if (path == Routes.catalogoCategorias) return 'Categorías';
   if (path == Routes.catalogoConteo) return 'Conteo de stock';
-  if (path == Routes.ventasLista) return 'Lista de ventas';
+  if (path == Routes.ventasLista) return 'Historial de ventas';
   if (path == Routes.compras) return 'Compras';
   if (path == Routes.comprasLista) return 'Lista de compras';
   if (path == Routes.comprasSuplidores) return 'Suplidores';

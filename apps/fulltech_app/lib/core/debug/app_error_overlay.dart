@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../routing/app_router.dart';
+import '../utils/app_feedback.dart';
 import 'app_diagnostics.dart';
 import 'app_error_diagnostics_sheet.dart';
 import 'app_error_reporter.dart';
@@ -35,7 +36,9 @@ const double kErrorNoticeBottomReservedHeight = 80;
 /// - Technical diagnostics are reachable only when [kAppDiagnosticsUiEnabled]
 ///   is true, which is never the case in production builds.
 class AppErrorOverlay extends StatefulWidget {
-  const AppErrorOverlay({super.key});
+  const AppErrorOverlay({super.key, this.login = false});
+
+  final bool login;
 
   @override
   State<AppErrorOverlay> createState() => _AppErrorOverlayState();
@@ -62,6 +65,9 @@ class _AppErrorOverlayState extends State<AppErrorOverlay> {
 
   void _handleErrorChanged() {
     final next = AppErrorReporter.instance.lastError.value;
+    if (widget.login && next != null) {
+      AppFeedback.dismissPersistentNotification();
+    }
     if (_visibleError == null && next != null) {
       _retrying = false;
     }
@@ -145,6 +151,26 @@ class _AppErrorOverlayState extends State<AppErrorOverlay> {
       valueListenable: AppErrorReporter.instance.lastError,
       builder: (context, error, _) {
         if (error == null) return const SizedBox.shrink();
+        if (widget.login) {
+          return AppFeedbackNotice(
+            notification: AppFeedbackNotification(
+              title: error.title,
+              body: error.userMessage,
+              kind: error.severity == AppErrorSeverity.warning
+                  ? AppFeedbackKind.info
+                  : AppFeedbackKind.error,
+              compact: true,
+              paragraph: true,
+              actionLabel: error.onRetry == null
+                  ? null
+                  : error.retryLabel ?? 'Reintentar',
+              onAction: error.onRetry == null || _retrying
+                  ? null
+                  : () => _retry(error),
+            ),
+            onClose: AppErrorReporter.instance.clear,
+          );
+        }
         return _NotificationBanner(
           error: error,
           retrying: _retrying,

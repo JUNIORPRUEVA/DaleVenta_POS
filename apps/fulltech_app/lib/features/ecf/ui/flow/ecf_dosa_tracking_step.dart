@@ -51,63 +51,55 @@ class EcfDosaTrackingStep extends StatelessWidget {
   Widget build(BuildContext context) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 700),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Expanded(
-                child: EcfStepTitle(
-                  title: 'Tu postulación',
-                  subtitle:
-                      'Continúa el proceso en el asistente oficial de DOSA.',
+              Row(
+                children: [
+                  const Expanded(
+                    child: EcfStepTitle(
+                      title: 'Tu postulación',
+                      subtitle: 'Consulta el avance de tu certificación.',
+                    ),
+                  ),
+                  EcfBadge(
+                    label: statusLabel,
+                    tone: official ? EcfTone.done : EcfTone.current,
+                    icon: official
+                        ? Icons.check_circle_outline_rounded
+                        : Icons.timelapse_rounded,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              _DosaStageIndicator(
+                labels: _labels,
+                milestone: milestone,
+                official: official,
+              ),
+              const SizedBox(height: 10),
+              Text(
+                statusMessage,
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  height: 1.4,
+                  color: AppColors.textSecondary,
                 ),
               ),
-              EcfBadge(
-                label: statusLabel,
-                tone: official ? EcfTone.done : EcfTone.current,
-                icon: official
-                    ? Icons.check_circle_outline_rounded
-                    : Icons.timelapse_rounded,
-              ),
+              if (activation != null) ...[
+                const SizedBox(height: 14),
+                activation!,
+              ],
+              if (next != null) ...[const SizedBox(height: 12), next!],
+              if (sequence != null) ...[const SizedBox(height: 12), sequence!],
+              if (portal != null) ...[const SizedBox(height: 12), portal!],
+              if (advanced != null) ...[const SizedBox(height: 12), advanced!],
             ],
           ),
-          const SizedBox(height: 16),
-          _DosaStageIndicator(
-            labels: _labels,
-            milestone: milestone,
-            official: official,
-          ),
-          const SizedBox(height: 10),
-          Text(
-            statusMessage,
-            style: const TextStyle(
-              fontSize: 12.5,
-              height: 1.4,
-              color: AppColors.textSecondary,
-            ),
-          ),
-          if (activation != null) ...[
-            const SizedBox(height: 14),
-            activation!,
-          ],
-          if (next != null) ...[
-            const SizedBox(height: 12),
-            next!,
-          ],
-          if (sequence != null) ...[
-            const SizedBox(height: 12),
-            sequence!,
-          ],
-          if (portal != null) ...[
-            const SizedBox(height: 12),
-            portal!,
-          ],
-          if (advanced != null) ...[
-            const SizedBox(height: 12),
-            advanced!,
-          ],
-        ],
+        ),
       ),
     );
   }

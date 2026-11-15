@@ -7,7 +7,6 @@ import 'package:go_router/go_router.dart';
 import '../../features/account/apps_downloads_panel.dart';
 import '../../features/onboarding/application/activation_controller.dart';
 import '../../features/onboarding/presentation/widgets/activation_steps.dart';
-import '../app_access/app_access_links.dart';
 import '../app_access/session_notices.dart';
 import '../auth/auth_provider.dart';
 import '../auth/app_permissions.dart';
@@ -78,7 +77,9 @@ class WebSessionActions extends ConsumerWidget {
         insetPadding: const EdgeInsets.all(16),
         backgroundColor: AppColors.surface,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 680),
+          constraints: const BoxConstraints(
+            maxWidth: AppsDownloadsPanel.maxPanelWidth,
+          ),
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(20),
             child: Column(
@@ -110,11 +111,7 @@ class WebSessionActions extends ConsumerWidget {
                 const SizedBox(height: 8),
                 const Text('Tu negocio y tu misma cuenta, donde trabajes.'),
                 const SizedBox(height: 16),
-                for (final channel in AppAccessLinks.allChannels())
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: AppsDownloadCard(channel: channel, concise: true),
-                  ),
+                const AppsDownloadCards(),
                 const Divider(),
                 TextButton(
                   onPressed: () {

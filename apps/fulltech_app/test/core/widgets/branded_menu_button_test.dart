@@ -42,7 +42,16 @@ void main() {
         final context = tester.element(find.byType(BrandedMenuPreview));
         await Future.wait([
           precacheImage(
-            const AssetImage('assets/image/nuevologo.png'),
+            tester
+                .widget<Image>(
+                  find
+                      .descendant(
+                        of: find.byType(BrandedMenuButton),
+                        matching: find.byType(Image),
+                      )
+                      .first,
+                )
+                .image,
             context,
           ),
           precacheImage(
@@ -52,7 +61,7 @@ void main() {
         ]);
       });
       await tester.pumpAndSettle();
-      expect(find.text('Facturación'), findsNothing);
+      expect(find.text('Facturar'), findsNothing);
       expect(find.text('FullPOS'), findsNothing);
       expect(find.text('Menú principal'), findsNothing);
       expect(find.byIcon(Icons.menu_rounded), findsOneWidget);
@@ -100,6 +109,31 @@ void main() {
     expect(opened, 1);
   });
 
+  for (final density in [1.0, 1.25, 2.0, 3.0]) {
+    testWidgets(
+      'el logo conserva el original y su tamaño a densidad $density',
+      (tester) async {
+        tester.view.physicalSize = Size(640 * density, 480 * density);
+        tester.view.devicePixelRatio = density;
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Center(child: BrandedMenuButton(onPressed: () {})),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final logo = find.byType(Image);
+        final widget = tester.widget<Image>(logo);
+        expect(tester.getSize(logo), const Size(40, 40));
+        expect(widget.filterQuality, FilterQuality.medium);
+        expect(widget.image, isA<AssetImage>());
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   testWidgets('la cabecera real sustituye el título y conserva sus acciones', (
     tester,
   ) async {
@@ -113,7 +147,7 @@ void main() {
           home: Scaffold(
             drawer: const Drawer(child: Text('Contenido del menú')),
             appBar: FullTechPageHeader(
-              title: 'Facturación',
+              title: 'Facturar',
               brandMenu: true,
               preferDrawerLeading: true,
               actions: [
@@ -125,7 +159,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Facturación'), findsNothing);
+    expect(find.text('Facturar'), findsNothing);
     expect(find.byType(BrandedMenuButton), findsOneWidget);
     expect(find.byIcon(Icons.sync), findsOneWidget);
     await tester.tap(find.byType(BrandedMenuButton));

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/auth/auth_provider.dart';
 import '../../data/ecf_repository.dart';
 import '../../ecf_dosa_activation_models.dart';
 import 'ecf_flow_kit.dart';
@@ -69,6 +70,7 @@ class _EcfDosaActivationStatusState
 
   Future<void> _run() async {
     if (_running) return;
+    final companyId = ref.read(authStateProvider).user?.companyId;
     setState(() {
       _running = true;
       _failed = false;
@@ -77,7 +79,11 @@ class _EcfDosaActivationStatusState
       final outcome = await ref
           .read(ecfRepositoryProvider)
           .attemptDosaActivation();
-      if (!mounted) return;
+      if (!mounted || companyId != ref.read(authStateProvider).user?.companyId) return;
+      if (outcome.changed || outcome.authorized) {
+        ref.invalidate(ecfCapabilitiesProvider);
+        ref.invalidate(ecfOnboardingProvider);
+      }
       setState(() => _outcome = outcome);
     } catch (_) {
       // Un fallo de red no se confunde con «falta evidencia»: son cosas

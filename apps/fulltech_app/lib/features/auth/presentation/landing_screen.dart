@@ -9,6 +9,7 @@ import '../../../core/analytics/marketing_analytics.dart';
 import '../../../core/app_access/app_access_links.dart';
 import '../../../core/routing/routes.dart';
 import '../../../core/utils/safe_url_launcher.dart';
+import '../../../core/utils/open_web_registration.dart';
 import 'pwa_install_prompt.dart';
 
 const _supportPhoneDisplay = '829-531-9442';
@@ -81,7 +82,7 @@ class LandingScreen extends StatefulWidget {
       sourcePage: 'landing',
       ctaName: ctaName,
     );
-    context.go(Routes.register);
+    unawaited(openWebRegistration(context));
   }
 
   static Future<void> openWindowsDownload(BuildContext context) {

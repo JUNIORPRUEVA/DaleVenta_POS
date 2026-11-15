@@ -38,6 +38,53 @@ class EcfCompletedView extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
+        if (!invoicingReady) {
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: constraints.hasBoundedHeight
+                    ? (constraints.maxHeight - 32).clamp(0.0, double.infinity)
+                    : 0,
+              ),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 700),
+                  child: EcfSurface(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          'Completa la habilitación',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Tu autorización está registrada. Completa lo pendiente para comenzar a facturar.',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(color: AppColors.textSecondary),
+                        ),
+                        if (numbering != null) ...[
+                          const SizedBox(height: 16),
+                          numbering!,
+                        ],
+                        const SizedBox(height: 8),
+                        TextButton(
+                          key: const ValueKey('ecf_completed_view_documents'),
+                          onPressed: onViewDocuments,
+                          child: const Text('Ver comprobantes electrónicos'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
         return SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
           child: ConstrainedBox(

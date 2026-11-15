@@ -12,6 +12,7 @@
 // ignore_for_file: avoid_print
 
 import 'dart:io';
+import '../../support/feedback_finders.dart';
 import 'dart:ui' as ui;
 
 import 'package:daleventa_pos/core/company/company_settings_model.dart';
@@ -176,7 +177,7 @@ Future<void> _pumpAndReject(
     find.byKey(const ValueKey('persistent_feedback_card')),
     findsOneWidget,
   );
-  expect(find.byTooltip('Cerrar notificación'), findsOneWidget);
+  expect(closeFeedbackButton(), findsOneWidget);
   expect(tester.takeException(), isNull);
 
   // La tarjeta está en la zona superior derecha.
@@ -200,7 +201,7 @@ void main() {
     await _pumpAndReject(tester, size: const Size(1366, 768));
     await _shot(tester, 'stock-adjustment-rejected-desktop-1366');
     // X cierra.
-    await tester.tap(find.byTooltip('Cerrar notificación'));
+    await tester.tap(closeFeedbackButton());
     await tester.pumpAndSettle();
     expect(
       find.byKey(const ValueKey('persistent_feedback_card')),
@@ -213,7 +214,7 @@ void main() {
   ) async {
     await _pumpAndReject(tester, size: const Size(390, 844));
     await _shot(tester, 'stock-adjustment-rejected-mobile-390');
-    await tester.tap(find.byTooltip('Cerrar notificación'));
+    await tester.tap(closeFeedbackButton());
     await tester.pumpAndSettle();
     expect(
       find.byKey(const ValueKey('persistent_feedback_card')),

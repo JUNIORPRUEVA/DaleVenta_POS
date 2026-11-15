@@ -77,7 +77,7 @@ class EcfHabilitacionVideoCard extends StatelessWidget {
               Text(
                 hasVideo ? 'Prepara tu empresa en la DGII' : 'Antes de empezar',
                 style: theme.textTheme.titleSmall?.copyWith(
-                  fontSize: 13.5,
+                  fontSize: 15,
                   fontWeight: FontWeight.w700,
                   color: AppColors.textPrimary,
                 ),
@@ -87,12 +87,11 @@ class EcfHabilitacionVideoCard extends StatelessWidget {
                 hasVideo
                     ? 'Un vídeo corto con los pasos que debes completar en '
                           'la DGII antes de iniciar la postulación.'
-                    : 'Los tres puntos anteriores se consiguen en la DGII. '
-                          'Mientras el vídeo no esté disponible, puedes abrir el '
-                          'portal oficial.',
+                    : 'El video de preparación estará disponible aquí. '
+                          'Puedes comenzar sin esperar o consultar el portal de la DGII.',
                 style: theme.textTheme.bodySmall?.copyWith(
-                  fontSize: 12,
-                  height: 1.35,
+                  fontSize: 14,
+                  height: 1.5,
                   color: AppColors.textSecondary,
                 ),
               ),
@@ -128,19 +127,6 @@ class EcfHabilitacionVideoCard extends StatelessWidget {
                       style: TextStyle(fontSize: 12.5),
                     ),
                   ),
-                  if (!hasVideo)
-                    TextButton.icon(
-                      onPressed: null,
-                      style: TextButton.styleFrom(
-                        minimumSize: const Size(0, 34),
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                      ),
-                      icon: const Icon(Icons.play_circle_outline, size: 15),
-                      label: const Text(
-                        'Vídeo no disponible',
-                        style: TextStyle(fontSize: 12.5),
-                      ),
-                    ),
                 ],
               ),
             ],
@@ -206,36 +192,41 @@ class _VideoPlaceholder extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFFF1F5F9),
-        border: Border.all(color: const Color(0xFFCBD5E1)),
+        color: AppColors.surfaceSubtle,
+        border: Border.all(color: AppColors.border),
       ),
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(
-              Icons.movie_outlined,
-              size: 30,
-              color: Color(0xFF94A3B8),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Aquí irá el vídeo de preparación',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: const Color(0xFF64748B),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.movie_outlined,
+                size: 30,
+                color: AppColors.textSecondary,
               ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              'Todavía no está disponible',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                fontSize: 11,
-                color: const Color(0xFF94A3B8),
+              const SizedBox(height: 6),
+              Text(
+                'Aquí irá el vídeo de preparación',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                  color: AppColors.textSecondary,
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 2),
+              Text(
+                'Todavía no está disponible',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  fontSize: 12,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -1,13 +1,18 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/auth/auth_provider.dart';
+import '../../core/auth/admin_authorization.dart';
+import '../../core/routing/app_navigator.dart';
+import '../../core/routing/route_access.dart';
+import '../../core/widgets/history_presentation.dart';
+import '../../core/widgets/provided_action_icon.dart';
 import '../../core/errors/user_safe_error_text.dart';
 import '../../core/pagination/infinite_scroll_load_more_trigger.dart';
 import '../../core/pagination/paged_load_more_footer.dart';
@@ -18,7 +23,6 @@ import '../../core/utils/local_file_bytes.dart';
 import '../../core/utils/media_file_actions.dart';
 import '../../core/utils/simple_xlsx.dart';
 import '../../core/widgets/app_drawer.dart';
-import '../../core/widgets/app_navigation.dart';
 import '../../core/widgets/custom_app_bar.dart';
 import '../../core/widgets/desktop_sales_style.dart';
 import '../../core/widgets/fulltech_page_header.dart';
@@ -32,24 +36,10 @@ import 'cliente_timeline_model.dart';
 import 'data/clientes_repository.dart';
 import '../ventas/data/ventas_repository.dart';
 
-bool _shouldUseClientesDesktopLayout(double width) {
-  if (width >= kDesktopShellBreakpoint) return true;
+bool _shouldUseClientesDesktopLayout(double width) => width >= 860;
 
-  final isDesktopPlatform = switch (defaultTargetPlatform) {
-    TargetPlatform.windows ||
-    TargetPlatform.macOS ||
-    TargetPlatform.linux => true,
-    TargetPlatform.android ||
-    TargetPlatform.iOS ||
-    TargetPlatform.fuchsia => false,
-  };
-
-  return isDesktopPlatform && width >= 720;
-}
-
-double _clientesInfoColumnWidth(double width) {
-  return (width * 0.30).clamp(360.0, 520.0);
-}
+double _clientesInfoColumnWidth(double width) =>
+    (width * .34).clamp(330.0, 640.0);
 
 final _clientActivityBundleProvider = FutureProvider.family
     .autoDispose<_ClientActivityBundle, String>((ref, clientId) async {
@@ -246,13 +236,14 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
   }
 
   Future<void> _openCreateClientFlow() async {
-    final created = await openClienteFormAdaptive(context);
-    if (created == null || !mounted) return;
-    setState(() {
-      _selectedClientId = created.id;
-    });
-    await ref.read(clientesControllerProvider.notifier).refresh();
-    _showClientNotice('Cliente creado', created.nombre);
+    final allowed = await ensureAdminAuthorization(
+      context,
+      ref,
+      permission: RouteAccess.permissionForLocation(Routes.cotizaciones),
+      routeLocation: Routes.cotizaciones,
+      reason: 'Crear cliente desde Facturar',
+    );
+    if (allowed && mounted) AppNavigator.go(context, Routes.cotizaciones);
   }
 
   Future<void> _openEditClientFlow(ClienteModel client) async {
@@ -517,27 +508,11 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
     return Scaffold(
       backgroundColor: isDesktop ? desktopSalesSurface : AppColors.background,
       drawer: buildAdaptiveDrawer(context, currentUser: currentUser),
-      floatingActionButton: !isDesktop
-          ? FloatingActionButton(
-              onPressed: _openCreateClientFlow,
-              tooltip: 'Nuevo cliente',
-              backgroundColor: AppColors.secondary,
-              foregroundColor: Colors.white,
-              child: const Icon(Icons.add_rounded, size: 30),
-            )
-          : null,
 
       appBar: isDesktop
           ? FullTechPageHeader(
               title: 'Clientes',
               actions: [
-                _ClientesHeaderActionButton(
-                  icon: Icons.person_add_alt_1_rounded,
-                  label: 'Nuevo cliente',
-                  onPressed: _openCreateClientFlow,
-                  prominent: true,
-                ),
-                const SizedBox(width: 8),
                 _ClientesHeaderActionButton(
                   icon: Icons.download_rounded,
                   label: 'Exportar',
@@ -647,39 +622,66 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
       body: SafeArea(
         bottom: false,
         child: isDesktop
-            ? DesktopSalesFrame(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        clipBehavior: Clip.antiAlias,
-                        child: _buildClientesMainColumn(
-                          state: state,
-                          controller: controller,
-                          theme: theme,
-                          activeFilterCount: activeFilterCount,
-                          desktopLayout: true,
-                          selectedClient: selectedClient,
-                        ),
+            ? Column(
+                children: [
+                  HistoryToolbar(
+                    maxSearchWidth: 760,
+                    search: TextField(
+                      controller: _searchCtrl,
+                      onChanged: _handleSearch,
+                      decoration: historySearchDecoration('Buscar clientes')
+                          .copyWith(
+                            prefixIcon: const Padding(
+                              padding: EdgeInsets.all(12),
+                              child: ProvidedActionIcon(
+                                ProvidedAction.search,
+                                size: 18,
+                              ),
+                            ),
+                          ),
+                    ),
+                    actions: [
+                      _SearchFilterButton(
+                        tooltip: 'Filtros',
+                        badgeCount: activeFilterCount,
+                        onPressed: () => _openFilters(state),
+                      ),
+                    ],
+                  ),
+                  Expanded(
+                    child: DesktopSalesFrame(
+                      padding: const EdgeInsets.fromLTRB(24, 10, 24, 16),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(
+                            child: HistoryPanel(
+                              child: _buildClientesMainColumn(
+                                state: state,
+                                controller: controller,
+                                theme: theme,
+                                activeFilterCount: activeFilterCount,
+                                desktopLayout: true,
+                                selectedClient: selectedClient,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          SizedBox(
+                            width: _clientesInfoColumnWidth(width),
+                            child: HistoryPanel(
+                              child: _ClienteFixedInfoColumn(
+                                client: selectedClient,
+                                totalClients: state.items.length,
+                                refreshing: state.refreshing,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(width: 16),
-                    SizedBox(
-                      width: _clientesInfoColumnWidth(width),
-                      child: _ClienteFixedInfoColumn(
-                        client: selectedClient,
-                        totalClients: state.items.length,
-                        refreshing: state.refreshing,
-                        onNewClient: _openCreateClientFlow,
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               )
             : _buildClientesMainColumn(
                 state: state,
@@ -738,14 +740,9 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
     return Column(
       children: [
         if (desktopLayout)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
-            child: _ClientesTopPanel(
-              searchController: _searchCtrl,
-              activeFilterCount: activeFilterCount,
-              onSearchChanged: _handleSearch,
-              onOpenFilters: () => _openFilters(state),
-            ),
+          HistoryListHeader(
+            label: 'Mostrando clientes',
+            onRefresh: state.refreshing ? null : controller.refresh,
           ),
         SyncStatusBanner(
           visible: state.refreshing,
@@ -787,12 +784,25 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
                 child: RefreshIndicator(
                   onRefresh: controller.refresh,
                   child: state.items.isEmpty
-                      ? ListView(
-                          padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
+                      ? CustomScrollView(
                           physics: const AlwaysScrollableScrollPhysics(),
-                          children: const [
-                            SizedBox(height: 120),
-                            Center(child: Text('No hay clientes disponibles.')),
+                          slivers: [
+                            SliverFillRemaining(
+                              hasScrollBody: false,
+                              child: HistoryEmptyState(
+                                title: 'No hay clientes con estos filtros',
+                                message:
+                                    'Ajusta los filtros o crea un cliente desde Facturar.',
+                                buttonLabel: 'Crear cliente',
+                                onPressed:
+                                    !state.loading &&
+                                        !state.refreshing &&
+                                        state.error == null
+                                    ? _openCreateClientFlow
+                                    : null,
+                                icon: Icons.people_outline,
+                              ),
+                            ),
                           ],
                         )
                       : InfiniteScrollLoadMoreListener(
@@ -807,12 +817,9 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
                           ],
                           onLoadMore: () => unawaited(controller.loadMore()),
                           child: ListView.separated(
-                            padding: EdgeInsets.fromLTRB(
-                              desktopLayout ? 14 : 14,
-                              desktopLayout ? 4 : 8,
-                              desktopLayout ? 14 : 14,
-                              24,
-                            ),
+                            padding: desktopLayout
+                                ? EdgeInsets.zero
+                                : const EdgeInsets.fromLTRB(14, 8, 14, 24),
                             itemCount: state.items.length + 1,
                             separatorBuilder: (context, index) => Divider(
                               height: 1,
@@ -896,89 +903,113 @@ class _ClienteCard extends ConsumerWidget {
         : _formatClientDate(client.createdAt!);
 
     if (compact) {
-      return Material(
-        color: selected
-            ? colorScheme.primary.withValues(alpha: 0.08)
-            : Colors.transparent,
-        child: InkWell(
-          mouseCursor: SystemMouseCursors.click,
-          onTap: onTap,
-          hoverColor: colorScheme.primary.withValues(alpha: 0.05),
-          child: Container(
-            height: 46,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            decoration: BoxDecoration(
-              border: Border(
-                left: BorderSide(
-                  color: selected ? colorScheme.primary : Colors.transparent,
-                  width: 3,
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final showEmail =
+              constraints.maxWidth /
+                  (MediaQuery.textScalerOf(context).scale(12) / 12) >=
+              1000;
+          return Material(
+            color: selected
+                ? colorScheme.primary.withValues(alpha: 0.08)
+                : Colors.transparent,
+            child: InkWell(
+              mouseCursor: SystemMouseCursors.click,
+              onTap: onTap,
+              hoverColor: colorScheme.primary.withValues(alpha: 0.05),
+              child: Container(
+                height: 46,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                decoration: BoxDecoration(
+                  border: Border(
+                    left: BorderSide(
+                      color: selected
+                          ? colorScheme.primary
+                          : Colors.transparent,
+                      width: 3,
+                    ),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      flex: 5,
+                      child: Text(
+                        client.nombre.trim().isEmpty
+                            ? 'Cliente sin nombre'
+                            : client.nombre,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: selected
+                              ? FontWeight.w700
+                              : FontWeight.w400,
+                          letterSpacing: -0.08,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      flex: 3,
+                      child: Text(
+                        phone.isEmpty ? 'Sin teléfono' : phone,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    if (showEmail)
+                      Expanded(
+                        child: Text(
+                          client.correo?.trim().isNotEmpty == true
+                              ? client.correo!
+                              : 'Sin correo',
+                          key: ValueKey('client-email-${client.id}'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: AppColors.textMuted),
+                        ),
+                      ),
+                    SizedBox(
+                      width: 86,
+                      child: Text(
+                        createdAt ?? 'Sin fecha',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.right,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    if (onEdit != null) ...[
+                      const SizedBox(width: 6),
+                      _ClientRowEditButton(
+                        onPressed: onEdit!,
+                        tooltip: 'Editar cliente',
+                      ),
+                    ],
+                    if (client.isDeleted) ...[
+                      const SizedBox(width: 8),
+                      Text(
+                        'Eliminado',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: colorScheme.error,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
             ),
-            child: Row(
-              children: [
-                Expanded(
-                  flex: 5,
-                  child: Text(
-                    client.nombre.trim().isEmpty
-                        ? 'Cliente sin nombre'
-                        : client.nombre,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      fontWeight: selected ? FontWeight.w900 : FontWeight.w800,
-                      letterSpacing: -0.08,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  flex: 3,
-                  child: Text(
-                    phone.isEmpty ? 'Sin teléfono' : phone,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                SizedBox(
-                  width: 86,
-                  child: Text(
-                    createdAt ?? 'Sin fecha',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.right,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                if (onEdit != null) ...[
-                  const SizedBox(width: 6),
-                  _ClientRowEditButton(
-                    onPressed: onEdit!,
-                    tooltip: 'Editar cliente',
-                  ),
-                ],
-                if (client.isDeleted) ...[
-                  const SizedBox(width: 8),
-                  Text(
-                    'Eliminado',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: colorScheme.error,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
+          );
+        },
       );
     }
 
@@ -1080,7 +1111,7 @@ class _ClientRowEditButton extends StatelessWidget {
     return IconButton(
       tooltip: tooltip,
       onPressed: onPressed,
-      icon: const Icon(Icons.edit_outlined, size: 15),
+      icon: const ProvidedActionIcon(ProvidedAction.edit, size: 17),
       visualDensity: VisualDensity.compact,
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints.tightFor(width: 26, height: 26),
@@ -1119,13 +1150,11 @@ class _ClienteFixedInfoColumn extends ConsumerWidget {
     required this.client,
     required this.totalClients,
     required this.refreshing,
-    required this.onNewClient,
   });
 
   final ClienteModel? client;
   final int totalClients;
   final bool refreshing;
-  final VoidCallback onNewClient;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1145,55 +1174,25 @@ class _ClienteFixedInfoColumn extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
-            child: Row(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: desktopSalesAccentSoft,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: const Color(0xFFB8CAFF)),
-                    boxShadow: [
-                      BoxShadow(
-                        color: desktopSalesAccent.withValues(alpha: 0.16),
-                        blurRadius: 18,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
-                  ),
-                  child: const Icon(
-                    Icons.person_search_rounded,
-                    color: desktopSalesAccent,
-                    size: 22,
+                Text(
+                  selected?.nombre.trim().isNotEmpty == true
+                      ? selected!.nombre
+                      : 'Detalle del cliente',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Cliente seleccionado',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 0,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        refreshing
-                            ? 'Sincronizando · $totalClients clientes'
-                            : '$totalClients clientes visibles',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ],
+                const SizedBox(height: 4),
+                Text(
+                  refreshing
+                      ? 'Sincronizando · $totalClients clientes'
+                      : '$totalClients clientes visibles',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: AppColors.textMuted,
                   ),
                 ),
               ],
@@ -1205,23 +1204,12 @@ class _ClienteFixedInfoColumn extends ConsumerWidget {
           ),
           Expanded(
             child: selected == null
-                ? _ClienteInfoEmptyState(onNewClient: onNewClient)
+                ? const _ClienteInfoEmptyState()
                 : SingleChildScrollView(
                     padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          selected.nombre.trim().isEmpty
-                              ? 'Cliente sin nombre'
-                              : selected.nombre.trim(),
-                          style: theme.textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 0,
-                            height: 1.05,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
                         Row(
                           children: [
                             _ClientStatusDot(
@@ -1254,6 +1242,12 @@ class _ClienteFixedInfoColumn extends ConsumerWidget {
                             icon: Icons.badge_outlined,
                             label: 'RNC / Cédula',
                             value: selected.taxId!.trim(),
+                          ),
+                        if ((selected.correo ?? '').trim().isNotEmpty)
+                          _ClientInfoLine(
+                            icon: Icons.mail_outline,
+                            label: 'Correo',
+                            value: selected.correo!.trim(),
                           ),
                         if ((selected.direccion ?? '').trim().isNotEmpty)
                           _ClientInfoLine(
@@ -1289,51 +1283,18 @@ class _ClienteFixedInfoColumn extends ConsumerWidget {
 }
 
 class _ClienteInfoEmptyState extends StatelessWidget {
-  const _ClienteInfoEmptyState({required this.onNewClient});
-
-  final VoidCallback onNewClient;
-
+  const _ClienteInfoEmptyState();
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.person_off_outlined,
-              size: 36,
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Selecciona un cliente',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'La información aparecerá fija en esta columna.',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: onNewClient,
-              icon: const Icon(Icons.person_add_alt_1_rounded),
-              label: const Text('Nuevo cliente'),
-            ),
-          ],
-        ),
+  Widget build(BuildContext context) => const ColoredBox(
+    color: AppColors.surfaceSubtle,
+    child: Center(
+      child: Text(
+        'Selecciona un cliente para ver el detalle',
+        textAlign: TextAlign.center,
+        style: TextStyle(color: AppColors.textMuted),
       ),
-    );
-  }
+    ),
+  );
 }
 
 class _ClientActivitySection extends StatelessWidget {
@@ -1374,11 +1335,16 @@ class _ClientActivitySection extends StatelessWidget {
             GridView(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 2,
                 crossAxisSpacing: 8,
                 mainAxisSpacing: 8,
-                mainAxisExtent: 80,
+                mainAxisExtent:
+                    80 *
+                    (MediaQuery.textScalerOf(context).scale(12) / 12).clamp(
+                      1.0,
+                      2.0,
+                    ),
               ),
               children: [
                 _ClientMetricTile(
@@ -1452,7 +1418,7 @@ class _ClientSectionTitle extends StatelessWidget {
           child: Text(
             label,
             style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w700,
               letterSpacing: 0,
             ),
           ),
@@ -1501,7 +1467,7 @@ class _ClientMetricTile extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
                     color: desktopSalesMuted,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
@@ -1515,7 +1481,7 @@ class _ClientMetricTile extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w700,
                   letterSpacing: 0,
                   height: 1.05,
                 ),
@@ -1581,7 +1547,7 @@ class _ClientTimelineMiniRow extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w700,
                     letterSpacing: 0,
                   ),
                 ),
@@ -1607,7 +1573,7 @@ class _ClientTimelineMiniRow extends StatelessWidget {
               formatRdCurrencyAccounting(amount.toDouble()),
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
                 color: desktopSalesAccent,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w700,
               ),
             ),
         ],
@@ -1650,7 +1616,7 @@ class _ClientActivityMessage extends StatelessWidget {
                   title,
                   style: Theme.of(
                     context,
-                  ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w900),
+                  ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 3),
                 Text(
@@ -1740,7 +1706,7 @@ class _ClientInfoLine extends StatelessWidget {
                   label,
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w700,
                     letterSpacing: 0,
                   ),
                 ),
@@ -1750,7 +1716,7 @@ class _ClientInfoLine extends StatelessWidget {
                   maxLines: maxLines,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w600,
                     height: 1.14,
                     letterSpacing: 0,
                   ),
@@ -1785,7 +1751,7 @@ class _ClientStatusDot extends StatelessWidget {
           label,
           style: Theme.of(context).textTheme.labelMedium?.copyWith(
             color: color,
-            fontWeight: FontWeight.w900,
+            fontWeight: FontWeight.w700,
           ),
         ),
       ],
@@ -1798,89 +1764,24 @@ class _ClientesHeaderActionButton extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.onPressed,
-    this.prominent = false,
   });
-
   final IconData icon;
   final String label;
   final VoidCallback? onPressed;
-  final bool prominent;
-
   @override
-  Widget build(BuildContext context) {
-    final style = prominent
-        ? FilledButton.styleFrom(
-            backgroundColor: desktopSalesAccent,
-            foregroundColor: Colors.white,
-            minimumSize: const Size(0, 42),
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          )
-        : OutlinedButton.styleFrom(
-            foregroundColor: desktopSalesAccent,
-            backgroundColor: Colors.white,
-            side: const BorderSide(color: Color(0xFFCFE0FF)),
-            minimumSize: const Size(0, 42),
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          );
-    final child = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 18),
-        const SizedBox(width: 8),
-        Text(
-          label,
-          style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
-        ),
-      ],
-    );
-    return prominent
-        ? FilledButton(onPressed: onPressed, style: style, child: child)
-        : OutlinedButton(onPressed: onPressed, style: style, child: child);
-  }
-}
-
-class _ClientesTopPanel extends StatelessWidget {
-  const _ClientesTopPanel({
-    required this.searchController,
-    required this.activeFilterCount,
-    required this.onSearchChanged,
-    required this.onOpenFilters,
-  });
-
-  final TextEditingController searchController;
-  final int activeFilterCount;
-  final ValueChanged<String> onSearchChanged;
-  final VoidCallback onOpenFilters;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: TextField(
-            controller: searchController,
-            onChanged: onSearchChanged,
-            decoration: desktopSalesInputDecoration(
-              hintText: 'Buscar clientes',
-              prefixIcon: const Icon(Icons.search_rounded, size: 20),
-            ),
-          ),
-        ),
-        const SizedBox(width: 10),
-        _SearchFilterButton(
-          tooltip: 'Filtros',
-          badgeCount: activeFilterCount,
-          onPressed: onOpenFilters,
-        ),
-      ],
-    );
-  }
+  Widget build(BuildContext context) => SizedBox.square(
+    dimension: 40,
+    child: IconButton(
+      tooltip: label,
+      onPressed: onPressed,
+      icon: icon == Icons.download_rounded
+          ? const ProvidedActionIcon(ProvidedAction.download)
+          : icon == Icons.refresh_rounded
+          ? const ProvidedActionIcon(ProvidedAction.refresh)
+          : Icon(icon, size: 22),
+      color: AppColors.textSecondary,
+    ),
+  );
 }
 
 String _formatClientDate(DateTime value) {

@@ -42,11 +42,15 @@ void main() {
         contains('/api/app-updates/windows/latest/download'),
       );
 
-      // Android: APK oficial.
+      // Android: ficha oficial de Google Play.
       final android = byKind[AppAccessKind.android]!;
       expect(android.actionLabel, 'Descargar');
       expect(android.uri, AppAccessLinks.androidReleaseUri);
-      expect(android.uri.toString(), endsWith('app-release.apk'));
+      expect(android.status, 'Google Play');
+      expect(
+        android.uri.toString(),
+        'https://play.google.com/store/apps/details?id=com.daleventa.pos',
+      );
 
       // iPhone: ficha oficial en App Store.
       final ios = byKind[AppAccessKind.ios]!;

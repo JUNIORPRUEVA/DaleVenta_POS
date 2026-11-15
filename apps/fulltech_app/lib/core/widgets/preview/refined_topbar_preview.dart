@@ -4,6 +4,7 @@ import '../../theme/app_colors.dart';
 import '../../theme/app_theme.dart';
 import '../branded_menu_button.dart';
 import '../refined_topbar_controls.dart';
+import '../../../features/account/apps_downloads_panel.dart';
 
 /// Muestra componentes reales con estados de ejemplo, sin consultar servicios.
 void main() => runApp(
@@ -64,7 +65,7 @@ class _RefinedTopbarPreviewState extends State<RefinedTopbarPreview> {
             ),
           ),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 2),
         PopupMenuButton<String>(
           tooltip: 'Estado de sincronización: $_status',
           onSelected: (value) => setState(() => _status = value),
@@ -94,7 +95,7 @@ class _RefinedTopbarPreviewState extends State<RefinedTopbarPreview> {
                 : AppColors.warning,
           ),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 2),
         PopupMenuButton<void>(
           tooltip: 'Cuenta y empresa',
           itemBuilder: (_) => const [
@@ -137,6 +138,16 @@ class _RefinedTopbarPreviewState extends State<RefinedTopbarPreview> {
           OutlinedButton(
             onPressed: () => setState(() => _longCompany = !_longCompany),
             child: const Text('Probar nombre largo'),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton(
+            onPressed: () => showGeneralDialog<void>(
+              context: context,
+              barrierDismissible: true,
+              barrierLabel: 'Cerrar aplicaciones',
+              pageBuilder: (_, __, ___) => const AppsDownloadsPanel(),
+            ),
+            child: const Text('Ver aplicaciones'),
           ),
           const Spacer(),
           Text(

@@ -35,6 +35,7 @@ import '../../core/widgets/custom_app_bar.dart';
 import '../../core/widgets/fulltech_dialog.dart';
 import '../../core/guardian/guardian_monitoring_panel.dart';
 import '../../modules/cash/cash_turn_menu_button.dart';
+import '../../core/widgets/compact_square_switch.dart';
 import 'apps_downloads_panel.dart';
 import 'delete_account_dialog.dart';
 import '../settings/ui/printer_settings_page.dart';
@@ -503,34 +504,41 @@ class AccountCompanySettingsScreen extends ConsumerWidget {
       title: 'Empresa',
       subtitle: 'Datos usados en facturas, cotizaciones, tickets y reportes.',
       contentScale: previewContentScale,
-      action: OutlinedButton.icon(
-        onPressed: () => ref.invalidate(companySettingsProvider),
-        icon: const Icon(Icons.sync),
-        label: const Text('Sincronizar'),
-        style: _outlinedButtonStyle(),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _SectionPanel(
-            title: 'Datos de empresa',
-            children: [
-              company.maybeWhen(
-                data: (settings) => _CompanySettingsEditor(settings: settings),
-                orElse: () => const _ParagraphBlock(
-                  title: 'Configuración de empresa',
-                  text:
-                      'Los datos de la empresa se sincronizan con el servidor para usarse en documentos internos y fiscales.',
+      plainMobileBar: true,
+      action: MediaQuery.sizeOf(context).width < 900
+          ? IconButton(
+              tooltip: 'Sincronizar',
+              onPressed: () => ref.invalidate(companySettingsProvider),
+              icon: const Icon(Icons.sync),
+            )
+          : OutlinedButton.icon(
+              onPressed: () => ref.invalidate(companySettingsProvider),
+              icon: const Icon(Icons.sync),
+              label: const Text('Sincronizar'),
+              style: _outlinedButtonStyle().copyWith(
+                textStyle: WidgetStatePropertyAll(
+                  Theme.of(context).textTheme.labelMedium,
+                ),
+                foregroundColor: WidgetStatePropertyAll(
+                  MediaQuery.sizeOf(context).width < 900
+                      ? AppColors.surface
+                      : AppColors.secondary,
+                ),
+                side: WidgetStatePropertyAll(
+                  BorderSide(
+                    color: MediaQuery.sizeOf(context).width < 900
+                        ? AppColors.surface
+                        : AppColors.borderStrong,
+                  ),
                 ),
               ),
-            ],
-          ),
-          // El checklist interno de 15 pasos de la era ALANUBE ya no se pinta
-          // aquí: al encender la facturación electrónica inundaba la pantalla
-          // con un proceso que el cliente completa dentro del módulo. Vive en
-          // la vista administrativa de e-CF (`/ecf/administracion`), junto al
-          // diagnóstico.
-        ],
+            ),
+      child: company.maybeWhen(
+        data: (settings) => _CompanySettingsEditor(settings: settings),
+        orElse: () => const _ParagraphBlock(
+          title: 'Configuración de empresa',
+          text: 'Los datos de la empresa se sincronizan con el servidor.',
+        ),
       ),
     );
   }
@@ -659,39 +667,15 @@ class _EcfCompanySwitchSectionState
                 ],
               ),
             if (!embedded) const SizedBox(height: 6),
-            if (canManage)
-              _CompactSwitchRow(
-                title: 'Activar módulo de facturación electrónica',
-                subtitle:
-                    'Activa impuestos y el acceso al módulo.',
-                value: enabled,
-                onChanged: (next) {
-                  if (_saving) return;
-                  _toggle(next);
-                },
-              )
-            else
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Activar módulo de facturación electrónica',
-                          style: _strongBodyStyle(),
-                        ),
-                        Text(
-                          'Solo un administrador autorizado puede cambiarlo.',
-                          style: _bodyStyle().copyWith(height: 1.18),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Switch.adaptive(value: enabled, onChanged: null),
-                ],
-              ),
+            _CompactSwitchRow(
+              title: 'Activar módulo de facturación electrónica',
+              subtitle: canManage
+                  ? 'Activa impuestos y el acceso al módulo.'
+                  : 'Solo un administrador autorizado puede cambiarlo.',
+              showSubtitle: true,
+              value: enabled,
+              onChanged: canManage && !_saving ? _toggle : null,
+            ),
             if (_error != null) ...[
               const SizedBox(height: 8),
               Text(
@@ -742,7 +726,7 @@ class _EcfSalesWithoutDocumentControl extends ConsumerWidget {
         AppPermission.manageEcfConfig,
       ),
       embedded: true,
-      nested: true,
+      nested: false,
     );
   }
 }
@@ -940,6 +924,7 @@ class _SettingsDetailScaffold extends ConsumerWidget {
     required this.child,
     this.action,
     this.contentScale = 1,
+    this.plainMobileBar = false,
   });
 
   final String title;
@@ -947,6 +932,7 @@ class _SettingsDetailScaffold extends ConsumerWidget {
   final Widget child;
   final Widget? action;
   final double contentScale;
+  final bool plainMobileBar;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -987,33 +973,37 @@ class _SettingsDetailScaffold extends ConsumerWidget {
             compact ? 14 : 18,
             compactDesktop ? 14 : 24,
           ),
-          children: [
-            detailChild,
-          ],
+          children: [detailChild],
         ),
       ),
     );
     return Scaffold(
       backgroundColor: AppColors.background,
       drawer: buildAdaptiveDrawer(context, currentUser: user),
-      appBar: CustomAppBar(
-        title: '',
-        showLogo: false,
-        showDepartmentLabel: false,
-        leading: backButton,
-        trailing: const SizedBox.shrink(),
-        // La acción principal vive en el appbar, pegada al extremo derecho: la
-        // fila de subtítulo se eliminó para no gastar alto de pantalla en texto
-        // que no aporta y que obligaba a hacer scroll.
-        actions: action == null
-            ? null
-            : [
-                Padding(
-                  padding: const EdgeInsets.only(right: 14),
-                  child: action!,
-                ),
-              ],
-      ),
+      appBar: plainMobileBar && !isDesktopLayout
+          ? AppBar(
+              title: Text(title),
+              leading: backButton,
+              actions: [if (action != null) action!],
+            )
+          : CustomAppBar(
+              title: '',
+              showLogo: false,
+              showDepartmentLabel: false,
+              leading: backButton,
+              trailing: const SizedBox.shrink(),
+              // La acción principal vive en el appbar, pegada al extremo derecho: la
+              // fila de subtítulo se eliminó para no gastar alto de pantalla en texto
+              // que no aporta y que obligaba a hacer scroll.
+              actions: action == null
+                  ? null
+                  : [
+                      Padding(
+                        padding: const EdgeInsets.only(right: 14),
+                        child: action!,
+                      ),
+                    ],
+            ),
       body: showInlineTitle
           ? SafeArea(left: false, right: false, bottom: false, child: content)
           : content,
@@ -2219,10 +2209,15 @@ class _StatusBanner extends StatelessWidget {
 }
 
 class _SectionPanel extends StatelessWidget {
-  const _SectionPanel({required this.title, required this.children});
+  const _SectionPanel({
+    required this.title,
+    required this.children,
+    this.trailing,
+  });
 
   final String title;
   final List<Widget> children;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -2232,7 +2227,15 @@ class _SectionPanel extends StatelessWidget {
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: _titleStyle(16)),
+        if (trailing == null)
+          Text(title, style: _titleStyle(16))
+        else
+          Row(
+            children: [
+              Expanded(child: Text(title, style: _titleStyle(16))),
+              trailing!,
+            ],
+          ),
         SizedBox(height: compactDesktop ? 8 : 12),
         ...children,
       ],
@@ -2575,6 +2578,7 @@ class _CompanySettingsEditorState
             accountNumber: _bankNumber.text.trim(),
             bankName: _bankName.text.trim(),
           ),
+        ...widget.settings.bankAccounts.skip(1),
       ],
     );
     final hasCoveredToggleChange =
@@ -2647,137 +2651,125 @@ class _CompanySettingsEditorState
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    // En escritorio, densidad compacta SIEMPRE: la pantalla debe caber sin
-    // scroll. Antes dependía de la altura de la ventana y en monitores altos
-    // los controles se inflaban.
-    final compactDesktop = size.width >= 900;
-    final sectionGap = compactDesktop ? 8.0 : 12.0;
-    final smallGap = compactDesktop ? 5.0 : 8.0;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (_showLegacyCompanyShortcut)
-          _SettingsOptionGrid(
-            items: [
-              _SettingsOptionData(
-                icon: Icons.storefront_rounded,
-                title: 'Nombre comercial',
-                value: widget.settings.companyName,
+    return _SectionPanel(
+      title: 'Datos de la empresa',
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Tooltip(
+            message: 'Logo de la empresa (opcional)',
+            child: TextButton.icon(
+              key: const ValueKey('company_logo_upload'),
+              onPressed: _pickLogo,
+              icon: _logoBytes == null
+                  ? const Icon(Icons.add_photo_alternate_outlined, size: 20)
+                  : ClipRRect(
+                      borderRadius: BorderRadius.circular(3),
+                      child: Image.memory(
+                        _logoBytes!,
+                        width: 24,
+                        height: 24,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+              label: Text(_logoBytes == null ? 'Subir logo' : 'Cambiar logo'),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.textMuted,
+                minimumSize: const Size(0, 40),
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                textStyle: Theme.of(context).textTheme.labelSmall,
               ),
-              _SettingsOptionData(
-                icon: Icons.badge_outlined,
-                title: 'RNC',
-                value: widget.settings.rnc,
-              ),
-              _SettingsOptionData(
-                icon: Icons.phone_outlined,
-                title: 'Teléfono',
-                value: widget.settings.phone,
-              ),
-              _SettingsOptionData(
-                icon: Icons.schedule_rounded,
-                title: 'Horario',
-                value: widget.settings.businessHours,
-              ),
-            ],
+            ),
           ),
-        if (_showLegacyCompanyShortcut) SizedBox(height: sectionGap),
-        _CompanyLogoUploader(
-          logoBytes: _logoBytes,
-          companyName: _name.text.trim(),
-          onPick: _pickLogo,
-          onRemove: _logoBytes == null ? null : _removeLogo,
-        ),
-        SizedBox(height: sectionGap),
-        Text('Datos principales', style: _titleStyle(15)),
-        SizedBox(height: smallGap),
+          TextButton.icon(
+            key: const ValueKey('company_more_details'),
+            onPressed: () {
+              FocusScope.of(context).unfocus();
+              setState(() => _showAdvancedCompany = !_showAdvancedCompany);
+            },
+            icon: Icon(
+              _showAdvancedCompany ? Icons.expand_less : Icons.expand_more,
+              size: 16,
+            ),
+            label: Text(_showAdvancedCompany ? 'Ver menos' : 'Ver más'),
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.textMuted,
+              minimumSize: const Size(0, 40),
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              textStyle: Theme.of(context).textTheme.labelSmall,
+            ),
+          ),
+        ],
+      ),
+      children: [
         _FormWrap(
-          compact: compactDesktop,
+          compact: true,
+          desktopColumns: 4,
+          mobileColumns: 2,
           children: [
             _field(_name, 'Nombre comercial', Icons.storefront_outlined),
-            _field(_rnc, 'RNC / identificación fiscal', Icons.badge_outlined),
+            _field(_rnc, 'RNC (opcional)', Icons.badge_outlined),
             _field(
-              _ecfContactEmail,
-              'Correo de facturación electrónica',
-              Icons.mark_email_read_outlined,
-              keyboardType: TextInputType.emailAddress,
-            ),
-            _field(_phone, 'Teléfono principal', Icons.phone_outlined),
-            _field(
-              _phonePreferential,
-              'Teléfono preferencial',
-              Icons.phone_in_talk_outlined,
+              _phone,
+              'Teléfono principal',
+              Icons.phone_outlined,
+              keyboardType: TextInputType.phone,
             ),
             _field(
               _address,
               'Dirección de la empresa',
               Icons.location_on_outlined,
-              maxLines: 2,
-            ),
-            _field(_businessHours, 'Horario', Icons.schedule_outlined),
-            _field(
-              _description,
-              'Descripción comercial',
-              Icons.notes_outlined,
-              maxLines: 2,
             ),
           ],
         ),
-        SizedBox(height: sectionGap),
-        _FiscalSettingsPanel(
-          compact: compactDesktop,
-          ecfEnabled: widget.settings.ecfEnabled,
-          pricesIncludeTax: _pricesIncludeTax,
-          defaultTaxRate: widget.settings.defaultTaxRate > 0
-              ? widget.settings.defaultTaxRate
-              : 0.18,
-          onPricesIncludeTaxChanged: (value) =>
-              setState(() => _pricesIncludeTax = value),
-          ecfControl: const _EcfCompanySwitchSection(embedded: true),
-        ),
-        SizedBox(height: compactDesktop ? 6 : 10),
-        _InventorySettingsPanel(
-          compact: compactDesktop,
-          inventoryEnabled: _inventoryEnabled,
-          measurementUnitsEnabled: _measurementUnitsEnabled,
-          multiWarehouseEnabled: _multiWarehouseEnabled,
-          onInventoryEnabledChanged: _setInventoryEnabled,
-          onMeasurementUnitsEnabledChanged: (value) =>
-              setState(() => _measurementUnitsEnabled = value),
-          onMultiWarehouseEnabledChanged: (value) =>
-              setState(() => _multiWarehouseEnabled = value),
-        ),
-        SizedBox(height: compactDesktop ? 6 : 10),
-        _WholesaleSettingsPanel(
-          enabled: _wholesalePriceListsEnabled,
-          onChanged: (value) =>
-              setState(() => _wholesalePriceListsEnabled = value),
-        ),
-        SizedBox(height: compactDesktop ? 4 : 10),
-        Align(
-          alignment: Alignment.centerRight,
-          child: TextButton.icon(
-            onPressed: () =>
-                setState(() => _showAdvancedCompany = !_showAdvancedCompany),
-            icon: Icon(
-              _showAdvancedCompany
-                  ? Icons.keyboard_arrow_up_rounded
-                  : Icons.keyboard_arrow_down_rounded,
-            ),
-            label: Text(_showAdvancedCompany ? 'Ver menos' : 'Ver más'),
-          ),
+        const SizedBox(height: 10),
+        Text('Representante legal · opcional', style: _strongBodyStyle()),
+        const SizedBox(height: 6),
+        _FormWrap(
+          compact: true,
+          mobileColumns: 2,
+          children: [
+            _field(_legalName, 'Nombre completo', Icons.person_outline_rounded),
+            _field(_legalCedula, 'Cédula', Icons.credit_card_outlined),
+          ],
         ),
         if (_showAdvancedCompany) ...[
-          Divider(
-            height: compactDesktop ? 10 : 16,
-            color: const Color(0xFFDDE7EE),
+          const SizedBox(height: 12),
+          _CompanyLogoUploader(
+            logoBytes: _logoBytes,
+            companyName: _name.text.trim(),
+            onPick: _pickLogo,
+            onRemove: _logoBytes == null ? null : _removeLogo,
           ),
-          Text('Canales y ubicación', style: _titleStyle(15)),
-          SizedBox(height: smallGap),
+          const SizedBox(height: 10),
           _FormWrap(
-            compact: compactDesktop,
+            compact: true,
+            desktopColumns: 3,
             children: [
+              _field(
+                _ecfContactEmail,
+                'Correo de facturación electrónica',
+                Icons.mark_email_read_outlined,
+                keyboardType: TextInputType.emailAddress,
+              ),
+              _field(
+                _phonePreferential,
+                'Teléfono preferencial',
+                Icons.phone_in_talk_outlined,
+              ),
+              _field(_businessHours, 'Horario', Icons.schedule_outlined),
+              _field(
+                _description,
+                'Descripción comercial',
+                Icons.notes_outlined,
+              ),
+              _field(_legalRole, 'Cargo', Icons.work_outline_rounded),
+              _field(_legalNationality, 'Nacionalidad', Icons.flag_outlined),
+              _field(
+                _legalCivilStatus,
+                'Estado civil',
+                Icons.assignment_ind_outlined,
+              ),
               _field(_website, 'Sitio web', Icons.language_outlined),
               _field(_instagram, 'Instagram', Icons.alternate_email_rounded),
               _field(_facebook, 'Facebook', Icons.facebook_outlined),
@@ -2788,36 +2780,12 @@ class _CompanySettingsEditorState
               ),
             ],
           ),
-          SizedBox(height: sectionGap),
-          Text('Representante legal', style: _titleStyle(15)),
-          SizedBox(height: smallGap),
+          const SizedBox(height: 10),
+          Text('Cuenta bancaria principal', style: _strongBodyStyle()),
+          const SizedBox(height: 6),
           _FormWrap(
-            compact: compactDesktop,
-            children: [
-              _field(
-                _legalName,
-                'Representante legal',
-                Icons.person_outline_rounded,
-              ),
-              _field(
-                _legalCedula,
-                'Cédula representante',
-                Icons.credit_card_outlined,
-              ),
-              _field(_legalRole, 'Cargo', Icons.work_outline_rounded),
-              _field(_legalNationality, 'Nacionalidad', Icons.flag_outlined),
-              _field(
-                _legalCivilStatus,
-                'Estado civil',
-                Icons.assignment_ind_outlined,
-              ),
-            ],
-          ),
-          SizedBox(height: sectionGap),
-          Text('Cuenta bancaria principal', style: _titleStyle(15)),
-          SizedBox(height: smallGap),
-          _FormWrap(
-            compact: compactDesktop,
+            compact: true,
+            desktopColumns: 4,
             children: [
               _field(
                 _bankAlias,
@@ -2838,7 +2806,64 @@ class _CompanySettingsEditorState
             ],
           ),
         ],
-        SizedBox(height: compactDesktop ? 8 : 14),
+        const Divider(height: 24, color: AppColors.border),
+        Text('Activación de módulos', style: _titleStyle(16)),
+        const SizedBox(height: 2),
+        Text('Activa lo que necesites para tu empresa.', style: _bodyStyle()),
+        const SizedBox(height: 8),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final columns = constraints.maxWidth >= 900
+                ? 3
+                : constraints.maxWidth >= 340
+                ? 2
+                : 1;
+            final width = (constraints.maxWidth - 16 * (columns - 1)) / columns;
+            return Wrap(
+              spacing: 16,
+              runSpacing: 12,
+              children: [
+                SizedBox(
+                  width: constraints.maxWidth < 640
+                      ? constraints.maxWidth
+                      : width,
+                  child: _FiscalSettingsPanel(
+                    ecfEnabled: widget.settings.ecfEnabled,
+                    pricesIncludeTax: _pricesIncludeTax,
+                    defaultTaxRate: widget.settings.defaultTaxRate > 0
+                        ? widget.settings.defaultTaxRate
+                        : 0.18,
+                    onPricesIncludeTaxChanged: (value) =>
+                        setState(() => _pricesIncludeTax = value),
+                    ecfControl: const _EcfCompanySwitchSection(embedded: true),
+                  ),
+                ),
+                SizedBox(
+                  width: width,
+                  child: _InventorySettingsPanel(
+                    inventoryEnabled: _inventoryEnabled,
+                    measurementUnitsEnabled: _measurementUnitsEnabled,
+                    multiWarehouseEnabled: _multiWarehouseEnabled,
+                    onInventoryEnabledChanged: _setInventoryEnabled,
+                    onMeasurementUnitsEnabledChanged: (value) =>
+                        setState(() => _measurementUnitsEnabled = value),
+                    onMultiWarehouseEnabledChanged: (value) =>
+                        setState(() => _multiWarehouseEnabled = value),
+                  ),
+                ),
+                SizedBox(
+                  width: width,
+                  child: _WholesaleSettingsPanel(
+                    enabled: _wholesalePriceListsEnabled,
+                    onChanged: (value) =>
+                        setState(() => _wholesalePriceListsEnabled = value),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+        const SizedBox(height: 12),
         Align(
           alignment: Alignment.centerRight,
           child: FilledButton.icon(
@@ -2851,7 +2876,11 @@ class _CompanySettingsEditorState
                   )
                 : const Icon(Icons.save_outlined),
             label: Text(_saving ? 'Guardando' : 'Guardar empresa'),
-            style: _filledButtonStyle(),
+            style: _filledButtonStyle().copyWith(
+              textStyle: WidgetStatePropertyAll(
+                Theme.of(context).textTheme.labelLarge,
+              ),
+            ),
           ),
         ),
       ],
@@ -2892,7 +2921,9 @@ class _CompanySettingsEditorState
           controller: controller,
           maxLines: maxLines,
           keyboardType: keyboardType,
-          autocorrect: keyboardType == TextInputType.emailAddress ? false : true,
+          autocorrect: keyboardType == TextInputType.emailAddress
+              ? false
+              : true,
           // Key estable para pruebas: el rótulo ya no es descendiente del
           // campo, así que localizarlo por texto dejó de ser fiable.
           key: ValueKey('company_field_$label'),
@@ -2938,66 +2969,51 @@ class _CompactSwitchRow extends StatelessWidget {
     required this.value,
     required this.onChanged,
     this.subtitle,
-    this.leading,
+    this.showSubtitle = false,
   });
 
   final String title;
   final String? subtitle;
-  final Widget? leading;
   final bool value;
-  final ValueChanged<bool> onChanged;
+  final ValueChanged<bool>? onChanged;
+  final bool showSubtitle;
 
   @override
-  Widget build(BuildContext context) {
-    return MergeSemantics(
-      child: Semantics(
-        toggled: value,
-        label: title,
-        value: value ? 'Activado' : 'Desactivado',
-        child: InkWell(
-          borderRadius: BorderRadius.circular(8),
-          onTap: () => onChanged(!value),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2),
-            child: Row(
-              children: [
-                if (leading != null) ...[
-                  SizedBox(width: 54, child: leading!),
-                  const SizedBox(width: 6),
+  Widget build(BuildContext context) => Tooltip(
+    message: subtitle ?? title,
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        CompactSquareSwitch(
+          key: ValueKey('company_setting_switch_$title'),
+          value: value,
+          onChanged: onChanged,
+          label: title,
+        ),
+        const SizedBox(width: 4),
+        Expanded(
+          child: ExcludeSemantics(
+            child: InkWell(
+              canRequestFocus: false,
+              onTap: onChanged == null ? null : () => onChanged!(!value),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: _strongBodyStyle()),
+                  if (showSubtitle && (subtitle ?? '').isNotEmpty)
+                    Text(subtitle!, style: _bodyStyle().copyWith(height: 1.2)),
                 ],
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(title, style: _strongBodyStyle()),
-                      if ((subtitle ?? '').trim().isNotEmpty)
-                        Text(
-                          subtitle!,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: _bodyStyle().copyWith(height: 1.18),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Switch.adaptive(
-                  key: ValueKey('company_setting_switch_$title'),
-                  value: value,
-                  onChanged: onChanged,
-                ),
-              ],
+              ),
             ),
           ),
         ),
-      ),
-    );
-  }
+      ],
+    ),
+  );
 }
 
 class _FiscalSettingsPanel extends StatelessWidget {
   const _FiscalSettingsPanel({
-    this.compact = false,
     required this.ecfEnabled,
     required this.pricesIncludeTax,
     required this.defaultTaxRate,
@@ -3005,76 +3021,64 @@ class _FiscalSettingsPanel extends StatelessWidget {
     this.ecfControl,
   });
 
-  final bool compact;
   final bool ecfEnabled;
   final bool pricesIncludeTax;
   final double defaultTaxRate;
   final ValueChanged<bool> onPricesIncludeTaxChanged;
-
-  /// Activación del módulo, independiente de su preparación para emitir.
   final Widget? ecfControl;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final rateLabel = '${(defaultTaxRate * 100).toStringAsFixed(0)}%';
-    return Material(
-      color: theme.colorScheme.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-        side: const BorderSide(color: Color(0xFFDDE7EE)),
-      ),
-      child: Padding(
-        padding: EdgeInsets.all(compact ? 9 : 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Facturación electrónica', style: _titleStyle(15)),
-            SizedBox(height: compact ? 3 : 6),
-            if (ecfControl != null) ecfControl!,
-            if (ecfEnabled) ...[
-              Divider(height: compact ? 10 : 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'ITBIS predeterminado: $rateLabel',
-                      style: _bodyStyle(),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Facturación electrónica', style: _titleStyle(13)),
+        const SizedBox(height: 4),
+        if (ecfControl != null) ecfControl!,
+        if (ecfEnabled) ...[
+          Padding(
+            padding: const EdgeInsets.only(left: 48, top: 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('ITBIS predeterminado: $rateLabel', style: _bodyStyle()),
+                const SizedBox(height: 6),
+                SegmentedButton<bool>(
+                  segments: const [
+                    ButtonSegment(value: true, label: Text('ITBIS incluido')),
+                    ButtonSegment(value: false, label: Text('Precio + ITBIS')),
+                  ],
+                  style: SegmentedButton.styleFrom(
+                    minimumSize: const Size(0, 40),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    textStyle: theme.textTheme.labelMedium,
+                    selectedBackgroundColor: AppColors.primarySoft,
+                    selectedForegroundColor: theme.colorScheme.primary,
+                    backgroundColor: AppColors.surface,
+                    side: const BorderSide(color: AppColors.borderStrong),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(3),
                     ),
                   ),
-                ],
-              ),
-              SizedBox(height: compact ? 6 : 10),
-              SegmentedButton<bool>(
-                segments: const [
-                  ButtonSegment(
-                    value: true,
-                    label: Text('ITBIS incluido'),
-                  ),
-                  ButtonSegment(value: false, label: Text('Precio + ITBIS')),
-                ],
-                style: SegmentedButton.styleFrom(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(6),
-                  ),
+                  selected: {pricesIncludeTax},
+                  onSelectionChanged: (values) =>
+                      onPricesIncludeTaxChanged(values.first),
                 ),
-                selected: {pricesIncludeTax},
-                onSelectionChanged: (values) =>
-                    onPricesIncludeTaxChanged(values.first),
-              ),
-              const SizedBox(height: 8),
-              const _EcfSalesWithoutDocumentControl(),
-            ],
-          ],
-        ),
-      ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 4),
+          const _EcfSalesWithoutDocumentControl(),
+        ],
+      ],
     );
   }
 }
 
 class _InventorySettingsPanel extends StatelessWidget {
   const _InventorySettingsPanel({
-    this.compact = false,
     required this.inventoryEnabled,
     required this.measurementUnitsEnabled,
     required this.multiWarehouseEnabled,
@@ -3083,7 +3087,6 @@ class _InventorySettingsPanel extends StatelessWidget {
     required this.onMultiWarehouseEnabledChanged,
   });
 
-  final bool compact;
   final bool inventoryEnabled;
   final bool measurementUnitsEnabled;
   final bool multiWarehouseEnabled;
@@ -3092,59 +3095,32 @@ class _InventorySettingsPanel extends StatelessWidget {
   final ValueChanged<bool> onMultiWarehouseEnabledChanged;
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Material(
-      color: theme.colorScheme.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-        side: const BorderSide(color: Color(0xFFDDE7EE)),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text('Inventario', style: _titleStyle(13)),
+      const SizedBox(height: 4),
+      _CompactSwitchRow(
+        title: 'Control de inventario',
+        subtitle:
+            'Controla existencias al vender, comprar y ajustar productos.',
+        value: inventoryEnabled,
+        onChanged: onInventoryEnabledChanged,
       ),
-      child: Padding(
-        padding: EdgeInsets.all(compact ? 9 : 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Inventario', style: _titleStyle(15)),
-            SizedBox(height: compact ? 3 : 6),
-            _CompactSwitchRow(
-              title: 'Control de inventario',
-              subtitle:
-                  'Controla existencias al vender, comprar y ajustar productos.',
-              leading: Text(
-                inventoryEnabled ? 'Activo' : 'Inactivo',
-                style: TextStyle(
-                  color: inventoryEnabled
-                      ? AppColors.success
-                      : AppColors.textMuted,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 12,
-                ),
-              ),
-              value: inventoryEnabled,
-              onChanged: onInventoryEnabledChanged,
-            ),
-            Divider(height: compact ? 9 : 16),
-            _CompactSwitchRow(
-              title: 'Activar unidades de medida',
-              subtitle:
-                  'Permite vender y manejar productos por unidad, libra, metro y otras medidas.',
-              value: measurementUnitsEnabled,
-              onChanged: onMeasurementUnitsEnabledChanged,
-            ),
-            Divider(height: compact ? 9 : 16),
-            _CompactSwitchRow(
-              title: 'Activar múltiples almacenes',
-              subtitle:
-                  'Activa inventario por almacenes, transferencias y Kardex por ubicación.',
-              value: multiWarehouseEnabled,
-              onChanged: onMultiWarehouseEnabledChanged,
-            ),
-          ],
-        ),
+      _CompactSwitchRow(
+        title: 'Activar unidades de medida',
+        subtitle: 'Permite vender por unidad, libra, metro y otras medidas.',
+        value: measurementUnitsEnabled,
+        onChanged: onMeasurementUnitsEnabledChanged,
       ),
-    );
-  }
+      _CompactSwitchRow(
+        title: 'Activar múltiples almacenes',
+        subtitle: 'Inventario por almacenes, transferencias y Kardex.',
+        value: multiWarehouseEnabled,
+        onChanged: onMultiWarehouseEnabledChanged,
+      ),
+    ],
+  );
 }
 
 class _WholesaleSettingsPanel extends StatelessWidget {
@@ -3157,41 +3133,19 @@ class _WholesaleSettingsPanel extends StatelessWidget {
   final ValueChanged<bool> onChanged;
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Material(
-      color: theme.colorScheme.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-        side: const BorderSide(color: Color(0xFFDDE7EE)),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text('Ventas', style: _titleStyle(13)),
+      const SizedBox(height: 4),
+      _CompactSwitchRow(
+        title: 'Listas de precios',
+        subtitle: 'Precios por cliente, producto y cantidad.',
+        value: enabled,
+        onChanged: onChanged,
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Mayoreo', style: _titleStyle(15)),
-            const SizedBox(height: 6),
-            _CompactSwitchRow(
-              title: 'Listas de precios',
-              subtitle:
-                  'Permite precios por cliente, reglas por producto y escalas por cantidad.',
-              leading: Text(
-                enabled ? 'Activo' : 'Inactivo',
-                style: TextStyle(
-                  color: enabled ? AppColors.success : AppColors.textMuted,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 12,
-                ),
-              ),
-              value: enabled,
-              onChanged: onChanged,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+    ],
+  );
 }
 
 class _CompanyLogoUploader extends StatelessWidget {
@@ -3252,9 +3206,7 @@ class _CompanyLogoUploader extends StatelessWidget {
           final text = Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Logo', style: _strongBodyStyle()),
-              ],
+              children: [Text('Logo', style: _strongBodyStyle())],
             ),
           );
           final pickButton = OutlinedButton.icon(
@@ -3380,22 +3332,35 @@ class _SettingsOptionGrid extends StatelessWidget {
 }
 
 class _FormWrap extends StatelessWidget {
-  const _FormWrap({required this.children, this.compact = false});
+  const _FormWrap({
+    required this.children,
+    this.compact = false,
+    this.desktopColumns = 2,
+    this.mobileColumns = 1,
+  });
 
   final List<Widget> children;
   final bool compact;
+  final int desktopColumns;
+  final int mobileColumns;
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final compact = constraints.maxWidth < 760;
-        final width = compact
-            ? constraints.maxWidth
-            : (constraints.maxWidth - (this.compact ? 8 : 12)) / 2;
+        final columns = constraints.maxWidth >= 1000
+            ? desktopColumns
+            : constraints.maxWidth >= 700
+            ? desktopColumns.clamp(1, 3)
+            : constraints.maxWidth >= 280
+            ? mobileColumns
+            : 1;
+        final width =
+            (constraints.maxWidth - (compact ? 8 : 12) * (columns - 1)) /
+            columns;
         return Wrap(
-          spacing: this.compact ? 8 : 12,
-          runSpacing: this.compact ? 7 : 12,
+          spacing: compact ? 8 : 12,
+          runSpacing: compact ? 7 : 12,
           children: [
             for (final child in children) SizedBox(width: width, child: child),
           ],

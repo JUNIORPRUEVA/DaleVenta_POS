@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import '../../support/inactive_activation_controller.dart';
+import 'package:daleventa_pos/core/widgets/compact_square_switch.dart';
 import 'package:daleventa_pos/features/onboarding/application/activation_controller.dart';
 
 import 'package:daleventa_pos/core/auth/auth_provider.dart';
@@ -24,6 +25,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../support/feedback_finders.dart';
 
 class _FakePrintingPlatformResolver extends PrintingPlatformResolver {
   const _FakePrintingPlatformResolver(this._platform);
@@ -249,9 +251,87 @@ Finder _companySettingSwitch(String title) =>
     find.byKey(ValueKey('company_setting_switch_$title'));
 
 bool _companySettingSwitchValue(WidgetTester tester, String title) =>
-    tester.widget<Switch>(_companySettingSwitch(title)).value;
+    tester.widget<CompactSquareSwitch>(_companySettingSwitch(title)).value;
 
 void main() {
+  testWidgets(
+    'guardar datos principales conserva los campos ocultos y permite RNC y representante vacíos',
+    (tester) async {
+      final initial = CompanySettings.empty().copyWith(
+        companyName: 'Empresa de prueba',
+        rnc: '',
+        legalRepresentativeName: '',
+        legalRepresentativeCedula: '',
+        phone: '8095550100',
+        ecfContactEmail: 'fiscal@example.test',
+        phonePreferential: '8095550200',
+        businessHours: 'Lunes a viernes',
+        description: 'Descripción conservada',
+        websiteUrl: 'https://example.test',
+        legalRepresentativeRole: 'Administrador',
+        legalRepresentativeNationality: 'Dominicana',
+        bankAccounts: const [
+          BankAccountEntry(
+            name: 'Principal',
+            accountNumber: 'cuenta-ficticia-1',
+          ),
+          BankAccountEntry(
+            name: 'Secundaria',
+            accountNumber: 'cuenta-ficticia-2',
+          ),
+        ],
+      );
+      final repository = _FakeCompanySettingsRepository(
+        initialSettings: initial,
+      );
+      await _pumpSettingsRouter(
+        tester,
+        initialLocation: Routes.configuracionEmpresa,
+        initialSettings: initial,
+        companyRepository: repository,
+        viewport: const Size(1264, 681),
+      );
+      expect(
+        find.byKey(
+          const ValueKey('company_field_Correo de facturación electrónica'),
+        ),
+        findsNothing,
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('company_field_Teléfono principal')),
+        '8095550300',
+      );
+      await tester.ensureVisible(find.text('Guardar empresa'));
+      await tester.tap(find.text('Guardar empresa').hitTestable());
+      await _settleSettingsFrame(tester);
+      if (find.text('Autorizar').evaluate().isNotEmpty) {
+        await tester.enterText(find.byType(TextField).last, '1234');
+        await tester.tap(find.text('Autorizar'));
+        await _settleSettingsFrame(tester);
+      }
+      final saved = repository.lastSavedSettings!;
+      expect(saved.phone, '8095550300');
+      expect(saved.rnc, isEmpty);
+      expect(saved.legalRepresentativeName, isEmpty);
+      expect(saved.legalRepresentativeCedula, isEmpty);
+      expect(saved.ecfContactEmail, initial.ecfContactEmail);
+      expect(saved.phonePreferential, initial.phonePreferential);
+      expect(saved.businessHours, initial.businessHours);
+      expect(saved.description, initial.description);
+      expect(saved.websiteUrl, initial.websiteUrl);
+      expect(saved.legalRepresentativeRole, initial.legalRepresentativeRole);
+      expect(
+        saved.legalRepresentativeNationality,
+        initial.legalRepresentativeNationality,
+      );
+      expect(
+        saved.bankAccounts.map((bank) => bank.toMap()),
+        initial.bankAccounts.map((bank) => bank.toMap()),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   test('settings error mapper hides technical ApiException formatting', () {
     final message = CompanySettingsFeedback.failure(
       CompanySettings.empty().copyWith(measurementUnitsEnabled: true),
@@ -454,7 +534,7 @@ void main() {
       findsOneWidget,
     );
 
-    await tester.tap(find.byTooltip('Cerrar notificación'));
+    await tester.tap(closeFeedbackButton());
     await tester.pump();
     expect(
       find.byKey(const ValueKey('persistent_feedback_card')),
@@ -758,7 +838,7 @@ void main() {
   });
 
   const desktopTargets = <String, String>{
-    Routes.configuracionEmpresa: 'Datos de empresa',
+    Routes.configuracionEmpresa: 'Datos de la empresa',
     Routes.configuracionDocumentos: 'Datos para documentos',
     Routes.configuracionImpresora: 'Impresión y tickets',
     Routes.configuracionParametros: 'Parámetros importantes',

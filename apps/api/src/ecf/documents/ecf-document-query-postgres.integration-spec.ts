@@ -38,6 +38,7 @@ uat("e-CF document query API (tenant isolation) on PostgreSQL", () => {
           approvedQuantity: 10_000,
           declarationVersion: "v1",
           declaredByUserId: actor,
+          expiresAt: documentType === "E31" ? new Date("2035-12-31T23:59:59.999Z") : null,
         },
       });
     }

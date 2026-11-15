@@ -267,6 +267,12 @@ void main() {
 
     // Verificar ahora → consulta de solo lectura → resuelve.
     await tapAndSettle(tester, 'Verificar ahora');
+    for (var attempt = 0;
+        attempt < 100 && find.text('Resultado de la verificación').evaluate().isEmpty;
+        attempt++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.pump();
+    }
     expect(find.text('Resultado de la verificación'), findsOneWidget);
     expect(find.textContaining('sale-real-1'), findsOneWidget);
     await tapAndSettle(tester, 'Entendido');

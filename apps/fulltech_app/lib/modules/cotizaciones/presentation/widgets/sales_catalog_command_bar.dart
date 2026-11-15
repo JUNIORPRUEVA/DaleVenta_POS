@@ -81,9 +81,10 @@ class SalesCatalogCommandBar extends StatelessWidget {
                         borderSide: BorderSide(color: AppColors.primary),
                       ),
                       prefixIcon: const Center(
-                        child: ImageIcon(
-                          AssetImage(searchAsset),
-                          size: 18,
+                        child: AppIcon(
+                          AppIcons.search,
+                          size: 22,
+                          strokeWidth: 2,
                           color: AppColors.textSecondary,
                         ),
                       ),

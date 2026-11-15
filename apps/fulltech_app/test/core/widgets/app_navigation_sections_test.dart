@@ -11,8 +11,10 @@ UserModel _user() => UserModel(
   companyId: 'company-a',
 );
 
-List<String> _titles(List<AppNavigationSection> sections) =>
-    sections.expand((section) => section.items).map((item) => item.title).toList();
+List<String> _titles(List<AppNavigationSection> sections) => sections
+    .expand((section) => section.items)
+    .map((item) => item.title)
+    .toList();
 
 void main() {
   group('buildAppNavigationSections — función pura (sin ref.watch)', () {
@@ -34,7 +36,7 @@ void main() {
       expect(titles, isNot(contains('Kardex')));
       // El resto de módulos base se mantiene.
       expect(titles, contains('Productos'));
-      expect(titles, contains('Facturación'));
+      expect(titles, contains('Facturar'));
     });
 
     test('multiWarehouseEnabled=true expone Almacenes y Kardex', () {
@@ -47,14 +49,16 @@ void main() {
       expect(titles, contains('Productos'));
     });
 
-    test('sin e-CF y sin piloto, la entrada de facturación electrónica no aparece',
-        () {
-      final titles = _titles(
-        buildAppNavigationSections(_user(), multiWarehouseEnabled: true),
-      );
+    test(
+      'sin e-CF y sin piloto, la entrada de facturación electrónica no aparece',
+      () {
+        final titles = _titles(
+          buildAppNavigationSections(_user(), multiWarehouseEnabled: true),
+        );
 
-      expect(titles, isNot(contains('Facturación electrónica')));
-    });
+        expect(titles, isNot(contains('Facturación electrónica')));
+      },
+    );
 
     test('la empresa piloto ve la entrada aunque su e-CF esté desactivado', () {
       final titles = _titles(
@@ -85,10 +89,7 @@ void main() {
     test('no duplica módulos en ninguna combinación', () {
       for (final enabled in [true, false]) {
         final titles = _titles(
-          buildAppNavigationSections(
-            _user(),
-            multiWarehouseEnabled: enabled,
-          ),
+          buildAppNavigationSections(_user(), multiWarehouseEnabled: enabled),
         );
 
         expect(
@@ -113,65 +114,72 @@ void main() {
 
     // Paridad desktop: `DesktopSidebar` consume exactamente esta salida. El
     // orden y el contenido deben permanecer idénticos a la línea base de PC.
-    test('paridad desktop: árbol de navegación con multiWarehouseEnabled=false', () {
-      final sections = buildAppNavigationSections(
-        _user(),
-        multiWarehouseEnabled: false,
-      );
+    test(
+      'paridad desktop: árbol de navegación con multiWarehouseEnabled=false',
+      () {
+        final sections = buildAppNavigationSections(
+          _user(),
+          multiWarehouseEnabled: false,
+        );
 
-      expect(
-        sections.map((section) => section.title).toList(),
-        ['Principal', 'Contabilidad', 'Cuenta'],
-      );
-      expect(_titles(sections), [
-        'Clientes',
-        'Facturación',
-        'Lista de ventas',
-        'Registrar entrada',
-        'Registrar salida',
-        'Historial',
-        'Créditos',
-        'Productos',
-        'Ajuste stock',
-        'Categorías',
-        'Recuento',
-        'Compras',
-        'Reportes',
-        'Depósitos',
-        'Pagos',
-        'Nómina',
-        'Usuario',
-      ]);
-    });
+        expect(sections.map((section) => section.title).toList(), [
+          'Principal',
+          'Contabilidad',
+          'Cuenta',
+        ]);
+        expect(_titles(sections), [
+          'Clientes',
+          'Facturar',
+          'Historial de ventas',
+          'Registrar entrada',
+          'Registrar salida',
+          'Historial',
+          'Créditos',
+          'Productos',
+          'Ajuste stock',
+          'Categorías',
+          'Recuento',
+          'Compras',
+          'Reportes',
+          'Depósitos',
+          'Pagos',
+          'Nómina',
+          'Usuario',
+        ]);
+      },
+    );
 
-    test('paridad desktop: árbol de navegación con multiWarehouseEnabled=true', () {
-      final sections = buildAppNavigationSections(
-        _user(),
-        multiWarehouseEnabled: true,
-      );
+    test(
+      'paridad desktop: árbol de navegación con multiWarehouseEnabled=true',
+      () {
+        final sections = buildAppNavigationSections(
+          _user(),
+          multiWarehouseEnabled: true,
+        );
 
-      expect(_titles(sections), [
-        'Clientes',
-        'Facturación',
-        'Lista de ventas',
-        'Registrar entrada',
-        'Registrar salida',
-        'Historial',
-        'Créditos',
-        'Productos',
-        'Ajuste stock',
-        'Categorías',
-        'Recuento',
-        'Kardex',
-        'Almacenes',
-        'Compras',
-        'Reportes',
-        'Depósitos',
-        'Pagos',
-        'Nómina',
-        'Usuario',
-      ]);
-    });
+        expect(_titles(sections), [
+          'Clientes',
+          'Facturar',
+          'Historial de ventas',
+          'Registrar entrada',
+          'Registrar salida',
+          'Historial',
+          'Créditos',
+          'Productos',
+          'Ajuste stock',
+          'Categorías',
+          'Recuento',
+          'Kardex',
+          'Almacenes',
+          'Compras',
+          'Reportes',
+          'Depósitos',
+          'Pagos',
+          'Nómina',
+          'Usuario',
+        ]);
+      },
+    );
   });
 
   group('visibilidad e-CF por empresa (opt-in obligatorio)', () {
@@ -224,8 +232,8 @@ void main() {
 
       for (final traditional in [
         'Clientes',
-        'Facturación',
-        'Lista de ventas',
+        'Facturar',
+        'Historial de ventas',
         'Créditos',
         'Productos',
         'Compras',
@@ -240,4 +248,3 @@ void main() {
     });
   });
 }
-

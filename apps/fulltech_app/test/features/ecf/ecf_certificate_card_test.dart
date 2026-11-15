@@ -611,10 +611,10 @@ void main() {
     expect(find.text('Todavía no está disponible'), findsOneWidget);
     expect(find.text('Ver el vídeo de preparación'), findsNothing);
     expect(find.text('Antes de empezar'), findsOneWidget);
-    expect(find.text('Vídeo no disponible'), findsOneWidget);
+    expect(find.text('Vídeo no disponible'), findsNothing);
     // Sin vídeo no se repiten los requisitos: ya están en la portada.
     expect(find.textContaining('FI-GDF-016'), findsNothing);
-    expect(find.textContaining('Los tres puntos anteriores'), findsOneWidget);
+    expect(find.textContaining('Puedes comenzar sin esperar'), findsOneWidget);
     expect(find.text('Abrir portal de la DGII'), findsOneWidget);
   });
 

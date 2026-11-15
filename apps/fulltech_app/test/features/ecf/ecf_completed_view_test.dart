@@ -41,6 +41,8 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('¡Felicidades!'), findsNothing);
+      expect(find.text('Completa la habilitación'), findsOneWidget);
+      expect(find.text('Revisa la facturación'), findsNothing);
       expect(
         find.textContaining('ya puede facturar electrónicamente'),
         findsNothing,

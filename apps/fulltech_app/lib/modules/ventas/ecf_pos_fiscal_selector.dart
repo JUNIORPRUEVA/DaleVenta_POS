@@ -25,6 +25,7 @@ class EcfPosFiscalSelector extends StatelessWidget {
     required this.onSelected,
     this.missingBuyer = false,
     this.compact = false,
+    this.embedded = false,
   });
 
   final List<EcfPosFiscalMode> modes;
@@ -36,6 +37,7 @@ class EcfPosFiscalSelector extends StatelessWidget {
   final bool missingBuyer;
 
   final bool compact;
+  final bool embedded;
 
   static const Color _ink = Color(0xFF0F172A);
   static const Color _muted = Color(0xFF64748B);
@@ -82,6 +84,7 @@ class EcfPosFiscalSelector extends StatelessWidget {
               builder: (context, controller, child) {
                 return _Trigger(
                   compact: compact,
+                  embedded: embedded,
                   current: current,
                   invalid: missingBuyer,
                   open: controller.isOpen,
@@ -114,6 +117,7 @@ class EcfPosFiscalSelector extends StatelessWidget {
 class _Trigger extends StatelessWidget {
   const _Trigger({
     required this.compact,
+    required this.embedded,
     required this.current,
     required this.invalid,
     required this.open,
@@ -122,6 +126,7 @@ class _Trigger extends StatelessWidget {
   });
 
   final bool compact;
+  final bool embedded;
   final EcfPosFiscalMode? current;
   final bool invalid;
   final bool open;
@@ -130,7 +135,9 @@ class _Trigger extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = invalid ? theme.colorScheme.error : theme.colorScheme.primary;
+    final accent = invalid
+        ? theme.colorScheme.error
+        : theme.colorScheme.primary;
     final hasValue = current != null;
 
     return Material(
@@ -140,21 +147,31 @@ class _Trigger extends StatelessWidget {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 160),
           curve: Curves.easeOut,
-          height: compact ? 44 : 50,
+          height: embedded ? 38 : (compact ? 44 : 50),
           decoration: BoxDecoration(
-            color: open ? const Color(0xFFF6FAFF) : _EcfPosFiscalSelectorColors.surface,
-            border: Border(
-              left: BorderSide(color: accent, width: 3),
-              top: BorderSide(
-                color: open ? accent.withValues(alpha: 0.55) : _EcfPosFiscalSelectorColors.line,
-              ),
-              right: BorderSide(
-                color: open ? accent.withValues(alpha: 0.55) : _EcfPosFiscalSelectorColors.line,
-              ),
-              bottom: BorderSide(
-                color: open ? accent.withValues(alpha: 0.55) : _EcfPosFiscalSelectorColors.line,
-              ),
-            ),
+            color: open
+                ? const Color(0xFFF6FAFF)
+                : _EcfPosFiscalSelectorColors.surface,
+            border: embedded
+                ? null
+                : Border(
+                    left: BorderSide(color: accent, width: 3),
+                    top: BorderSide(
+                      color: open
+                          ? accent.withValues(alpha: 0.55)
+                          : _EcfPosFiscalSelectorColors.line,
+                    ),
+                    right: BorderSide(
+                      color: open
+                          ? accent.withValues(alpha: 0.55)
+                          : _EcfPosFiscalSelectorColors.line,
+                    ),
+                    bottom: BorderSide(
+                      color: open
+                          ? accent.withValues(alpha: 0.55)
+                          : _EcfPosFiscalSelectorColors.line,
+                    ),
+                  ),
           ),
           padding: const EdgeInsets.fromLTRB(10, 0, 8, 0),
           child: Row(
@@ -164,21 +181,27 @@ class _Trigger extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'COMPROBANTE ELECTRÓNICO',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 9,
-                        height: 1.1,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.9,
-                        color: _EcfPosFiscalSelectorColors.muted,
+                    if (!embedded) ...[
+                      Text(
+                        'COMPROBANTE ELECTRÓNICO',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 9,
+                          height: 1.1,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.9,
+                          color: _EcfPosFiscalSelectorColors.muted,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 2),
+                      const SizedBox(height: 2),
+                    ],
                     Text(
-                      hasValue ? current!.label : 'Elegir comprobante',
+                      hasValue
+                          ? (embedded && current == EcfPosFiscalMode.normal
+                                ? 'Normal · sin comprobante'
+                                : current!.label)
+                          : 'Elegir comprobante',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -261,9 +284,7 @@ class _EcfModeMenuItem extends StatelessWidget {
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 border: Border.all(
-                  color: active
-                      ? primary
-                      : _EcfPosFiscalSelectorColors.line,
+                  color: active ? primary : _EcfPosFiscalSelectorColors.line,
                   width: active ? 1.4 : 1,
                 ),
               ),
@@ -273,9 +294,7 @@ class _EcfModeMenuItem extends StatelessWidget {
                   fontSize: 10.5,
                   height: 1,
                   fontWeight: FontWeight.w900,
-                  color: active
-                      ? primary
-                      : _EcfPosFiscalSelectorColors.muted,
+                  color: active ? primary : _EcfPosFiscalSelectorColors.muted,
                 ),
               ),
             ),
@@ -291,9 +310,7 @@ class _EcfModeMenuItem extends StatelessWidget {
                       height: 1.2,
                       fontWeight: FontWeight.w800,
                       letterSpacing: 0,
-                      color: active
-                          ? primary
-                          : _EcfPosFiscalSelectorColors.ink,
+                      color: active ? primary : _EcfPosFiscalSelectorColors.ink,
                     ),
                   ),
                 ],

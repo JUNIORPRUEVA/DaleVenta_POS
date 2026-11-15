@@ -70,6 +70,9 @@ local("company activation and POS readiness on isolated PostgreSQL", () => {
       companyId, documentType: "E32", prefix: "E32",
       startNumber: 1, nextNumber: 1, endNumber: 10,
     } });
+    expect((await query.capabilities(user)).posReady).toBe(false);
+    await prisma.ecfDgiiAuthorizedSequence.create({data:{companyId,environment:"SANDBOX",documentType:"E32",
+      authorizationNumber:"SYNTHETIC-OWN",rangeFrom:1,rangeTo:10,approvedQuantity:10,declarationVersion:"test-v1"}});
     expect(await query.capabilities(user)).toMatchObject({ posReady: true, posAvailableTypes: ["E32"] });
     await prisma.ecfSequence.update({ where: { id: sequence.id }, data: { nextNumber: 11 } });
     expect((await query.capabilities(user)).posReady).toBe(false);

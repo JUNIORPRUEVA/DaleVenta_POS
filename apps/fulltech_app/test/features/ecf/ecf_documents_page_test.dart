@@ -107,6 +107,45 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  testWidgets(
+    'filtros y buscador rectangulares mantienen contraste seleccionado',
+    (tester) async {
+      await pumpTray(
+        tester,
+        harness(
+          tray(
+            (_) => {
+              'total': 1,
+              'items': [document(id: 'demo', encf: 'E310000000001')],
+            },
+          ),
+        ),
+      );
+      final statusFilter = tester.widget<FilterChip>(
+        find.byType(FilterChip).first,
+      );
+      final typeFilter = tester.widget<ChoiceChip>(
+        find.byType(ChoiceChip).first,
+      );
+      expect(
+        (statusFilter.shape as RoundedRectangleBorder).borderRadius,
+        BorderRadius.circular(6),
+      );
+      expect(
+        (typeFilter.shape as RoundedRectangleBorder).borderRadius,
+        BorderRadius.circular(6),
+      );
+      expect(statusFilter.labelStyle!.color, Colors.white);
+      expect(typeFilter.labelStyle!.color, Colors.white);
+      final field = tester.widget<TextField>(find.byType(TextField));
+      expect(
+        (field.decoration!.enabledBorder as OutlineInputBorder).borderRadius,
+        BorderRadius.circular(6),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('shows each document real status instead of one generic badge', (
     tester,
   ) async {

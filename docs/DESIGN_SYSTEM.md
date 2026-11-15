@@ -58,6 +58,16 @@ Role-specific branding can change primary/secondary/tertiary colors. Check `role
 - Inputs are filled white, with 16px radius, soft border, stronger focused border, and status error styling.
 - Dropdown menus follow the input styling.
 
+Fiscal tray refinement approved by the owner (2026-11-14): status/type filters
+and search use compact rectangular corners (6px), with white text on selected
+primary controls. Document rows use a thin border and compact status indicators.
+This is scoped to the fiscal tray; the global chip/input theme is unchanged.
+The pending fiscal completion view combines its header and embedded numbering
+into one EcfSurface, without nesting white bordered sections.
+Fiscal configuration19 also uses6px rectangular buttons and compact panels,
+with a two-column desktop layout and a single mobile column. Numbering summaries
+wrap metadata without ellipsis in this view; global summary defaults are unchanged.
+
 ## Tables, Lists, Menus
 
 - `DataTableTheme` uses muted heading row and medium body weight.
@@ -100,6 +110,8 @@ Use these before creating new primitives:
 - `AppDrawer`
 - `AppNavigation`
 - `PrimaryButton`
+- `CompactSquareSwitch` for compact company module controls: rectangular visual
+  track, 44×40 interaction area, keyboard activation and toggled/disabled semantics.
 - `ErrorBanner`
 - `SyncStatusBanner`
 - `ProductNetworkImage`

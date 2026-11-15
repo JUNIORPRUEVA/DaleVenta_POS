@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../support/feedback_finders.dart';
 
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
@@ -15,7 +16,6 @@ import 'package:daleventa_pos/core/offline/offline_store.dart';
 import 'package:daleventa_pos/core/tax/product_tax_options_provider.dart';
 import 'package:daleventa_pos/core/uom/uom_formatters.dart';
 import 'package:daleventa_pos/core/utils/money_formatters.dart';
-import 'package:daleventa_pos/core/widgets/fulltech_dialog.dart';
 import 'package:daleventa_pos/features/catalogo/data/catalog_repository.dart';
 import 'package:daleventa_pos/features/products/ui/inventory_module_pages.dart';
 import 'package:daleventa_pos/features/warehouses/data/warehouse_repository.dart';
@@ -753,11 +753,11 @@ void main() {
         find.byKey(const ValueKey('persistent_feedback_card')),
         findsOneWidget,
       );
-      expect(find.byTooltip('Cerrar notificación'), findsOneWidget);
+      expect(closeFeedbackButton(), findsOneWidget);
       expect(tester.takeException(), isNull);
 
       // La X cierra la notificación.
-      await tester.tap(find.byTooltip('Cerrar notificación'));
+      await tester.tap(closeFeedbackButton());
       await tester.pumpAndSettle();
       expect(
         find.byKey(const ValueKey('persistent_feedback_card')),
@@ -955,7 +955,7 @@ void main() {
         ),
         'Accesorios',
       );
-      await tester.tap(find.widgetWithText(DialogPrimaryButton, 'Crear'));
+      await tester.tap(find.widgetWithText(FilledButton, 'Crear'));
       await tester.pumpAndSettle();
       await tester.runAsync(() async {
         await Future<void>.delayed(const Duration(milliseconds: 200));

@@ -43,6 +43,7 @@ uat("e-CF numbering ranges (E31/E34) on PostgreSQL", () => {
           approvedQuantity: 10_000,
           declarationVersion: "v1",
           declaredByUserId: actor,
+          expiresAt: documentType === "E31" ? new Date("2035-12-31T23:59:59.999Z") : null,
         },
       });
     }
@@ -80,9 +81,40 @@ uat("e-CF numbering ranges (E31/E34) on PostgreSQL", () => {
 
   it("refuses an expired range without consuming anything", async () => {
     const { companyId, user } = await tenant();
-    await range(user, "E31", 1, 10, new Date(Date.now() - 86_400_000));
+    const saved = await range(user, "E31", 1, 10);
+    await prisma.ecfSequence.updateMany({ where: { companyId, id: saved.id }, data: { validUntil: new Date(Date.now() - 86_400_000) } });
     await expect(allocated(user)).rejects.toThrow("ECF_SEQUENCE_EXHAUSTED");
     expect(await prisma.ecfSequenceAuditLog.count({ where: { companyId } })).toBe(0);
+  });
+
+  it("inherits E31 expiry on registration/renewal and refuses a date invented by the client", async () => {
+    const { companyId, user } = await tenant();
+    const original = await range(user,"E31",1,10);
+    expect(original.validUntil?.toISOString()).toBe("2035-12-31T23:59:59.999Z");
+    await allocated(user);
+    await expect(sequences.renew(user,{documentType:"E31",startNumber:2,endNumber:10,validUntil:"2036-12-31"})).rejects.toThrow("coincidir");
+    expect((await prisma.ecfSequence.findFirstOrThrow({where:{id:original.id,companyId}})).active).toBe(true);
+    const renewed=await sequences.renew(user,{documentType:"E31",startNumber:2,endNumber:10});
+    expect(renewed.validUntil).toEqual(original.validUntil);expect(renewed.nextNumber).toBe(2);
+    expect((await prisma.ecfSequence.findFirstOrThrow({where:{id:original.id,companyId}})).nextNumber).toBe(2);
+  });
+
+  it("rechecks the authorization after a concurrent expiry update without borrowing the old date", async () => {
+    const {companyId,user}=await tenant();
+    let release!:()=>void, locked!:()=>void;
+    const gate=new Promise<void>(resolve=>{release=resolve;});
+    const started=new Promise<void>(resolve=>{locked=resolve;});
+    const update=prisma.$transaction(async tx=>{
+      await tx.$queryRaw`SELECT id FROM ecf_dgii_authorized_sequences WHERE company_id=${companyId}::uuid AND document_type='E31' AND environment='PRODUCTION' FOR UPDATE`;
+      locked();await gate;
+      await tx.ecfDgiiAuthorizedSequence.updateMany({where:{companyId,environment:"PRODUCTION",documentType:"E31"},data:{expiresAt:new Date("2034-12-31T23:59:59.999Z")}});
+    });
+    await started;
+    const registration=range(user,"E31",1,10);
+    try { await new Promise(resolve=>setTimeout(resolve,50)); } finally { release(); }
+    await update;
+    expect((await registration).validUntil?.toISOString()).toBe("2034-12-31T23:59:59.999Z");
+    expect(await prisma.ecfSequenceAuditLog.count({where:{companyId,action:"ALLOCATED"}})).toBe(0);
   });
 
   it("keeps every company on its own range", async () => {

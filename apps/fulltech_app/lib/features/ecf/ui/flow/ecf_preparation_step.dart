@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../../../core/company/company_settings_model.dart';
 import 'ecf_flow_kit.dart';
+import 'ecf_managed_setup_offer.dart';
 
 /// Única pantalla de preparación antes de iniciar la postulación.
 ///
@@ -268,6 +269,10 @@ class EcfPreparationStep extends StatelessWidget {
                   text:
                       'Un administrador con permiso de facturación electrónica debe iniciar la postulación.',
                 ),
+              if (!postulationStarted && dosaEntry != null && canManage) ...[
+                const SizedBox(height: 12),
+                const EcfManagedSetupOffer(),
+              ],
               // Después de la acción principal: primero se abre el asistente, luego
               // se explica qué falta para poder facturar.
               if (activation != null) ...[

@@ -29,10 +29,18 @@ class SalesDetailField extends StatelessWidget {
         ),
       ),
       Container(
-        height: 32,
+        constraints: const BoxConstraints(minHeight: 40),
+        clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
           color: AppColors.surface,
           border: Border.all(color: AppColors.border),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        // El disparador fiscal pinta su propia superficie blanca. El contorno
+        // debe quedar encima de ella y conservar las esquinas del campo.
+        foregroundDecoration: BoxDecoration(
+          border: Border.all(color: AppColors.border),
+          borderRadius: BorderRadius.circular(8),
         ),
         child: child,
       ),
@@ -51,6 +59,7 @@ class SalesDetailHeader extends StatelessWidget {
     required this.onOpenNote,
     required this.onPdf,
     this.priceListSelector,
+    this.fiscalSelector,
   });
 
   final Widget clientSelector;
@@ -61,6 +70,7 @@ class SalesDetailHeader extends StatelessWidget {
   final VoidCallback onOpenNote;
   final VoidCallback onPdf;
   final Widget? priceListSelector;
+  final Widget? fiscalSelector;
 
   @override
   Widget build(BuildContext context) => Material(
@@ -83,7 +93,8 @@ class SalesDetailHeader extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
@@ -109,61 +120,101 @@ class SalesDetailHeader extends StatelessWidget {
             ],
           ),
         ),
-        if (priceListSelector != null || onOpenFiscalData != null)
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        Padding(
+          padding: const EdgeInsets.fromLTRB(10, 6, 10, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (priceListSelector != null)
-                Expanded(child: priceListSelector!),
-              if (onOpenFiscalData != null)
-                Expanded(
-                  child: SalesDetailField(
-                    label: 'Comprobante',
-                    child: Tooltip(
-                      message: 'Tipo de factura: $fiscalLabel',
-                      child: InkWell(
-                        onTap: onOpenFiscalData,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  fiscalLabel,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(context).textTheme.labelMedium
-                                      ?.copyWith(fontWeight: FontWeight.w500),
+              if (priceListSelector != null ||
+                  onOpenFiscalData != null ||
+                  fiscalSelector != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (fiscalSelector != null)
+                        Expanded(
+                          child: SalesDetailField(
+                            label: 'Comprobante',
+                            child: fiscalSelector!,
+                          ),
+                        )
+                      else if (onOpenFiscalData != null)
+                        Expanded(
+                          child: SalesDetailField(
+                            label: 'Comprobante',
+                            child: Tooltip(
+                              message: 'Tipo de factura: $fiscalLabel',
+                              child: InkWell(
+                                onTap: onOpenFiscalData,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          fiscalLabel,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .labelMedium
+                                              ?.copyWith(
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                        ),
+                                      ),
+                                      const Icon(
+                                        Icons.keyboard_arrow_down_rounded,
+                                        size: 16,
+                                        color: AppColors.textSecondary,
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
-                              const Icon(
-                                Icons.keyboard_arrow_down_rounded,
-                                size: 16,
-                                color: AppColors.textSecondary,
-                              ),
-                            ],
+                            ),
                           ),
+                        ),
+                      if (priceListSelector != null) ...[
+                        if (onOpenFiscalData != null || fiscalSelector != null)
+                          const SizedBox(width: 10),
+                        Expanded(child: priceListSelector!),
+                      ],
+                    ],
+                  ),
+                ),
+              Container(
+                key: const ValueKey('sales-client-row'),
+                constraints: const BoxConstraints(minHeight: 38),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width:
+                          56 *
+                          (MediaQuery.textScalerOf(context).scale(12) / 12)
+                              .clamp(1.0, 1.5),
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 10),
+                        child: Text(
+                          'Cliente',
+                          style: Theme.of(context).textTheme.labelMedium
+                              ?.copyWith(color: AppColors.textSecondary),
                         ),
                       ),
                     ),
-                  ),
-                ),
-            ],
-          ),
-        Padding(
-          padding: const EdgeInsets.only(top: 4, bottom: 4),
-          child: Row(
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: Text(
-                  'Cliente',
-                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
+                    Expanded(child: clientSelector),
+                  ],
                 ),
               ),
-              Expanded(child: clientSelector),
             ],
           ),
         ),
@@ -188,7 +239,7 @@ class SalesDetailPriceListSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SalesDetailField(
-    label: 'Mayoreo',
+    label: 'Lista de precios',
     child: Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Row(
@@ -234,16 +285,16 @@ class _HeaderAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SizedBox.square(
-    dimension: 40,
+    dimension: 44,
     child: IconButton(
       tooltip: tooltip,
       onPressed: onPressed,
       padding: EdgeInsets.zero,
-      icon: Icon(icon, size: 22),
+      icon: Icon(icon, size: 24),
       style: IconButton.styleFrom(
         foregroundColor: active ? AppColors.primary : AppColors.textSecondary,
         hoverColor: AppColors.primarySoft,
-        shape: const RoundedRectangleBorder(),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
     ),
   );

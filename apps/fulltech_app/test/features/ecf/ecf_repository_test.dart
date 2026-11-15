@@ -95,6 +95,13 @@ void main() {
     );
   });
 
+  test('E31 expiry comes from the backend and remains optional for older payloads', () async {
+    expect(EcfCapabilities.fromJson({'enabled':true}).e31SequenceDueDate,isNull);
+    final repo=repositoryWith((_)async=>json({'enabled':true,'environment':'PRODUCTION',
+      'posReady':true,'posAvailableTypes':['E31'],'e31SequenceDueDate':'2031-12-31'}));
+    expect((await repo.capabilities()).e31SequenceDueDate,'2031-12-31');
+  });
+
   test(
     'la impresión fiscal consulta la venta y no reutiliza datos entre empresas',
     () async {

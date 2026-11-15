@@ -1,6 +1,311 @@
 # Execution State
 
-## Current work — commercial E31/refund/E34 closeout (2026-11-14)
+## Current work — integración visual/fiscal segura (2026-11-14)
+
+Own worktree C:/src/fullpos-integration-20261114,
+branch agent/integrate-visual-fiscal-20261114, base origin/production-main cbc3eceb.
+Owner requested preserving all detalleVisuales and fiscal work before integrating
+to production-main. Source snapshots/hashes complete; design72 modified+245 new,
+fiscal55 modified+77 new, plus three raw-normalized generated files preserved.
+Original checkout preserved separately; no source worktree cleaned or modified.
+Two design conflict files resolved preserving fiscal badge/panel and visual drawer.
+Fiscal patch applied cleanly afterward. API build PASS; final automated validation PASS.
+Dedicated disposable PostgreSQL in loopback55500; no production DB/config touched.
+Current report:docs/VISUAL_FISCAL_INTEGRATION_20261114.md.
+Private evidence/scripts: C:/Users/pc/.codex/backups/fullpos-visual-fiscal-integration-20261114/.
+API final3341 PASS/101 skipped; return PostgreSQL15 PASS; HTTP3 suites/44 PASS.
+Full Flutter final2426 PASS/9 skipped/0 failures in about10min, after stale UI assertions,
+reviewed references and bounded SQLite waits were corrected. Earlier failures
+are documented in the report, not hidden. Focused fixes179 PASS; cash19 PASS.
+Full web UAT build PASS156.9s; website12 tests/check/build PASS; full analysis
+PASS278.4s and final10 modified helper/test files PASS48.1s.
+Linux final42 visual tests PASS, without update mode; eleven Linux PNG references
+copied back after inspection (seven logo/search plus four header border images).
+Windows selected14 PASS; final full suite verifies Windows references normally.
+Tenant inventory168 models/endpoint matrix431 rows generated successfully;
+timestamp-only changes preserved privately and excluded from the candidate.
+Final provenance449 source records:434 byte-identical,15 merged/reviewed,
+no missing files, no changed originals, no high-confidence secret candidates.
+Final candidate inventory472 paths in docs/VISUAL_FISCAL_INTEGRATION_FILES_20261114.md.
+Integration test helper added at test/support/feedback_finders.dart. Preserve
+semantic X close affordance; no tooltip reintroduced into approved design.
+Generated notification screenshots copied privately and restored narrowly to HEAD;
+Windows failure evidence moved safely into the task backup, excluded from Git.
+App .env is synthetic/ignored. No schema/migration/lockfile/Docker/workflow diffs.
+Remote re-fetch confirms cbc3eceb; branch upstream removed to avoid an accidental
+default push to production-main. Original worktrees remain untouched.
+Owner subsequently authorized commit/push/PR of this exact integration candidate.
+Only agent/integrate-visual-fiscal-20261114 may be published, targeting production-main.
+Do not force-push, merge, deploy, restart or change production data/configuration.
+NO-GO for release: PR CI and real UAT remain gates. Local evidence above is final;
+consult the actual PR checks for publication status, not these frozen local results.
+The previous task state below is retained as source history, not current status.
+
+## Current work — paired fiscal design review (2026-11-14)
+
+Owner requested a preview and joint screen-by-screen refinement before any deploy.
+Owner selected Empresa and the fiscal module entry as the first review scope.
+All previous self-service changes remain on the same owned isolated worktree and
+branch below; no other worktree or production operation is authorized.
+
+Current design iteration explicitly requested by owner:
+- Owner resolved "screen20" as19 fiscal configuration. Updated only that
+  layout and its numbering summary: responsive two-column panels on desktop,
+  one column on mobile, rectangular6px buttons, compact existing consent switch,
+  readable stacked numbering metadata, no empty document-types panel.
+  Existing permission checks, confirmation text and repository writes preserved.
+  Added desktop640px control-visibility/button-shape regression plus actual
+  preview1280x760 E34-action visibility check.55 regression tests PASS before
+  the final text-button border polish; scoped analysis4 files PASS (4.2s).
+  Final14 preview tests PASS after final border polish. Final scoped analysis
+  four files PASS (3.9s), git diff --check PASS. Preview compiled31.3s,
+  session3652, HTTP200 at localhost4804. Desktop1280x760 and390px mobile
+  widget captures inspected and archived at docs/ecf/config-compact-design-2026-11-14/.
+  Logs:config-compact-tests-final.log, config-compact-preview-final.log,
+  config-compact-analyze-final.log, config-compact-server.log.
+  No browser/device interaction or production operation. Deployment NO-GO.
+- Owner requested compact tracking (4–6), a single centered pending-close card
+  (15), rectangular tray filters/search and finer rows (16–18). Implemented in
+  existing widgets only: tracking max-width700/neutral subtitle, embedded
+  numbering in a single pending EcfSurface,6px tray controls/row borders and a
+  compact neutral connection-error row. Selected-filter text contrast corrected.
+  The optional embedded flag defaults false, preserving other EcfSection callers.
+  Gallery fixtures now use actual known pending reason and AUTHORIZED_SANDBOX
+  for the certified example; previous demo values caused raw/fallback messages.
+  Pending-close fixture uses fictional PRODUCTION numbering for customer copy.
+  Regression82 tests PASS across preview/tray/completion/numbering/flow/activation.
+  Final preview13 tests PASS after fixture adjustment; scoped analysis9 files
+  PASS (66.8s). Preview compiled40.3s, session35363, localhost4804 HTTP200.
+  Desktop/mobile captures inspected for tracking, close15, tray16 and error18;
+  fourteen captures archived at docs/ecf/compact-fiscal-design-2026-11-14/.
+  Final diff reviewed and git diff --check PASS. No production changes.
+  Logs:compact-fiscal-tests.log, compact-fiscal-preview-final.log,
+  compact-fiscal-analyze.log and compact-fiscal-server.log.
+  Owner also mentioned screen20, but gallery has only4–19: async clarification
+  asks whether this means19 configuration or the E34 dialog; no reply yet.
+  Do not claim that unidentified screen completed.
+- Owner requested multiple remaining screens for joint review. Added local-only
+  EcfDesignGallery (test/preview) with16 scenarios numbered4–19: request/tests/
+  certification/network failure, unsigned/signed authorization, production
+  action, new/active/expired numbering, ready/incomplete closure, documents
+  populated/empty/error, and fiscal configuration. All mount real widgets;
+  no production UI or fiscal behavior changed in this iteration.
+  Numbering/configuration use synthetic PRODUCTION data to review the actual
+  customer labels; no credential or real authorization is used. Other examples
+  remain synthetic SANDBOX. HTTP stays blocked by the existing adapter.
+  Inventory:docs/ecf/FISCAL_DESIGN_REVIEW_2026-11-14.md lists what is present
+  and all identified auxiliary/admin/dialog/printing areas still to review.
+  Initial gallery tests found Riverpod nested-scope dependencies; explicit
+  local provider overrides and a local Navigator fixed the fixture. A subsequent
+  page/list return-type compile error in that override was corrected.
+  Final13 tests PASS across390/1280px, exercising all16 gallery scenarios plus
+  existing Empresa/welcome/preparation regressions. Final scoped analysis of
+  three preview files PASS (3.7s); git diff --check PASS.
+  Generated32 gallery captures; inspected mobile documents/authorization and
+  desktop production-numbering. Evidence:docs/ecf/gallery-design-2026-11-14/.
+  Logs:gallery-tests-final.log, gallery-analyze-final.log, gallery-server.log.
+  Browser interaction and physical devices remain unverified. Deployment NO-GO.
+- Preparation follow-up: owner requested neutral FullPOS-facing assistant copy
+  and optional managed setup advertising for US$150 paid once. Removed DOSA
+  from the preparation card description only; provider integration is unchanged.
+  New EcfManagedSetupOffer below the primary card reuses SupportConfig (the same
+  contact used by features/assistant/data/assistant_whatsapp_service.dart).
+  Opens WhatsApp with a prepared inquiry; no automatic message/payment/session.
+  A brief fade/slide entrance respects reduced-motion/accessibility preferences.
+  No perpetual animation, popup or change to primary postulation action.
+  Local regression:59 tests PASS (offer, preview, fiscal steps, DOSA section).
+  Tested URI target/message, 320/700px with1.4x text, reduced motion and CTA.
+  Desktop/320px rendered captures inspected; three preparation captures archived
+  at docs/ecf/managed-setup-design-2026-11-14/. No real WhatsApp message sent.
+  Scoped static analysis PASS:five files, no issues (122.5s).
+  Preview compiled in45.3s, session43077, HTTP200 at localhost4804.
+  Logs:managed-setup-tests.log, managed-setup-analyze.log,
+  managed-setup-server.log. Final diff reviewed; git diff --check PASS.
+  Browser/physical-device interaction remains unverified; native widget renders
+  and navigation were checked. Production remains NO-GO until owner approval.
+- Welcome follow-up: owner requested only refinement of the video and text
+  columns, then access to the next screen. Balanced desktop columns, aligned
+  video padding and readable14px step descriptions preserve the existing flow.
+  The missing-video state remains explicit, without a disabled duplicate action;
+  its caption no longer incorrectly references three DGII prerequisites.
+  Preview now exposes `3. Preparación` directly; Comenzar still navigates there.
+  Fixed its incomplete fixture: the real DosaAssistantSection now receives local
+  eligibility and intent responses. Previously the fixture lacked dosaEntry and
+  displayed a permission notice instead of the postulation card. Registration
+  is overridden to reject locally, with no real provider/session request.
+  Regression asserts the real card/button, the blocked action and return route.
+  No video uploaded, no provider/session opened and no production touched.
+  Validation:44 preview/fiscal-flow/certificate tests PASS. Initial run failed
+  only on an assertion of the replaced introduction; updated to the intended
+  copy, then all44 passed, including the final complete preparation fixture.
+  Final scoped analysis of six files PASS (4.8s).
+  Screenshots at320/390/1280 plus compact desktop generated; desktop and320
+  inspected; the final real preparation card was also visually inspected.
+  Browser interaction remains unavailable; these are widget renders.
+  Evidence logs:welcome-design-tests-final.log, welcome-design-analyze-final.log.
+  Updated preview compiled in40.3s, session43386, HTTP200 on localhost4804.
+  Captures archived at docs/ecf/welcome-design-2026-11-14/.
+  Deployment remains NO-GO pending explicit owner authorization.
+- Owner approved the compact company design, then requested visible optional logo
+  upload and a cleaner mobile appbar, and explicitly authorized advancing to the
+  next screen after those corrections. Logo upload/change now appears in the data
+  header using the existing picker/normalization/save flow. Only Empresa opts
+  into a plain mobile AppBar (title/back/sync), avoiding web-session window pills
+  in that narrow header. Other screens retain their existing bars.
+- Next joint screen: fiscal welcome. Corrected its inaccurate "sin salir de
+  FullPOS" copy to explain browser handoff and return. No external session is
+  opened by the local preview. Remaining welcome design is for owner review.
+- Follow-up regression95 tests PASS (preview, account, fiscal flow). Scoped
+  analysis PASS with no issues (40.5s); final preview9 tests PASS after the upload
+  label adjustment. Logs: company-logo-appbar-tests.log,
+  company-logo-appbar-analyze.log and company-logo-preview-final.log.
+  Follow-up files: account_menu_screens.dart, ecf_welcome_step.dart,
+  ecf_design_preview_test.dart, PRODUCT_SPEC.md, EXECUTION_STATE.md and the three
+  existing company-design screenshots. No global appbar behavior was changed.
+  Preview server session13420 compiled in21.3s and serves HTTP200 at
+  http://127.0.0.1:4804/ for the next joint review. Final screenshots refreshed.
+- Default company fields: name, optional RNC, phone/address; optional legal
+  representative name/ID remain visible. Header disclosure "Ver más" contains
+  logo, fiscal email, other contacts, extra representative fields and banking.
+- "Activación de módulos" is a flat responsive set of columns, with compact
+  rectangular switches beside their labels; existing confirmations and permissions
+  remain. Inventory and sales share columns in phone widths where they fit.
+- Same controllers/save contract preserve hidden values. A save regression
+  exposed existing loss of additional bank accounts; retaining the existing tail
+  fixes it without changing the primary-account editing contract.
+- Local widget regression93 PASS: company save with hidden data and empty
+  optional identity fields, disclosure persistence, consent/permissions/tenant
+  navigation, keyboard/disabled semantics, desktop1264x681 without scrolling,
+  Android/iPhone-sized mock views. This is layout simulation, not device QA.
+- First analysis found two deprecated test semantics calls; updated to current
+  flagsCollection API. Final whole Flutter analysis PASS (96.5s). Early test issues
+  (semantics handle cleanup, old title assertions and a generic dropdown finder)
+  were corrected; no failing assertion was disabled.
+- Desktop, Android-sized and iPhone-sized screenshots rendered with real widgets
+  were inspected and retained in docs/ecf/company-design-2026-11-14/.
+- Only generated unrelated notification PNGs from this run were restored to HEAD.
+  Other worktrees, production data/config and the previous fiscal work are intact.
+Validation commands actually executed from apps/fulltech_app:
+`flutter analyze --no-pub`: PASS, no issues.
+`flutter test --no-pub test/core/widgets/compact_square_switch_test.dart test/preview/ecf_design_preview_test.dart test/features/account test/features/ecf/ecf_sales_without_document_section_test.dart`:
+93 PASS. Evidence in company-design-analyze-final.log and
+company-design-regression-final.log under the private backups folder.
+Final diff review/check PASS; unrelated generated notification images restored.
+Preview was stopped only for sequential validation, recompiled successfully in
+21.8s and serves HTTP200 on127.0.0.1:4804 (server session65713).
+No commit/push/merge/deploy is authorized here.
+Owner review of this company screen is next, before moving to another screen.
+
+Files in this company design iteration:
+apps/fulltech_app/lib/features/account/account_menu_screens.dart;
+apps/fulltech_app/lib/features/ecf/ui/ecf_config_page.dart;
+apps/fulltech_app/lib/core/widgets/compact_square_switch.dart;
+apps/fulltech_app/test/core/widgets/compact_square_switch_test.dart;
+apps/fulltech_app/test/features/account/account_settings_navigation_test.dart;
+apps/fulltech_app/test/features/account/ecf_company_toggle_drawer_test.dart;
+apps/fulltech_app/test/features/account/settings_notifications_visual_qa_test.dart;
+apps/fulltech_app/test/features/ecf/ecf_sales_without_document_section_test.dart;
+apps/fulltech_app/test/preview/ecf_design_preview_test.dart;
+docs/DESIGN_SYSTEM.md; docs/PRODUCT_SPEC.md; docs/EXECUTION_STATE.md;
+docs/ecf/company-design-2026-11-14/empresa-escritorio-compacta.png;
+docs/ecf/company-design-2026-11-14/empresa-android.png;
+docs/ecf/company-design-2026-11-14/empresa-iphone.png.
+
+New test-only entry point: apps/fulltech_app/test/preview/ecf_design_preview.dart.
+Uses AccountCompanySettingsScreen, EcfWelcomeStep and EcfPreparationStep directly,
+with synthetic in-memory repositories, simulated auth and an HTTP adapter that
+rejects every network request. No deployment .env values are loaded. The UI lets
+the owner navigate Empresa/entry, change desktop/Android/iPhone/tablet layout
+sizes, test the fiscal switches and reset demo state. Layout simulation is NOT
+physical-device QA. External postulation is not opened from the preparation CTA.
+The baseline preview is now updated by the company design iteration above.
+Welcome and later fiscal screens await the next joint review; the welcome copy
+promising "sin salir de FullPOS" despite native external-browser handoff remains
+an identified item for that screen, outside this company-only iteration.
+
+Initial preview analysis/four widget tests passed before this design iteration;
+current final counts are recorded above. Existing company/portal/assistant
+baseline61 tests had passed. Six initial screenshots were rendered before the
+company redesign; current design screenshots are listed above.
+Local preview includes the startup correction and new company design; current
+server session65713 runs on127.0.0.1:4804 with HTTP200 for joint review. Older
+sessions15120/25488 were stopped only for local correction/validation.
+Do not stop the current preview while the owner reviews it.
+Interactive browser rendering is owner review, not an automated browser PASS.
+Private logs/screenshots remain under
+.codex/backups/fullpos-ecf-selfservice-20261114/design-preview*.
+Company UI redesign was explicitly requested and implemented in this iteration.
+No backend edit, commit, push, merge or deployment was performed in this design
+step. Await owner feedback, then iterate together; do not advance through the
+remaining screens without that review.
+Production/new deployment stays NO-GO. Previous browser/device QA limits remain.
+
+Preview startup follow-up: owner reported an indefinite loading cover. Root cause
+confirmed in source: web/index.html keeps #app-loader until the existing
+fullposCompleteWebStartup hook is called, and the new preview omitted that hook.
+Preview now calls the shared completeWebStartup helper after its first rendered
+frame. Production startup/shell code is unchanged. A new lifecycle regression
+checks that completion happens after content exists and only once across
+navigation/reset; all5 native preview tests PASS, analysis of all3 preview/test
+files PASS. A browser-only regression was added, but its Chrome
+runner stalled at loading before executing assertions and was aborted. Browser
+access MCP also remains unavailable; no browser functional PASS is claimed.
+Only the verified old local preview and owned stalled test process tree were
+stopped; no user browser or production service was stopped. Preview recompiled
+successfully and serves HTTP200 on the same127.0.0.1:4804 URL. Owner should reload
+to receive the fixed entry point; actual browser confirmation remains pending.
+Private evidence: design-preview-startup-{analyze,tests,red}.log. The "red" log
+contains an interrupted browser startup, NOT an executed RED assertion.
+
+## Previous work — self-service e-CF hardening (2026-11-14)
+
+Owner explicitly authorized local investigation, fixes and full simulated QA for
+all-company self-service. New isolated worktree C:/src/fullpos-ecf-selfservice-20261114,
+branch agent/ecf-selfservice-hardening-20261114, based on merged PR44/cbc3eceb.
+Original dirty workspace and all other worktrees are preserved. No production
+access or mutation is needed; FULLTECH's previously verified activation remains.
+No deploy/restart/configuration/migration or real invoice is authorized here.
+Deployment stays NO-GO pending a new explicit owner authorization.
+
+Confirmed root cause: form authorization expiry is not passed to the operational
+range; POS asks for the E31 expiry on checkout and the sale trusts that input.
+Plan: use own company/environment authorization as the server source, retain old
+contracts/data/counters, remove repeated date entry, prove new-company self-service
+and security on a fresh local PostgreSQL database with localhost external mocks.
+Implementation derives E31 expiry on server/new ranges, projects it to POS,
+validates dates and own authorizations, scopes fiscal providers to session/company
+and hides unnecessary TEST numbering before production opt-in. Customer-route
+HTTP case completes two synthetic onboarding/certification/production/E31 cycles
+with signed localhost-mocked outcomes and separate credentials/dates/QR.
+Audit also reproduced revoked/expired auto-enrollment being replaced and a
+standalone preparation race between expiry resolution and allocation. Both have
+RED-to-GREEN regressions and minimal locking/recheck fixes. Old E31 test fixtures
+now include consistent synthetic expiry; no production range/history was rewritten.
+
+Final PASS: API build; strict types for four principal specs; general backend
+240 suites/2887 tests (555 opt-in skipped); ECF PostgreSQL160 suites/2054 tests;
+atomic/readiness/sequence/environment PostgreSQL4 suites/39 tests; HTTP3 suites/44
+tests; Flutter analyze; full Flutter2266 tests (9 skipped before two new scope
+regressions); final focused Flutter128 tests including those new regressions;
+release web JS build with loopback API target. Static inventories:168 models,
+431 endpoints; unsafe query heuristic audit0 errors/298 warnings, reviewed in
+changed scope without suppressing warnings. Diff reviewed/check passes.
+
+Six screenshots rendered with real Flutter widgets and AppTheme.light were
+generated; mobile/desktop PNGs inspected. Interactive browser QA remains pending:
+browser access host unavailable, native CUA blocked on URL confidence, stopped
+and completed. Do NOT retry or bypass CUA this turn. Synthetic preview on4803
+was stopped. Only two owned task-labelled local PG containers were used on
+55500/55501, both verified and stopped (Exited0) at closeout; no allowlist was
+relaxed, no production access occurred. Temporary
+native DLL contention and a Supertest auto-close race were corrected/revalidated;
+final evidence and exact commands are in the report/private logs.
+
+No commit/push/merge/production action occurred. Changes remain on the isolated
+branch for review. Browser QA and explicit owner authorization are required before
+any new deployment. See docs/ecf/ECF_SELF_SERVICE_HARDENING_2026-11-14.md.
+
+## Previous work — commercial E31/refund/E34 closeout (2026-11-14)
 
 Mode: CONTINUOUS_CONTROLLED_EXECUTION. Owner asked to finish the remaining fiscal
 work before a later design phase. Existing user-controlled merge/deploy and

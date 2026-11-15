@@ -467,7 +467,7 @@ void main() {
 
     expect(find.text('Activa tu facturación electrónica'), findsOneWidget);
     expect(
-      find.textContaining('Todo el proceso, acompañado por FullPOS'),
+      find.textContaining('FullPOS te acompaña paso a paso'),
       findsOneWidget,
     );
     // El recorrido no repite requisitos en la portada.

@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart' hide GestureDetector;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,27 +7,29 @@ import 'package:intl/intl.dart';
 
 import '../../../core/widgets/app_gesture_detector.dart';
 
-import '../../../core/auth/auth_provider.dart';
 import '../../../core/debug/trace_log.dart';
+import '../../../core/company/company_settings_repository.dart';
 import '../../../core/errors/api_exception.dart';
 import '../../../core/realtime/operations_refresh_signals.dart';
 import '../../../core/routing/app_navigator.dart';
 import '../../../core/utils/app_feedback.dart';
 import '../../../core/utils/money_formatters.dart';
-import '../../../core/widgets/app_drawer.dart';
 import '../../../core/widgets/custom_app_bar.dart';
+import '../../../core/widgets/provided_action_icon.dart';
+import '../../../core/theme/app_colors.dart';
+import 'reports_interactive_chart.dart';
 import '../../../modules/ventas/data/ventas_repository.dart';
 import '../../../modules/ventas/sales_models.dart';
 import '../utils/sales_report_pdf_service.dart';
 
-const _primaryBlue = Color(0xFF2563EB);
+const _primaryBlue = AppColors.primary;
 const _teal = Color(0xFF0D9488);
 const _gold = Color(0xFFD97706);
 const _error = Color(0xFFDC2626);
 const _textPrimary = Color(0xFF111827);
 const _textSecondary = Color(0xFF6B7280);
 const _borderSoft = Color(0xFFE5E7EB);
-const _pageBg = Color(0xFFF6F8FB);
+const _pageBg = AppColors.background;
 
 const _salesKpiHelp = 'Es el total vendido en el período seleccionado.';
 const _grossProfitKpiHelp =
@@ -44,7 +45,7 @@ const _reportsFilterIconAsset = 'assets/image/reports_filter.png';
 /// para los chips globales (`chipTheme`); los filtros de Reportes deben verse
 /// mas rectangulares y profesionales, por eso se fija 10 px (dentro del rango
 /// 8-12 pedido) SIN alterar el theme global ni otras pantallas.
-const double kReportsFilterRadius = 10;
+const double kReportsFilterRadius = 0;
 
 /// Periodos rapidos de fecha, en el ORDEN EXACTO en que se muestran.
 /// Una sola fuente de verdad para el selector (desktop y movil) y el drawer.
@@ -627,6 +628,7 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
           ? _selectedCategory!.trim()
           : 'Todas las categorias';
       final bytes = await buildProfessionalSalesReportPdf(
+        company: await ref.read(companySettingsProvider.future),
         from: range.start,
         to: range.end,
         categoryLabel: categoryLabel,
@@ -700,13 +702,16 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
       pageBuilder: (dialogContext, animation, secondaryAnimation) {
         return Align(
           alignment: Alignment.centerRight,
-          child: ReportsFilterDrawer(
-            selectedPeriod: _selectedPeriod,
-            selectedRangeLabel:
-                '${_date.format(_range.start)} - ${_date.format(_range.end)}',
-            selectedDateRange: _range,
-            categories: _categories,
-            selectedCategory: _selectedCategory,
+          child: Theme(
+            data: _reportsVisualTheme(context),
+            child: ReportsFilterDrawer(
+              selectedPeriod: _selectedPeriod,
+              selectedRangeLabel:
+                  '${_date.format(_range.start)} - ${_date.format(_range.end)}',
+              selectedDateRange: _range,
+              categories: _categories,
+              selectedCategory: _selectedCategory,
+            ),
           ),
         );
       },
@@ -754,223 +759,231 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final user = ref.watch(authStateProvider).user;
-
-    return Scaffold(
-      drawer: buildAdaptiveDrawer(context, currentUser: user),
-      backgroundColor: _pageBg,
-      appBar: MediaQuery.sizeOf(context).width < 640
-          ? CustomAppBar(
-              title: 'Reportes',
-              showLogo: false,
-              showDepartmentLabel: false,
-              actions: [
-                _ReportsMobileAppBarAction(
-                  tooltip: 'Filtros',
-                  onPressed: _openMobileFilters,
-                  child: Badge(
-                    isLabelVisible: _hasNonDefaultFilters,
-                    smallSize: 8,
-                    child: const ImageIcon(
-                      AssetImage(_reportsFilterIconAsset),
-                      size: 18,
-                    ),
+    final mobile = MediaQuery.sizeOf(context).width < 640;
+    final periodLabel =
+        '${_date.format(_range.start)} - ${_date.format(_range.end)}';
+    return Theme(
+      data: _reportsVisualTheme(context),
+      child: Scaffold(
+        backgroundColor: _pageBg,
+        appBar: mobile
+            ? CustomAppBar(
+                title: 'Reportes',
+                showLogo: false,
+                showDepartmentLabel: false,
+                trailing: const SizedBox.shrink(),
+                actions: [
+                  IconButton(
+                    tooltip: 'Filtros',
+                    onPressed: _openMobileFilters,
+                    icon: const ProvidedActionIcon(ProvidedAction.filter),
                   ),
-                ),
-                _ReportsMobileAppBarAction(
-                  tooltip: 'Recargar',
-                  onPressed: (_loading || _loadingSections) ? null : _loadData,
-                  child: const Icon(Icons.refresh_rounded, size: 18),
-                ),
-                _ReportsMobileAppBarAction(
-                  tooltip: 'PDF',
-                  onPressed: (_loading || _loadingSections || _generatingPdf)
-                      ? null
-                      : _downloadPdf,
-                  child: _generatingPdf
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(Icons.picture_as_pdf_outlined, size: 18),
-                ),
-              ],
-              trailing: const SizedBox.shrink(),
-            )
-          : null,
-      body: LayoutBuilder(
-        builder: (context, pageConstraints) {
-          final mobile = pageConstraints.maxWidth < 640;
-          return Padding(
-            padding: EdgeInsets.all(mobile ? 8 : 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (!mobile) ...[
-                  ReportsTopBar(
-                    selectedPeriod: _selectedPeriod,
-                    customLabel: _selectedPeriod == DateRangePeriod.custom
-                        ? '${_date.format(_range.start)} - ${_date.format(_range.end)}'
-                        : null,
-                    loading: _loading || _loadingSections,
-                    generatingPdf: _generatingPdf,
-                    categories: _categories,
-                    selectedCategory: _selectedCategory,
-                    onPeriodChanged: _changePeriod,
-                    onCategoryChanged: _changeCategory,
-                    onReload: _loadData,
-                    onDownloadPdf: _downloadPdf,
-                    showReset: _hasNonDefaultFilters,
-                    onReset: _resetFilters,
+                  IconButton(
+                    tooltip: 'Recargar',
+                    onPressed: _loading || _loadingSections ? null : _loadData,
+                    icon: const ProvidedActionIcon(ProvidedAction.reload),
                   ),
-                  const SizedBox(height: 12),
+                  IconButton(
+                    tooltip: 'PDF',
+                    onPressed: _loading || _loadingSections || _generatingPdf
+                        ? null
+                        : _downloadPdf,
+                    icon: const ProvidedActionIcon(ProvidedAction.pdf),
+                  ),
                 ],
-                if (_loading || _loadingSections)
-                  const LinearProgressIndicator(minHeight: 2),
-                if (_error != null)
-                  Expanded(
-                    child: Center(child: _ReportsOfflineMessage(_error!)),
-                  )
-                else
-                  Expanded(
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        final wide = constraints.maxWidth >= 1120;
-                        // Periodo sin ventas: no es un error. Los KPIs quedan en
-                        // RD$0.00 y se explica claramente al usuario que puede
-                        // cambiar fecha/categoria (Fase 31).
-                        final emptyPeriod = !_loading && _kpis.salesCount == 0;
-                        return RefreshIndicator(
-                          onRefresh: _loadData,
-                          child: ListView(
-                            padding: EdgeInsets.only(bottom: mobile ? 18 : 0),
-                            children: mobile
-                                ? [
-                                    if (emptyPeriod) const _EmptyPeriodNotice(),
-                                    _MobileReportsContent(
-                                      kpis: _kpis,
-                                      salesSeries: _salesSeries,
-                                      profitSeries: _profitSeries,
-                                      paymentMethods: _paymentMethods,
-                                      topProducts: _topProducts,
-                                      topClients: _topClients,
-                                      sales: _sales.take(8).toList(),
-                                    ),
-                                  ]
-                                : [
-                                    if (emptyPeriod) ...[
+              )
+            : null,
+        body: Column(
+          children: [
+            if (!mobile)
+              ReportsTopBar(
+                selectedPeriod: _selectedPeriod,
+                customLabel: _selectedPeriod == DateRangePeriod.custom
+                    ? periodLabel
+                    : null,
+                loading: _loading || _loadingSections,
+                generatingPdf: _generatingPdf,
+                categories: _categories,
+                selectedCategory: _selectedCategory,
+                onPeriodChanged: _changePeriod,
+                onCategoryChanged: _changeCategory,
+                onReload: _loadData,
+                onDownloadPdf: _downloadPdf,
+                showReset: _hasNonDefaultFilters,
+                onReset: _resetFilters,
+              ),
+            Expanded(
+              child: LayoutBuilder(
+                builder: (context, constraints) => Align(
+                  alignment: Alignment.topCenter,
+                  child: SizedBox(
+                    key: const ValueKey('reports-content'),
+                    width: math.min(1360, constraints.maxWidth),
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: mobile ? 12 : 24,
+                        vertical: mobile ? 12 : 20,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (mobile) ...[
+                            ReportsActiveFilterBar(
+                              period: _periodLabel(_selectedPeriod),
+                              range: periodLabel,
+                              category: _selectedCategory,
+                              onClearCategory: () => _changeCategory(null),
+                              showReset: _hasNonDefaultFilters,
+                              onReset: _resetFilters,
+                            ),
+                            const SizedBox(height: 12),
+                          ],
+                          if (_loading || _loadingSections)
+                            const LinearProgressIndicator(minHeight: 2),
+                          if (_error != null)
+                            Expanded(
+                              child: Center(
+                                child: _ReportsOfflineMessage(_error!),
+                              ),
+                            )
+                          else
+                            Expanded(
+                              child: RefreshIndicator(
+                                onRefresh: _loadData,
+                                child: ListView(
+                                  key: const ValueKey(
+                                    'reports-dashboard-scroll',
+                                  ),
+                                  physics:
+                                      const AlwaysScrollableScrollPhysics(),
+                                  padding: const EdgeInsets.only(bottom: 24),
+                                  children: [
+                                    if (!_loading && _kpis.salesCount == 0) ...[
                                       const _EmptyPeriodNotice(),
-                                      const SizedBox(height: 12),
+                                      const SizedBox(height: 16),
                                     ],
+                                    ReportsFinancialKpiCards(kpis: _kpis),
+                                    const SizedBox(height: 16),
                                     _HeroReportsPanel(
-                                      wide: wide,
+                                      wide: constraints.maxWidth >= 1000,
                                       kpis: _kpis,
                                       salesSeries: _salesSeries,
                                       paymentMethods: _paymentMethods,
-                                      periodLabel:
-                                          '${_date.format(_range.start)} - ${_date.format(_range.end)}',
+                                      periodLabel: periodLabel,
                                     ),
-                                    const SizedBox(height: 12),
-                                    ReportsFinancialKpiCards(kpis: _kpis),
-                                    const SizedBox(height: 12),
+                                    const SizedBox(height: 16),
+                                    _ReportsSectionPair(
+                                      left: _PremiumCard(
+                                        title: 'Evolución de utilidad bruta',
+                                        child: SizedBox(
+                                          height: 240,
+                                          child: ProfitLineChart(
+                                            data: _profitSeries,
+                                          ),
+                                        ),
+                                      ),
+                                      right: _ComparativeStatsCard(
+                                        rows: _comparisons,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 16),
                                     CategoryProfitTable(
                                       categories: _categoryProfits,
                                     ),
-                                    const SizedBox(height: 12),
-                                    wide
-                                        ? Row(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Expanded(
-                                                flex: 3,
-                                                child: _PremiumCard(
-                                                  title: 'Utilidad bruta',
-                                                  child: SizedBox(
-                                                    height: 260,
-                                                    child: ProfitLineChart(
-                                                      data: _profitSeries,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                              const SizedBox(width: 12),
-                                              Expanded(
-                                                flex: 2,
-                                                child: _ComparativeStatsCard(
-                                                  rows: _comparisons,
-                                                ),
-                                              ),
-                                            ],
-                                          )
-                                        : Column(
-                                            children: [
-                                              _PremiumCard(
-                                                title: 'Utilidad bruta',
-                                                child: SizedBox(
-                                                  height: 230,
-                                                  child: ProfitLineChart(
-                                                    data: _profitSeries,
-                                                  ),
-                                                ),
-                                              ),
-                                              const SizedBox(height: 12),
-                                              _ComparativeStatsCard(
-                                                rows: _comparisons,
-                                              ),
-                                            ],
-                                          ),
-                                    const SizedBox(height: 12),
-                                    wide
-                                        ? Row(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Expanded(
-                                                child: TopProductsTable(
-                                                  products: _topProducts,
-                                                ),
-                                              ),
-                                              const SizedBox(width: 12),
-                                              Expanded(
-                                                child: TopClientsTable(
-                                                  clients: _topClients,
-                                                ),
-                                              ),
-                                            ],
-                                          )
-                                        : Column(
-                                            children: [
-                                              TopProductsTable(
-                                                products: _topProducts,
-                                              ),
-                                              const SizedBox(height: 12),
-                                              TopClientsTable(
-                                                clients: _topClients,
-                                              ),
-                                            ],
-                                          ),
-                                    const SizedBox(height: 12),
+                                    const SizedBox(height: 16),
+                                    _ReportsSectionPair(
+                                      left: TopProductsTable(
+                                        products: _topProducts,
+                                      ),
+                                      right: TopClientsTable(
+                                        clients: _topClients,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 16),
                                     _RecentSalesTable(
                                       sales: _sales.take(12).toList(),
                                     ),
                                   ],
-                          ),
-                        );
-                      },
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                   ),
-              ],
+                ),
+              ),
             ),
-          );
-        },
+          ],
+        ),
       ),
     );
   }
+}
+
+ThemeData _reportsVisualTheme(BuildContext context) {
+  final theme = Theme.of(context);
+  const shape = RoundedRectangleBorder();
+  const border = OutlineInputBorder(
+    borderRadius: BorderRadius.zero,
+    borderSide: BorderSide(color: AppColors.border),
+  );
+  final button = ButtonStyle(
+    shape: const WidgetStatePropertyAll(shape),
+    minimumSize: const WidgetStatePropertyAll(Size(40, 40)),
+    textStyle: WidgetStatePropertyAll(
+      theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w600),
+    ),
+  );
+  return theme.copyWith(
+    filledButtonTheme: FilledButtonThemeData(style: button),
+    outlinedButtonTheme: OutlinedButtonThemeData(style: button),
+    textButtonTheme: TextButtonThemeData(style: button),
+    elevatedButtonTheme: ElevatedButtonThemeData(style: button),
+    iconButtonTheme: const IconButtonThemeData(
+      style: ButtonStyle(shape: WidgetStatePropertyAll(shape)),
+    ),
+    inputDecorationTheme: theme.inputDecorationTheme.copyWith(
+      filled: true,
+      fillColor: Colors.white,
+      border: border,
+      enabledBorder: border,
+      focusedBorder: border.copyWith(
+        borderSide: const BorderSide(color: _primaryBlue),
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+    ),
+    dialogTheme: theme.dialogTheme.copyWith(
+      shape: shape,
+      backgroundColor: Colors.white,
+      surfaceTintColor: Colors.transparent,
+    ),
+    listTileTheme: theme.listTileTheme.copyWith(
+      shape: const RoundedRectangleBorder(),
+    ),
+  );
+}
+
+class _ReportsSectionPair extends StatelessWidget {
+  const _ReportsSectionPair({required this.left, required this.right});
+  final Widget left;
+  final Widget right;
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) => constraints.maxWidth >= 900
+        ? Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(flex: 3, child: left),
+              const SizedBox(width: 16),
+              Expanded(flex: 2, child: right),
+            ],
+          )
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [left, const SizedBox(height: 16), right],
+          ),
+  );
 }
 
 class DateRangeHelper {
@@ -1111,75 +1124,63 @@ Future<DateTimeRange?> _showReportsDateRangePicker(
     initialDateRange: initial,
     helpText: 'Selecciona el intervalo',
     saveText: 'Aplicar',
+    confirmText: 'Aplicar',
     cancelText: 'Cancelar',
     fieldStartLabelText: 'Desde',
     fieldEndLabelText: 'Hasta',
+    switchToInputEntryModeIcon: const _ReportsDateEntryIcon(
+      ProvidedAction.edit,
+    ),
+    switchToCalendarEntryModeIcon: const _ReportsDateEntryIcon(
+      ProvidedAction.calendar,
+    ),
     builder: (context, child) {
       final size = MediaQuery.sizeOf(context);
       final maxWidth = math.min(size.width - 24, 560.0);
       final maxHeight = math.min(size.height - 48, 620.0);
-      return Center(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: math.max(320.0, maxWidth),
-            maxHeight: math.max(420.0, maxHeight),
+      final theme = _reportsVisualTheme(context);
+      return Theme(
+        data: theme.copyWith(
+          datePickerTheme: DatePickerThemeData(
+            backgroundColor: Colors.white,
+            surfaceTintColor: Colors.transparent,
+            rangePickerBackgroundColor: Colors.white,
+            rangePickerSurfaceTintColor: Colors.transparent,
+            rangePickerShape: const RoundedRectangleBorder(),
+            rangePickerHeaderBackgroundColor: AppColors.surfaceSubtle,
+            rangePickerHeaderForegroundColor: AppColors.textPrimary,
+            rangePickerHeaderHeadlineStyle: const TextStyle(
+              fontSize: 23,
+              fontWeight: FontWeight.w600,
+            ),
+            rangePickerHeaderHelpStyle: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+            rangeSelectionBackgroundColor: AppColors.primarySoft,
+            dayShape: const WidgetStatePropertyAll(RoundedRectangleBorder()),
+            shape: const RoundedRectangleBorder(),
           ),
-          child: child ?? const SizedBox.shrink(),
+        ),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: math.max(0.0, maxWidth),
+              maxHeight: math.max(0.0, maxHeight),
+            ),
+            child: child ?? const SizedBox.shrink(),
+          ),
         ),
       );
     },
   );
 }
 
-class _ReportsMobileAppBarAction extends StatelessWidget {
-  const _ReportsMobileAppBarAction({
-    required this.tooltip,
-    required this.onPressed,
-    required this.child,
-  });
-
-  final String tooltip;
-  final VoidCallback? onPressed;
-  final Widget child;
-
+class _ReportsDateEntryIcon extends Icon {
+  const _ReportsDateEntryIcon(this.action) : super(null);
+  final ProvidedAction action;
   @override
-  Widget build(BuildContext context) {
-    final enabled = onPressed != null;
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: Tooltip(
-        message: tooltip,
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            mouseCursor: SystemMouseCursors.click,
-            borderRadius: BorderRadius.circular(10),
-            onTap: onPressed,
-            child: Ink(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: enabled ? 0.14 : 0.07),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: enabled ? 0.24 : 0.12),
-                ),
-              ),
-              child: IconTheme(
-                data: IconThemeData(
-                  color: Colors.white.withValues(alpha: enabled ? 1 : 0.52),
-                  size: 18,
-                ),
-                child: Center(
-                  child: enabled ? child : Opacity(opacity: 0.52, child: child),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => ProvidedActionIcon(action, size: 20);
 }
 
 // Publico (no `_`) para poder testear la UI de filtros de Reportes sin red:
@@ -1208,6 +1209,7 @@ class _ReportsFilterDrawerState extends State<ReportsFilterDrawer> {
   late DateRangePeriod _period = widget.selectedPeriod;
   late String? _category = widget.selectedCategory;
   late final DateTimeRange _customRange = widget.selectedDateRange;
+  String _categoryQuery = '';
 
   void _apply() {
     Navigator.of(context).pop(
@@ -1256,7 +1258,7 @@ class _ReportsFilterDrawerState extends State<ReportsFilterDrawer> {
 
   @override
   Widget build(BuildContext context) {
-    final width = math.min(MediaQuery.sizeOf(context).width * 0.88, 340.0);
+    final width = math.min(MediaQuery.sizeOf(context).width, 420.0);
     return SafeArea(
       child: Material(
         color: Colors.transparent,
@@ -1282,11 +1284,8 @@ class _ReportsFilterDrawerState extends State<ReportsFilterDrawer> {
               Container(
                 padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
                 decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Color(0xFF1957E6), Color(0xFF2F7BFF)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
+                  color: Colors.white,
+                  border: Border(bottom: BorderSide(color: AppColors.border)),
                   borderRadius: BorderRadius.only(
                     topLeft: Radius.circular(kReportsFilterRadius),
                   ),
@@ -1297,17 +1296,20 @@ class _ReportsFilterDrawerState extends State<ReportsFilterDrawer> {
                       child: Text(
                         'Filtros',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: AppColors.textPrimary,
                           fontSize: 18,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
                     IconButton(
                       tooltip: 'Cerrar',
                       onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(Icons.close_rounded),
-                      color: Colors.white,
+                      icon: const ProvidedActionIcon(
+                        ProvidedAction.close,
+                        size: 16,
+                      ),
+                      color: AppColors.textMuted,
                     ),
                   ],
                 ),
@@ -1336,12 +1338,31 @@ class _ReportsFilterDrawerState extends State<ReportsFilterDrawer> {
                     ),
                     const SizedBox(height: 18),
                     const _DrawerSectionTitle('Categoría'),
+                    TextField(
+                      decoration: const InputDecoration(
+                        hintText: 'Buscar categoría',
+                        prefixIcon: Padding(
+                          padding: EdgeInsets.all(14),
+                          child: ProvidedActionIcon(
+                            ProvidedAction.search,
+                            size: 18,
+                          ),
+                        ),
+                      ),
+                      onChanged: (query) =>
+                          setState(() => _categoryQuery = query),
+                    ),
+                    const SizedBox(height: 8),
                     _FilterCategoryTile(
                       label: 'Todas las categorías',
                       selected: _category == null,
                       onTap: () => setState(() => _category = null),
                     ),
-                    for (final category in widget.categories)
+                    for (final category in widget.categories.where(
+                      (category) => category.toLowerCase().contains(
+                        _categoryQuery.trim().toLowerCase(),
+                      ),
+                    ))
                       _FilterCategoryTile(
                         label: category,
                         selected: _category == category,
@@ -1411,7 +1432,7 @@ class _DrawerSectionTitle extends StatelessWidget {
         style: const TextStyle(
           color: _textSecondary,
           fontSize: 12,
-          fontWeight: FontWeight.w900,
+          fontWeight: FontWeight.w600,
         ),
       ),
     );
@@ -1453,7 +1474,7 @@ class _FilterRangePreview extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: _textPrimary,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w600,
                     fontSize: 12.5,
                   ),
                 ),
@@ -1464,7 +1485,7 @@ class _FilterRangePreview extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: _textSecondary,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                     fontSize: 11,
                   ),
                 ),
@@ -1504,7 +1525,7 @@ class _FilterCategoryTile extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
           color: selected ? _primaryBlue : _textPrimary,
-          fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
+          fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
         ),
       ),
     );
@@ -1558,7 +1579,7 @@ class ReportsActiveFilterBar extends StatelessWidget {
                 foregroundColor: _primaryBlue,
                 textStyle: const TextStyle(
                   fontSize: 12,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
@@ -1600,193 +1621,102 @@ class ReportsTopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final width = MediaQuery.sizeOf(context).width;
-    final mobile = width < 640;
-    // Entre 640 y 900 px el encabezado de escritorio no cabe con la etiqueta
-    // del boton de PDF: se usa la variante de solo icono para evitar desbordes.
-    final compactHeader = width < 900;
-    return _Surface(
-      padding: EdgeInsets.fromLTRB(12, 10, 12, mobile ? 12 : 10),
-      radius: kReportsFilterRadius,
-      child: Column(
-        children: [
-          if (mobile)
-            Column(
-              children: [
-                Row(
-                  children: [
-                    Builder(
-                      builder: (context) => IconButton(
-                        tooltip: 'Menú',
-                        onPressed: () => Scaffold.of(context).openDrawer(),
-                        icon: const Icon(Icons.menu_rounded),
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.all(9),
-                      decoration: BoxDecoration(
-                        color: scheme.primary.withValues(alpha: 0.10),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: scheme.primary.withValues(alpha: 0.18),
-                        ),
-                      ),
-                      child: Icon(
-                        Icons.bar_chart_rounded,
-                        color: scheme.primary,
-                        size: 18,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    const Expanded(
-                      child: Text(
-                        'Reportes',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w900,
-                          fontSize: 20,
-                        ),
-                      ),
-                    ),
-                    IconButton.outlined(
-                      tooltip: 'Recargar',
-                      onPressed: loading ? null : onReload,
-                      icon: const Icon(Icons.refresh_rounded, size: 18),
-                    ),
-                    const SizedBox(width: 6),
-                    IconButton.filledTonal(
-                      tooltip: 'Descargar PDF',
-                      onPressed: loading || generatingPdf
-                          ? null
-                          : onDownloadPdf,
-                      icon: generatingPdf
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.picture_as_pdf_outlined, size: 18),
-                    ),
-                  ],
-                ),
-              ],
-            )
-          else
+    final compact = MediaQuery.sizeOf(context).width < 1000;
+    return DecoratedBox(
+      key: const ValueKey('reports-full-width-header'),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: AppColors.border)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
             Row(
               children: [
                 AppNavigator.maybeBackButton(context) ??
-                    const SizedBox(width: 44),
-                Container(
-                  padding: const EdgeInsets.all(9),
-                  decoration: BoxDecoration(
-                    color: scheme.primary.withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: scheme.primary.withValues(alpha: 0.18),
-                    ),
-                  ),
-                  child: Icon(
-                    Icons.bar_chart_rounded,
-                    color: scheme.primary,
-                    size: 18,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                const Expanded(
-                  child: Text(
-                    'Reportes',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w900,
-                      fontSize: 20,
-                    ),
-                  ),
-                ),
+                    const SizedBox(width: 40),
                 const SizedBox(width: 8),
+                const ProvidedActionIcon(
+                  ProvidedAction.analytics,
+                  color: _primaryBlue,
+                  size: 24,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Reportes',
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w500,
+                          color: _textPrimary,
+                        ),
+                      ),
+                      if (!compact)
+                        const Text(
+                          'Ventas, costos y rentabilidad de tu negocio',
+                          style: TextStyle(fontSize: 12, color: _textSecondary),
+                        ),
+                    ],
+                  ),
+                ),
                 SizedBox(
-                  // En ventanas estrechas el selector se reduce para que el
-                  // encabezado nunca desborde; en anchas conserva 240 px.
-                  width: compactHeader ? 176 : 240,
+                  width: compact ? 174 : 250,
                   child: CategoryFilterSelector(
                     categories: categories,
                     selectedCategory: selectedCategory,
                     onChanged: loading ? null : onCategoryChanged,
                   ),
                 ),
-                if (showReset) ...[
-                  const SizedBox(width: 6),
+                if (showReset)
                   IconButton(
                     tooltip: 'Restablecer filtros',
                     onPressed: loading ? null : onReset,
-                    icon: const Icon(Icons.restart_alt_rounded, size: 18),
+                    icon: const Icon(Icons.restart_alt_rounded, size: 20),
                   ),
-                ],
-                const SizedBox(width: 6),
+                const SizedBox(width: 8),
                 IconButton.outlined(
                   tooltip: 'Recargar',
                   onPressed: loading ? null : onReload,
-                  icon: const Icon(Icons.refresh_rounded, size: 18),
+                  icon: const ProvidedActionIcon(ProvidedAction.reload),
                 ),
                 const SizedBox(width: 8),
-                if (compactHeader)
-                  IconButton.filledTonal(
+                if (compact)
+                  IconButton.filled(
                     tooltip: 'Descargar PDF',
                     onPressed: loading || generatingPdf ? null : onDownloadPdf,
-                    icon: generatingPdf
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                    icon: const ProvidedActionIcon(ProvidedAction.pdf),
                   )
                 else
-                  FilledButton.tonalIcon(
+                  FilledButton.icon(
                     onPressed: loading || generatingPdf ? null : onDownloadPdf,
                     icon: generatingPdf
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
+                        ? const SizedBox.square(
+                            dimension: 18,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Icon(Icons.picture_as_pdf_outlined, size: 16),
+                        : const ProvidedActionIcon(
+                            ProvidedAction.pdf,
+                            size: 18,
+                          ),
                     label: const Text('Descargar PDF'),
                   ),
               ],
             ),
-          const SizedBox(height: 10),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Desktop: los 6 periodos deben caber en UNA fila sin scroll
-              // innecesario, asi que el selector toma el ancho disponible y la
-              // categoria queda en una columna de ancho fijo.
-              Expanded(
-                child: DateRangeSelector(
-                  selectedPeriod: selectedPeriod,
-                  customLabel: customLabel,
-                  onPeriodChanged: onPeriodChanged,
-                ),
-              ),
-            ],
-          ),
-          if (mobile) ...[
             const SizedBox(height: 8),
-            CategoryFilterSelector(
-              categories: categories,
-              selectedCategory: selectedCategory,
-              onChanged: loading ? null : onCategoryChanged,
+            const Divider(height: 1, color: _borderSoft),
+            const SizedBox(height: 8),
+            DateRangeSelector(
+              selectedPeriod: selectedPeriod,
+              customLabel: customLabel,
+              onPeriodChanged: onPeriodChanged,
             ),
           ],
-          if (selectedCategory?.trim().isNotEmpty == true) ...[
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: _Pill(text: 'Filtrado: ${selectedCategory!.trim()}'),
-            ),
-          ],
-        ],
+        ),
       ),
     );
   }
@@ -1799,65 +1729,148 @@ class CategoryFilterSelector extends StatelessWidget {
     required this.selectedCategory,
     required this.onChanged,
   });
-
   final List<String> categories;
   final String? selectedCategory;
   final ValueChanged<String?>? onChanged;
+  @override
+  Widget build(BuildContext context) => OutlinedButton(
+    onPressed: onChanged == null
+        ? null
+        : () async {
+            final result = await showDialog<({String? category})>(
+              context: context,
+              builder: (context) => Theme(
+                data: _reportsVisualTheme(context),
+                child: _ReportsCategoryDialog(
+                  categories: categories,
+                  selected: selectedCategory,
+                ),
+              ),
+            );
+            if (result != null && context.mounted) {
+              onChanged?.call(result.category);
+            }
+          },
+    style: OutlinedButton.styleFrom(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+    ),
+    child: Row(
+      children: [
+        const ProvidedActionIcon(ProvidedAction.category, size: 18),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            selectedCategory ?? 'Todas las categorías',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+          ),
+        ),
+        const Icon(Icons.expand_more, size: 18),
+      ],
+    ),
+  );
+}
 
+class _ReportsCategoryDialog extends StatefulWidget {
+  const _ReportsCategoryDialog({
+    required this.categories,
+    required this.selected,
+  });
+  final List<String> categories;
+  final String? selected;
+  @override
+  State<_ReportsCategoryDialog> createState() => _ReportsCategoryDialogState();
+}
+
+class _ReportsCategoryDialogState extends State<_ReportsCategoryDialog> {
+  String _query = '';
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final items = <DropdownMenuItem<String?>>[
-      const DropdownMenuItem<String?>(
-        value: null,
-        child: Text('Todas las categorías'),
+    final media = MediaQuery.of(context);
+    final visible = widget.categories
+        .where(
+          (category) =>
+              category.toLowerCase().contains(_query.trim().toLowerCase()),
+        )
+        .toList();
+    Widget option(String? category) => ListTile(
+      dense: true,
+      selected: widget.selected == category,
+      selectedTileColor: AppColors.primarySoft,
+      leading: const ProvidedActionIcon(ProvidedAction.category, size: 18),
+      title: Text(
+        category ?? 'Todas las categorías',
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
       ),
-      for (final category in categories)
-        DropdownMenuItem<String?>(value: category, child: Text(category)),
-    ];
-    final selected = categories.contains(selectedCategory)
-        ? selectedCategory
-        : null;
-    return _Surface(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      radius: kReportsFilterRadius,
-      shadow: false,
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String?>(
-          isExpanded: true,
-          value: selected,
-          mouseCursor: onChanged == null
-              ? SystemMouseCursors.basic
-              : SystemMouseCursors.click,
-          icon: Icon(Icons.keyboard_arrow_down_rounded, color: scheme.primary),
-          items: items,
-          onChanged: onChanged,
-          style: const TextStyle(
-            color: _textPrimary,
-            fontWeight: FontWeight.w700,
-            fontSize: 12,
-          ),
-          selectedItemBuilder: (context) => items
-              .map(
-                (item) => Row(
-                  children: [
-                    Icon(
-                      Icons.category_outlined,
-                      size: 17,
-                      color: scheme.primary,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        item.value ?? 'Todas las categorías',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+      trailing: widget.selected == category
+          ? const Icon(Icons.check, size: 18, color: _primaryBlue)
+          : null,
+      onTap: () => Navigator.pop(context, (category: category)),
+    );
+    return Dialog(
+      insetPadding: const EdgeInsets.all(16),
+      child: SizedBox(
+        width: 480,
+        height: math.min(
+          520,
+          math.max(220, media.size.height - media.viewInsets.bottom - 80),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 4, 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Categorías · ${widget.categories.length}',
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                  ],
+                  ),
+                  IconButton(
+                    tooltip: 'Cerrar categorías',
+                    onPressed: () => Navigator.pop(context),
+                    icon: const ProvidedActionIcon(
+                      ProvidedAction.close,
+                      size: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+              child: TextField(
+                decoration: const InputDecoration(
+                  hintText: 'Buscar categoría',
+                  prefixIcon: Padding(
+                    padding: EdgeInsets.all(14),
+                    child: ProvidedActionIcon(ProvidedAction.search, size: 18),
+                  ),
                 ),
-              )
-              .toList(),
+                onChanged: (query) => setState(() => _query = query),
+              ),
+            ),
+            option(null),
+            const Divider(height: 1),
+            Expanded(
+              child: visible.isEmpty
+                  ? const Center(
+                      child: Text('No hay categorías con ese nombre.'),
+                    )
+                  : ListView.builder(
+                      itemCount: visible.length,
+                      itemBuilder: (_, index) => option(visible[index]),
+                    ),
+            ),
+          ],
         ),
       ),
     );
@@ -1966,7 +1979,7 @@ class _FilterChip extends StatelessWidget {
                 softWrap: false,
                 style: TextStyle(
                   color: selected ? scheme.primary : _textPrimary,
-                  fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w600,
                   fontSize: 12.5,
                 ),
               ),
@@ -1986,121 +1999,76 @@ class _HeroReportsPanel extends StatelessWidget {
     required this.paymentMethods,
     required this.periodLabel,
   });
-
   final bool wide;
   final KpisData kpis;
   final List<SeriesDataPoint> salesSeries;
   final List<PaymentMethodData> paymentMethods;
   final String periodLabel;
-
   @override
   Widget build(BuildContext context) {
-    final mobile = MediaQuery.sizeOf(context).width < 640;
-    final salesPanel = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Ventas del período',
-          style: TextStyle(
-            color: _textSecondary,
-            fontWeight: FontWeight.w600,
-            fontSize: 12,
+    final salesPanel = _PremiumCard(
+      title: 'Ventas por fecha',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            periodLabel,
+            style: const TextStyle(fontSize: 12, color: _textSecondary),
           ),
-        ),
-        const SizedBox(height: 6),
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: Alignment.centerLeft,
-          child: Text(
-            formatRdCurrencyAccounting(kpis.totalSales),
-            style: TextStyle(
-              fontSize: wide
-                  ? 42
-                  : mobile
-                  ? 28
-                  : 34,
-              fontWeight: FontWeight.w800,
-              color: _textPrimary,
-            ),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: salesSeries.isEmpty ? 160 : 240,
+            child: SalesBarChart(data: salesSeries, barColor: _primaryBlue),
           ),
-        ),
-        const SizedBox(height: 12),
-        _Pill(text: periodLabel),
-        const SizedBox(height: 16),
-        SizedBox(
-          height: wide
-              ? 290
-              : mobile
-              ? 190
-              : 240,
-          child: SalesBarChart(data: salesSeries, barColor: _primaryBlue),
-        ),
-      ],
-    );
-
-    final methodPanel = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Dinero COBRADO por metodo en el periodo (no ventas devengadas):
-        // el movimiento monetario de una devolucion vive en Caja.
-        const Text(
-          'Cobros por metodo de pago',
-          style: TextStyle(
-            color: _textSecondary,
-            fontWeight: FontWeight.w600,
-            fontSize: 12,
-          ),
-        ),
-        const SizedBox(height: 6),
-        // NOTA: aqui NO se repiten "Margen neto" / "Utilidad neta" / "Ordenes"
-        // porque ReportsFinancialKpiCards (justo debajo en desktop) ya los
-        // muestra: repetirlos seria informacion de utilidad duplicada.
-        SizedBox(
-          height: mobile ? 230 : 250,
-          child: PaymentMethodPieChart(data: paymentMethods),
-        ),
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: [
-            _HeroMiniInfo(
-              label: 'Ticket promedio',
-              value: formatRdCurrencyAccounting(kpis.avgTicket),
-            ),
-            _HeroMiniInfo(
-              label: 'Método líder',
-              value: paymentMethods.isEmpty
-                  ? 'Sin datos'
-                  : paymentMethods.first.method,
-            ),
-          ],
-        ),
-      ],
-    );
-
-    return _Surface(
-      padding: EdgeInsets.all(mobile ? 14 : 22),
-      radius: 12,
-      gradient: const LinearGradient(
-        colors: [Color(0xFFF8FBFF), Color(0xFFEDF4FF), Color(0xFFF6FBFF)],
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
+        ],
       ),
-      child: wide
-          ? Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(flex: 6, child: salesPanel),
-                const SizedBox(width: 26),
-                Expanded(flex: 4, child: methodPanel),
-              ],
-            )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [salesPanel, const SizedBox(height: 18), methodPanel],
-            ),
     );
+    final methodPanel = _PremiumCard(
+      title: 'Cobros por método de pago',
+      child: Column(
+        children: [
+          SizedBox(
+            height: paymentMethods.isEmpty ? 160 : 220,
+            child: PaymentMethodPieChart(data: paymentMethods),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: _HeroMiniInfo(
+                  label: 'Ticket promedio',
+                  value: formatRdCurrencyAccounting(kpis.avgTicket),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _HeroMiniInfo(
+                  label: 'Método líder',
+                  value: paymentMethods.isEmpty
+                      ? 'Sin datos'
+                      : paymentMethods
+                            .reduce((a, b) => a.amount >= b.amount ? a : b)
+                            .method,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+    return wide
+        ? Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(flex: 3, child: salesPanel),
+              const SizedBox(width: 16),
+              Expanded(flex: 2, child: methodPanel),
+            ],
+          )
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [salesPanel, const SizedBox(height: 16), methodPanel],
+          );
   }
 }
 
@@ -2166,7 +2134,7 @@ class ReportsFinancialKpiCards extends StatelessWidget {
               runSpacing: gap,
               children: [
                 for (final card in cards)
-                  SizedBox(width: width, height: 92, child: card),
+                  SizedBox(width: width, height: 108, child: card),
               ],
             ),
             const SizedBox(height: 12),
@@ -2196,12 +2164,12 @@ class _ProfitBreakdownPanel extends StatelessWidget {
             _ProfitBreakdownItem(
               label: 'Margen bruto',
               value: '${kpis.grossMargin.toStringAsFixed(1)}%',
-              color: _teal,
+              color: kpis.grossMargin >= 0 ? _teal : _error,
             ),
             _ProfitBreakdownItem(
               label: 'Margen neto',
               value: '${kpis.netMargin.toStringAsFixed(1)}%',
-              color: _teal,
+              color: kpis.netMargin >= 0 ? _teal : _error,
             ),
             _ProfitBreakdownItem(
               label: 'Tickets',
@@ -2235,7 +2203,7 @@ class _ProfitBreakdownPanel extends StatelessWidget {
                 style: TextStyle(
                   color: _textPrimary,
                   fontSize: 13,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
               const SizedBox(height: 10),
@@ -2271,7 +2239,7 @@ class _ProfitBreakdownItem extends StatelessWidget {
             style: const TextStyle(
               color: _textSecondary,
               fontSize: 12,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ),
@@ -2286,208 +2254,12 @@ class _ProfitBreakdownItem extends StatelessWidget {
               style: TextStyle(
                 color: color,
                 fontSize: 13,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
         ),
       ],
-    );
-  }
-}
-
-class _MobileReportsContent extends StatelessWidget {
-  const _MobileReportsContent({
-    required this.kpis,
-    required this.salesSeries,
-    required this.profitSeries,
-    required this.paymentMethods,
-    required this.topProducts,
-    required this.topClients,
-    required this.sales,
-  });
-
-  final KpisData kpis;
-  final List<SeriesDataPoint> salesSeries;
-  final List<SeriesDataPoint> profitSeries;
-  final List<PaymentMethodData> paymentMethods;
-  final List<TopProduct> topProducts;
-  final List<TopClient> topClients;
-  final List<SaleModel> sales;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(6, 8, 6, 12),
-          child: ReportsFinancialKpiCards(kpis: kpis),
-        ),
-        _FlatSection(
-          title: 'Ritmo de ventas',
-          child: SizedBox(
-            height: 180,
-            child: SalesBarChart(data: salesSeries, barColor: _primaryBlue),
-          ),
-        ),
-        _FlatSection(
-          title: 'Utilidad bruta',
-          child: SizedBox(
-            height: 160,
-            child: ProfitLineChart(data: profitSeries),
-          ),
-        ),
-        _FlatSection(
-          // Dinero COBRADO por metodo en el periodo (no ventas devengadas):
-          // las devoluciones y sus movimientos de caja viven en Caja.
-          title: 'Cobros por metodo de pago',
-          child: SizedBox(
-            height: 220,
-            child: PaymentMethodPieChart(data: paymentMethods),
-          ),
-        ),
-        _MobileRankingSection(
-          title: 'Productos más vendidos',
-          rows: [
-            for (var i = 0; i < topProducts.length; i++)
-              _MobileRankingData(
-                rank: i + 1,
-                title: topProducts[i].productName,
-                subtitle: topProducts[i].totalQtyLabel,
-                value: formatRdCurrencyAccounting(topProducts[i].totalSales),
-              ),
-          ],
-        ),
-        _MobileRankingSection(
-          title: 'Clientes top',
-          rows: [
-            for (var i = 0; i < topClients.length; i++)
-              _MobileRankingData(
-                rank: i + 1,
-                title: topClients[i].clientName,
-                subtitle: '${topClients[i].purchaseCount} compras',
-                value: formatRdCurrencyAccounting(topClients[i].totalSpent),
-              ),
-          ],
-        ),
-        _RecentSalesTable(sales: sales),
-      ],
-    );
-  }
-}
-
-class _FlatSection extends StatelessWidget {
-  const _FlatSection({required this.title, required this.child});
-
-  final String title;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(6, 10, 6, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
-              color: _textPrimary,
-              fontSize: 16,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 10),
-          child,
-        ],
-      ),
-    );
-  }
-}
-
-class _MobileRankingData {
-  const _MobileRankingData({
-    required this.rank,
-    required this.title,
-    required this.subtitle,
-    required this.value,
-  });
-
-  final int rank;
-  final String title;
-  final String subtitle;
-  final String value;
-}
-
-class _MobileRankingSection extends StatelessWidget {
-  const _MobileRankingSection({required this.title, required this.rows});
-
-  final String title;
-  final List<_MobileRankingData> rows;
-
-  @override
-  Widget build(BuildContext context) {
-    return _FlatSection(
-      title: title,
-      child: rows.isEmpty
-          ? const SizedBox(height: 80, child: _EmptyChart())
-          : Column(
-              children: [
-                for (final row in rows.take(6))
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 6),
-                    child: Row(
-                      children: [
-                        SizedBox(
-                          width: 30,
-                          child: Text(
-                            '#${row.rank}',
-                            style: const TextStyle(
-                              color: _primaryBlue,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                row.title,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: _textPrimary,
-                                  fontWeight: FontWeight.w900,
-                                ),
-                              ),
-                              Text(
-                                row.subtitle,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: _textSecondary,
-                                  fontSize: 11,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          row.value,
-                          style: const TextStyle(
-                            color: _primaryBlue,
-                            fontWeight: FontWeight.w900,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
     );
   }
 }
@@ -2496,81 +2268,201 @@ class SalesBarChart extends StatelessWidget {
   const SalesBarChart({super.key, required this.data, required this.barColor});
   final List<SeriesDataPoint> data;
   final Color barColor;
-
   @override
-  Widget build(BuildContext context) {
-    if (data.isEmpty) return const _EmptyChart();
-    return CustomPaint(
-      painter: _BarChartPainter(data: data, color: barColor),
-      child: const SizedBox.expand(),
-    );
-  }
+  Widget build(BuildContext context) => ReportsInteractiveChart(
+    label: 'Ventas por fecha',
+    color: barColor,
+    points: data
+        .map((point) => (label: point.label, value: point.value))
+        .toList(),
+  );
 }
 
 class ProfitLineChart extends StatelessWidget {
   const ProfitLineChart({super.key, required this.data});
   final List<SeriesDataPoint> data;
-
   @override
-  Widget build(BuildContext context) {
-    if (data.isEmpty) return const _EmptyChart();
-    return CustomPaint(
-      painter: _LineChartPainter(data: data, color: _gold),
-      child: const SizedBox.expand(),
-    );
-  }
+  Widget build(BuildContext context) => ReportsInteractiveChart(
+    label: 'Utilidad bruta por fecha',
+    color: _teal,
+    line: true,
+    points: data
+        .map((point) => (label: point.label, value: point.value))
+        .toList(),
+  );
 }
 
-class PaymentMethodPieChart extends StatelessWidget {
+class PaymentMethodPieChart extends StatefulWidget {
   const PaymentMethodPieChart({super.key, required this.data});
   final List<PaymentMethodData> data;
+  @override
+  State<PaymentMethodPieChart> createState() => _PaymentMethodPieChartState();
+}
+
+class _PaymentMethodPieChartState extends State<PaymentMethodPieChart> {
+  int? _selected;
+  @override
+  void didUpdateWidget(covariant PaymentMethodPieChart oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.data != widget.data) _selected = null;
+  }
 
   @override
   Widget build(BuildContext context) {
+    final data = widget.data;
     if (data.isEmpty) return const _EmptyChart();
+    if (data.any((entry) => entry.amount < 0)) {
+      return ReportsInteractiveChart(
+        label: 'Cobros por método',
+        color: _primaryBlue,
+        points: data
+            .map((entry) => (label: entry.method, value: entry.amount))
+            .toList(),
+      );
+    }
     final total = data.fold<double>(0, (sum, item) => sum + item.amount);
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final mobile = constraints.maxWidth < 360;
-        final chart = CustomPaint(
-          painter: _PieChartPainter(data: data),
-          child: Center(
-            child: Text(
-              formatRdCurrencyAccounting(total),
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900),
+    final selected = _selected == null ? null : data[_selected!];
+    return Row(
+      children: [
+        Expanded(
+          flex: 5,
+          child: LayoutBuilder(
+            builder: (context, constraints) => GestureDetector(
+              onTapDown: (details) {
+                if (total <= 0) return;
+                final center = Offset(
+                  constraints.maxWidth / 2,
+                  constraints.maxHeight / 2,
+                );
+                final delta = details.localPosition - center;
+                if (delta.distance <
+                    math.min(constraints.maxWidth, constraints.maxHeight) *
+                        .25) {
+                  setState(() => _selected = null);
+                  return;
+                }
+                final angle =
+                    (math.atan2(delta.dy, delta.dx) + math.pi / 2) %
+                    (math.pi * 2);
+                var end = 0.0;
+                for (var index = 0; index < data.length; index++) {
+                  end += data[index].amount / total * math.pi * 2;
+                  if (angle < end) {
+                    setState(() => _selected = index);
+                    break;
+                  }
+                }
+              },
+              child: CustomPaint(
+                painter: _PieChartPainter(data: data, selected: _selected),
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          selected?.method ?? 'Total cobrado',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: _textSecondary,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            formatRdCurrencyAccounting(
+                              selected?.amount ?? total,
+                            ),
+                            key: const ValueKey(
+                              'reports-payment-selected-amount',
+                            ),
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: _textPrimary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
             ),
           ),
-        );
-        final legend = Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            for (var i = 0; i < data.length; i++)
-              _LegendRow(
-                color: _chartColors[i % _chartColors.length],
-                label: data[i].method,
-                value:
-                    '${total == 0 ? 0 : ((data[i].amount / total) * 100).toStringAsFixed(0)}% · ${data[i].count}',
-              ),
-          ],
-        );
-        if (mobile) {
-          return Column(
-            children: [
-              SizedBox(height: 150, child: chart),
-              const SizedBox(height: 8),
-              legend,
-            ],
-          );
-        }
-        return Row(
-          children: [
-            Expanded(flex: 3, child: chart),
-            const SizedBox(width: 12),
-            Expanded(flex: 2, child: legend),
-          ],
-        );
-      },
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          flex: 6,
+          child: Center(
+            child: ListView.separated(
+              shrinkWrap: true,
+              padding: EdgeInsets.zero,
+              itemCount: data.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 4),
+              itemBuilder: (context, index) {
+                final entry = data[index];
+                final percent = total == 0 ? 0 : entry.amount / total * 100;
+                return Semantics(
+                  button: true,
+                  selected: _selected == index,
+                  child: InkWell(
+                    onTap: () => setState(
+                      () => _selected = _selected == index ? null : index,
+                    ),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 6,
+                      ),
+                      color: _selected == index
+                          ? AppColors.primarySoft
+                          : Colors.transparent,
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 3,
+                            height: 28,
+                            color: _chartColors[index % _chartColors.length],
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  entry.method,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                Text(
+                                  '${percent.toStringAsFixed(1)}% · ${entry.count} cobros',
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    color: _textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -2675,7 +2567,7 @@ class _CategoryProfitRow extends StatelessWidget {
                 data.category,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontWeight: FontWeight.w900),
+                style: const TextStyle(fontWeight: FontWeight.w600),
               ),
             ),
             Text(
@@ -2683,7 +2575,7 @@ class _CategoryProfitRow extends StatelessWidget {
               style: const TextStyle(
                 color: _textSecondary,
                 fontSize: 12,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ],
@@ -2723,7 +2615,7 @@ class _CategoryMetric extends StatelessWidget {
       decoration: BoxDecoration(
         color: _pageBg,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _borderSoft),
+        border: Border.all(color: _borderSoft.withValues(alpha: 0.35)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2739,7 +2631,7 @@ class _CategoryMetric extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: color,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w600,
               fontSize: 12,
             ),
           ),
@@ -2829,7 +2721,7 @@ class _RecentSalesTable extends StatelessWidget {
                       sale.customerName ?? 'Cliente General',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w800),
+                      style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
                     subtitle: Text(
                       _recentSaleSubtitle(sale, date),
@@ -2843,7 +2735,7 @@ class _RecentSalesTable extends StatelessWidget {
                         // devuelta no se muestra como venta completa.
                         formatRdCurrencyAccounting(sale.netActiveAmount),
                         style: const TextStyle(
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w600,
                           color: _primaryBlue,
                         ),
                       ),
@@ -2888,7 +2780,7 @@ class _EmptyPeriodNotice extends StatelessWidget {
               children: [
                 Text(
                   'No hay ventas para este período',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900),
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                 ),
                 SizedBox(height: 3),
                 Text(
@@ -2940,7 +2832,7 @@ class _ReportsOfflineMessage extends StatelessWidget {
               style: const TextStyle(
                 color: _textSecondary,
                 fontSize: 12,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ],
@@ -2954,25 +2846,22 @@ class _Surface extends StatelessWidget {
   const _Surface({
     required this.child,
     this.padding = const EdgeInsets.all(16),
-    this.radius = 12,
-    this.shadow = true,
-    this.gradient,
+    this.radius = 6,
+    this.shadow = false,
   });
 
   final Widget child;
   final EdgeInsets padding;
   final double radius;
   final bool shadow;
-  final Gradient? gradient;
 
   @override
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: Colors.white,
-        gradient: gradient,
-        borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: _borderSoft),
+        borderRadius: BorderRadius.circular(math.min(radius, 6)),
+        border: Border.all(color: _borderSoft.withValues(alpha: 0.35)),
         boxShadow: shadow
             ? [
                 BoxShadow(
@@ -3004,7 +2893,7 @@ class _PremiumCard extends StatelessWidget {
         children: [
           Text(
             title,
-            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
           ),
           const SizedBox(height: 12),
           child,
@@ -3046,7 +2935,13 @@ class _KpiCard extends StatelessWidget {
               color: color.withValues(alpha: 0.11),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(icon, color: color, size: 21),
+            child: icon == Icons.trending_up_outlined
+                ? ProvidedActionIcon(
+                    ProvidedAction.profit,
+                    color: color,
+                    size: 21,
+                  )
+                : Icon(icon, color: color, size: 21),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -3063,8 +2958,8 @@ class _KpiCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           color: _textSecondary,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 10.5,
+                          fontWeight: FontWeight.w500,
+                          fontSize: 12,
                         ),
                       ),
                     ),
@@ -3083,7 +2978,7 @@ class _KpiCard extends StatelessWidget {
                     maxLines: 1,
                     style: TextStyle(
                       color: color,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w600,
                       fontSize: 20,
                     ),
                   ),
@@ -3222,7 +3117,7 @@ class _KpiHelpPopover extends StatelessWidget {
               color: _textSecondary,
               fontSize: 12,
               height: 1.28,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ),
@@ -3258,7 +3153,7 @@ class _HeroMiniInfo extends StatelessWidget {
             value,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontWeight: FontWeight.w900),
+            style: const TextStyle(fontWeight: FontWeight.w600),
           ),
         ],
       ),
@@ -3282,49 +3177,9 @@ class _Pill extends StatelessWidget {
         text,
         style: const TextStyle(
           color: _primaryBlue,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w600,
           fontSize: 12,
         ),
-      ),
-    );
-  }
-}
-
-class _LegendRow extends StatelessWidget {
-  const _LegendRow({
-    required this.color,
-    required this.label,
-    required this.value,
-  });
-  final Color color;
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Container(
-            width: 9,
-            height: 9,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 7),
-          Expanded(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-            ),
-          ),
-          Text(
-            value,
-            style: const TextStyle(fontSize: 11, color: _textSecondary),
-          ),
-        ],
       ),
     );
   }
@@ -3358,7 +3213,7 @@ class _RankingRow extends StatelessWidget {
                     '#$rank',
                     style: const TextStyle(
                       color: _primaryBlue,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
@@ -3370,7 +3225,7 @@ class _RankingRow extends StatelessWidget {
                         title,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.w800),
+                        style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(height: 2),
                       Text(
@@ -3385,7 +3240,7 @@ class _RankingRow extends StatelessWidget {
                         trailing,
                         style: const TextStyle(
                           color: _primaryBlue,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ],
@@ -3401,7 +3256,7 @@ class _RankingRow extends StatelessWidget {
                     '#$rank',
                     style: const TextStyle(
                       color: _primaryBlue,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
@@ -3413,7 +3268,7 @@ class _RankingRow extends StatelessWidget {
                         title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.w800),
+                        style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
                       Text(
                         subtitle,
@@ -3432,7 +3287,7 @@ class _RankingRow extends StatelessWidget {
                     alignment: Alignment.centerRight,
                     child: Text(
                       trailing,
-                      style: const TextStyle(fontWeight: FontWeight.w900),
+                      style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
                   ),
                 ),
@@ -3484,7 +3339,6 @@ class _ComparisonRowData {
 class _ComparisonRow extends StatelessWidget {
   const _ComparisonRow({required this.data});
   final _ComparisonRowData data;
-
   @override
   Widget build(BuildContext context) {
     final change = data.previousValue == 0
@@ -3492,144 +3346,68 @@ class _ComparisonRow extends StatelessWidget {
         : ((data.currentValue - data.previousValue) / data.previousValue) * 100;
     final positive = change >= 0;
     final color = positive ? _teal : _error;
-    final mobile = MediaQuery.sizeOf(context).width < 640;
-
-    final trend = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            positive ? Icons.trending_up : Icons.trending_down,
-            size: 14,
-            color: color,
-          ),
-          const SizedBox(width: 4),
-          Text(
-            '${positive ? '+' : ''}${change.toStringAsFixed(1)}%',
-            style: TextStyle(
-              color: color,
-              fontSize: 11,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-        ],
-      ),
-    );
-
-    return Container(
-      padding: EdgeInsets.all(mobile ? 12 : 14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _borderSoft),
-      ),
-      child: mobile
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(9),
-                      decoration: BoxDecoration(
-                        color: _primaryBlue.withValues(alpha: 0.10),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Icon(data.icon, color: _primaryBlue, size: 20),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        data.currentLabel,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                    ),
-                    trend,
-                  ],
+          Row(
+            children: [
+              Icon(data.icon, color: _primaryBlue, size: 16),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  data.currentLabel,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
-                const SizedBox(height: 10),
-                FittedBox(
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                color: color.withValues(alpha: .08),
+                child: Text(
+                  '${positive ? '+' : ''}${change.toStringAsFixed(1)}%',
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 5),
+          Row(
+            children: [
+              Expanded(
+                child: FittedBox(
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerLeft,
                   child: Text(
                     formatRdCurrencyAccounting(data.currentValue),
                     style: const TextStyle(
-                      fontSize: 21,
-                      fontWeight: FontWeight.w900,
-                      color: _primaryBlue,
+                      fontSize: 18,
+                      color: _textPrimary,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  '${data.currentCount} ventas | ${data.previousLabel}: ${formatRdCurrencyAccounting(data.previousValue)} (${data.previousCount} ventas)',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: _textSecondary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            )
-          : Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: _primaryBlue.withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(data.icon, color: _primaryBlue, size: 22),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              data.currentLabel,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ),
-                          trend,
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        formatRdCurrencyAccounting(data.currentValue),
-                        style: const TextStyle(
-                          fontSize: 21,
-                          fontWeight: FontWeight.w900,
-                          color: _primaryBlue,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '${data.currentCount} ventas | ${data.previousLabel}: ${formatRdCurrencyAccounting(data.previousValue)} (${data.previousCount} ventas)',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: _textSecondary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+              ),
+              Text(
+                '${data.currentCount} ventas',
+                style: const TextStyle(fontSize: 11, color: _textSecondary),
+              ),
+            ],
+          ),
+          const SizedBox(height: 3),
+          Text(
+            '${data.previousLabel}: ${formatRdCurrencyAccounting(data.previousValue)} · ${data.previousCount} ventas',
+            style: const TextStyle(fontSize: 11, color: _textSecondary),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -3642,141 +3420,40 @@ class _EmptyChart extends StatelessWidget {
       child: Text(
         'Sin datos en el rango seleccionado',
         textAlign: TextAlign.center,
-        style: TextStyle(color: _textSecondary, fontWeight: FontWeight.w700),
+        style: TextStyle(color: _textSecondary, fontWeight: FontWeight.w500),
       ),
     );
   }
 }
 
-class _BarChartPainter extends CustomPainter {
-  _BarChartPainter({required this.data, required this.color});
-  final List<SeriesDataPoint> data;
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    const left = 58.0;
-    const bottom = 28.0;
-    const top = 12.0;
-    final chart = Rect.fromLTWH(
-      left,
-      top,
-      size.width - left - 8,
-      size.height - top - bottom,
-    );
-    final maxValue = data.map((e) => e.value.abs()).fold<double>(0, math.max);
-    final safeMax = maxValue == 0 ? 1 : maxValue;
-    final axis = Paint()
-      ..color = _borderSoft
-      ..strokeWidth = 1;
-    canvas.drawLine(chart.bottomLeft, chart.bottomRight, axis);
-    for (var i = 0; i < 4; i++) {
-      final y = chart.top + (chart.height / 4) * i;
-      canvas.drawLine(Offset(chart.left, y), Offset(chart.right, y), axis);
-    }
-    final slot = chart.width / data.length;
-    final barW = slot <= 16 ? slot * 0.58 : math.min(slot * 0.62, 28.0);
-    final barPaint = Paint()..color = color;
-    final textPainter = TextPainter(textDirection: ui.TextDirection.ltr);
-    final labelStep = math.max(1, (data.length / 7).ceil()).toInt();
-    for (var i = 0; i < data.length; i++) {
-      final h = (data[i].value.abs() / safeMax) * (chart.height - 8);
-      final x = chart.left + slot * i + (slot - barW) / 2;
-      final rect = RRect.fromRectAndRadius(
-        Rect.fromLTWH(x, chart.bottom - h, barW, h),
-        const Radius.circular(4),
-      );
-      barPaint.color = data[i].value < 0 ? _error : color;
-      canvas.drawRRect(rect, barPaint);
-      if (i % labelStep == 0) {
-        textPainter.text = TextSpan(
-          text: data[i].label.substring(5).replaceAll('-', '/'),
-          style: const TextStyle(fontSize: 10, color: _textSecondary),
-        );
-        textPainter.layout(maxWidth: slot + 8);
-        textPainter.paint(canvas, Offset(x - 4, chart.bottom + 8));
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _BarChartPainter oldDelegate) {
-    return oldDelegate.data != data || oldDelegate.color != color;
-  }
-}
-
-class _LineChartPainter extends CustomPainter {
-  _LineChartPainter({required this.data, required this.color});
-  final List<SeriesDataPoint> data;
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    const pad = 18.0;
-    final rect = Rect.fromLTWH(
-      pad,
-      pad,
-      size.width - pad * 2,
-      size.height - pad * 2,
-    );
-    final maxValue = data.map((e) => e.value).fold<double>(0, math.max);
-    final safeMax = maxValue == 0 ? 1 : maxValue;
-    final points = <Offset>[];
-    for (var i = 0; i < data.length; i++) {
-      final x = rect.left + (rect.width / math.max(1, data.length - 1)) * i;
-      final y = rect.bottom - (data[i].value / safeMax) * rect.height;
-      points.add(Offset(x, y));
-    }
-    final grid = Paint()
-      ..color = _borderSoft
-      ..strokeWidth = 1;
-    for (var i = 0; i < 4; i++) {
-      final y = rect.top + (rect.height / 4) * i;
-      canvas.drawLine(Offset(rect.left, y), Offset(rect.right, y), grid);
-    }
-    if (points.length < 2) return;
-    final path = Path()..moveTo(points.first.dx, points.first.dy);
-    for (final point in points.skip(1)) {
-      path.lineTo(point.dx, point.dy);
-    }
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = color
-        ..strokeWidth = 3
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round,
-    );
-    final fill = Path.from(path)
-      ..lineTo(points.last.dx, rect.bottom)
-      ..lineTo(points.first.dx, rect.bottom)
-      ..close();
-    canvas.drawPath(fill, Paint()..color = color.withValues(alpha: 0.10));
-  }
-
-  @override
-  bool shouldRepaint(covariant _LineChartPainter oldDelegate) {
-    return oldDelegate.data != data || oldDelegate.color != color;
-  }
-}
-
 class _PieChartPainter extends CustomPainter {
-  _PieChartPainter({required this.data});
+  _PieChartPainter({required this.data, this.selected});
   final List<PaymentMethodData> data;
+  final int? selected;
 
   @override
   void paint(Canvas canvas, Size size) {
     final total = data.fold<double>(0, (sum, item) => sum + item.amount);
-    if (total == 0) return;
-    final radius = math.min(size.width, size.height) / 2 - 8;
+    final radius = math.max(0.0, math.min(size.width, size.height) / 2 - 18);
     final center = Offset(size.width / 2, size.height / 2);
     var start = -math.pi / 2;
     final paint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 26;
+      ..strokeWidth = 20;
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()
+        ..color = AppColors.surfaceSubtle
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 20,
+    );
+    if (total <= 0) return;
     for (var i = 0; i < data.length; i++) {
       final sweep = (data[i].amount / total) * math.pi * 2;
-      paint.color = _chartColors[i % _chartColors.length];
+      paint.color = _chartColors[i % _chartColors.length].withValues(
+        alpha: selected == null || selected == i ? 1 : .25,
+      );
       canvas.drawArc(
         Rect.fromCircle(center: center, radius: radius),
         start,
@@ -3790,7 +3467,7 @@ class _PieChartPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _PieChartPainter oldDelegate) {
-    return oldDelegate.data != data;
+    return oldDelegate.data != data || oldDelegate.selected != selected;
   }
 }
 

@@ -4,7 +4,6 @@ import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/design_system/typography/app_typography.dart';
 import '../../../clientes/cliente_model.dart';
 
 /// Búsqueda anclada al campo: conserva el repositorio y la selección del editor.
@@ -18,6 +17,7 @@ class SalesClientSelector extends StatefulWidget {
     required this.onSelected,
     required this.onClear,
     required this.onCreate,
+    this.framed = true,
   });
   final String name;
   final String phone;
@@ -26,7 +26,8 @@ class SalesClientSelector extends StatefulWidget {
   final ValueChanged<ClienteModel> onSelected;
   final VoidCallback onClear;
   final VoidCallback onCreate;
-  static const createIconAsset = 'assets/image/cliente-crear.png';
+  final bool framed;
+  static const createIconAsset = 'assets/image/cliente-nuevo.png';
 
   @override
   State<SalesClientSelector> createState() => _SalesClientSelectorState();
@@ -224,54 +225,55 @@ class _SalesClientSelectorState extends State<SalesClientSelector> {
         ),
       ],
       builder: (context, controller, _) => Container(
-        height: 32,
+        height: 36,
         decoration: BoxDecoration(
-          border: Border.all(
-            color: _focus.hasFocus ? AppColors.primary : AppColors.border,
-          ),
+          border: widget.framed
+              ? Border.all(
+                  color: _focus.hasFocus ? AppColors.primary : AppColors.border,
+                )
+              : null,
+          borderRadius: BorderRadius.circular(8),
         ),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(
               child: Tooltip(
                 message: widget.hasClient
                     ? '${widget.name}${widget.phone.isEmpty ? '' : ' · ${widget.phone}'}'
                     : 'Buscar por nombre o teléfono',
-                child: TextField(
-                  controller: _search,
-                  focusNode: _focus,
-                  onTap: _open,
-                  onChanged: (query) {
-                    if (!_menu.isOpen) _menu.open();
-                    _schedule(query);
-                  },
-                  onSubmitted: (_) {
-                    _debounce?.cancel();
-                    unawaited(_load(_search.text));
-                  },
-                  style: Theme.of(
-                    context,
-                  ).textTheme.labelMedium?.copyWith(height: 1.2),
-                  strutStyle: const StrutStyle(
-                    fontFamily: AppTypography.fontFamily,
-                    fontSize: 12,
-                    height: 1.2,
-                    forceStrutHeight: true,
-                  ),
-                  textAlignVertical: TextAlignVertical.center,
-                  decoration: InputDecoration(
-                    hintText: 'Seleccionar cliente',
-                    hintStyle: Theme.of(context).textTheme.labelMedium
-                        ?.copyWith(height: 1.2, color: AppColors.textMuted),
-                    isDense: true,
-                    isCollapsed: true,
-                    filled: false,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                    disabledBorder: InputBorder.none,
-                    hoverColor: Colors.transparent,
+                child: Center(
+                  child: TextField(
+                    controller: _search,
+                    focusNode: _focus,
+                    onTap: _open,
+                    onChanged: (query) {
+                      if (!_menu.isOpen) _menu.open();
+                      _schedule(query);
+                    },
+                    onSubmitted: (_) {
+                      _debounce?.cancel();
+                      unawaited(_load(_search.text));
+                    },
+                    style: Theme.of(
+                      context,
+                    ).textTheme.labelMedium?.copyWith(height: 1.2),
+                    textAlignVertical: TextAlignVertical.center,
+                    decoration: InputDecoration(
+                      hintText: 'Seleccionar cliente',
+                      hintStyle: Theme.of(context).textTheme.labelMedium
+                          ?.copyWith(height: 1.2, color: AppColors.textMuted),
+                      isDense: true,
+                      isCollapsed: true,
+                      visualDensity: VisualDensity.standard,
+                      filled: false,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      disabledBorder: InputBorder.none,
+                      hoverColor: Colors.transparent,
+                    ),
                   ),
                 ),
               ),
@@ -315,26 +317,40 @@ class _SalesClientSelectorState extends State<SalesClientSelector> {
               ),
             ),
             Container(
-              width: 32,
-              height: 30,
+              width:
+                  88 *
+                  (MediaQuery.textScalerOf(context).scale(12) / 12).clamp(
+                    1.0,
+                    2.0,
+                  ),
+              height: 34,
               decoration: const BoxDecoration(
                 border: Border(left: BorderSide(color: AppColors.border)),
               ),
-              child: IconButton(
-                tooltip: 'Crear cliente',
-                padding: EdgeInsets.zero,
-                onPressed: () {
-                  controller.close();
-                  _focus.unfocus();
-                  widget.onCreate();
-                },
-                icon: const ImageIcon(
-                  AssetImage(SalesClientSelector.createIconAsset),
-                  size: 20,
-                ),
-                style: IconButton.styleFrom(
-                  foregroundColor: AppColors.primary,
-                  shape: const RoundedRectangleBorder(),
+              child: Tooltip(
+                message: 'Crear cliente',
+                child: TextButton.icon(
+                  onPressed: () {
+                    controller.close();
+                    _focus.unfocus();
+                    widget.onCreate();
+                  },
+                  icon: Image.asset(
+                    SalesClientSelector.createIconAsset,
+                    width: 24,
+                    height: 24,
+                    color: AppColors.primary,
+                    filterQuality: FilterQuality.medium,
+                    excludeFromSemantics: true,
+                  ),
+                  label: const Text('Nuevo'),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    foregroundColor: AppColors.primary,
+                    textStyle: Theme.of(context).textTheme.labelMedium
+                        ?.copyWith(fontWeight: FontWeight.w600),
+                    shape: const RoundedRectangleBorder(),
+                  ),
                 ),
               ),
             ),
