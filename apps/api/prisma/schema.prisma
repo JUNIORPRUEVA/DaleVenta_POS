@@ -1220,6 +1220,7 @@ model Company {
   warehouseTransferItems           WarehouseTransferItem[]
   inventoryZeroConfigState         InventoryZeroConfigState?
   telemetryOutbox                  TelemetryOutbox[]
+  usagePulses                      CompanyUsagePulse[]
   guardianIncidents                GuardianIncident[]
   guardianQuota                    GuardianCompanyQuota?
   guardianMachineCredentials       GuardianMachineCredential[]
@@ -2952,6 +2953,26 @@ model NotificationOutbox {
   @@index([status, nextAttemptAt])
   @@index([lockedAt])
   @@map("notification_outbox")
+}
+
+/// Optional foreground activity, independent of licensing and business transactions.
+model CompanyUsagePulse {
+  id            String   @id @default(uuid()) @db.Uuid
+  companyId     String   @map("company_id") @db.Uuid
+  sessionId     String   @map("session_id") @db.Uuid
+  streamId      String   @map("stream_id") @db.Uuid
+  sequence      Int
+  observedAt    DateTime @default(now()) @map("observed_at") @db.Timestamptz(3)
+  activeFrom    DateTime? @map("active_from") @db.Timestamptz(3)
+  active        Boolean
+  platform      String   @db.VarChar(16)
+  appVersion    String   @map("app_version") @db.VarChar(80)
+  company       Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, sessionId, streamId, sequence], map: "company_usage_pulses_stream_sequence_key")
+  @@index([companyId, observedAt])
+  @@index([observedAt])
+  @@map("company_usage_pulses")
 }
 
 model TelemetryOutbox {

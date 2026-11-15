@@ -33,6 +33,7 @@ import 'core/debug/runtime_diagnostics.dart';
 import 'core/guardian/guardian_bootstrap.dart';
 import 'core/license/license_repository.dart';
 import 'core/lifecycle/app_lifecycle_coordinator.dart';
+import 'core/usage/usage_activity_boundary.dart';
 import 'core/offline/sync_queue_service.dart';
 import 'core/offline/sale_attempt_recovery_engine.dart';
 import 'core/offline/sale_attempt_recovery_providers.dart';
@@ -439,35 +440,37 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
                 child: child,
               );
 
-        return Stack(
-          children: [
-            FulltechGlobalBackground(
-              role: role,
-              enableBlurEffects:
-                  widget.enableBackgroundStartup && _backgroundStartupStarted,
-            ),
-            if (effectiveChild != null)
-              ActivationEntryPoint(
-                child: GlobalAiAssistantEntryPoint(child: effectiveChild),
+        return UsageActivityBoundary(
+          child: Stack(
+            children: [
+              FulltechGlobalBackground(
+                role: role,
+                enableBlurEffects:
+                    widget.enableBackgroundStartup && _backgroundStartupStarted,
               ),
-            const AppLoadingOverlay(),
-            const UpdateGuardOverlay(),
-            const LicensePurchaseOverlay(),
-            // ÚLTIMO a propósito: el aviso compacto de errores recuperables se
-            // pinta encima de los overlays de bloqueo (`UpdateGuardOverlay`,
-            // `LicensePurchaseOverlay`), que cubren la pantalla con un velo
-            // semitransparente. Debajo de ellos el aviso quedaba ilegible
-            // (verificado en Windows). Sigue siendo una tarjeta de esquina: no
-            // captura clics fuera de su caja ni bloquea el modal.
-            ListenableBuilder(
-              listenable: router.routeInformationProvider,
-              builder: (context, _) => AppErrorOverlay(
-                login:
-                    router.routeInformationProvider.value.uri.path ==
-                    Routes.login,
+              if (effectiveChild != null)
+                ActivationEntryPoint(
+                  child: GlobalAiAssistantEntryPoint(child: effectiveChild),
+                ),
+              const AppLoadingOverlay(),
+              const UpdateGuardOverlay(),
+              const LicensePurchaseOverlay(),
+              // ÚLTIMO a propósito: el aviso compacto de errores recuperables se
+              // pinta encima de los overlays de bloqueo (`UpdateGuardOverlay`,
+              // `LicensePurchaseOverlay`), que cubren la pantalla con un velo
+              // semitransparente. Debajo de ellos el aviso quedaba ilegible
+              // (verificado en Windows). Sigue siendo una tarjeta de esquina: no
+              // captura clics fuera de su caja ni bloquea el modal.
+              ListenableBuilder(
+                listenable: router.routeInformationProvider,
+                builder: (context, _) => AppErrorOverlay(
+                  login:
+                      router.routeInformationProvider.value.uri.path ==
+                      Routes.login,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         );
       },
     );

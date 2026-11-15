@@ -17,6 +17,16 @@ List<String> _titles(List<AppNavigationSection> sections) => sections
     .toList();
 
 void main() {
+  test('los destinos fiscales distinguen facturas generadas de numeración', () {
+    expect(
+      resolveNavigationTitle('/ecf/documents', const []),
+      'Facturas electrónicas',
+    );
+    expect(
+      resolveNavigationTitle('/ecf/config', const []),
+      'Numeración y configuración fiscal',
+    );
+  });
   group('buildAppNavigationSections — función pura (sin ref.watch)', () {
     test('sin usuario no expone secciones', () {
       final sections = buildAppNavigationSections(

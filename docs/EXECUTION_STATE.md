@@ -1,5 +1,35 @@
 # Execution State
 
+## Current work — fiscal navigation and company activity integration (2026-11-15)
+
+Owner confirmed the activity writer finished and authorized integration of the
+pending work. Own worktree C:/src/fullpos-fiscal-activity-integration-20261115,
+branch agent/fiscal-activity-integration-20261115, base origin/production-main
+859bc5a9. Source worktree is clean at0576cfd0. Merge5db36b6b preserves commits
+ec6c2b05/0576cfd0 and the entire existing fiscal/design ancestry. The only merge
+conflict was main.dart: retain the current login-aware AppErrorOverlay and add
+the default-disabled UsageActivityBoundary around the existing stack.
+
+Plan: audit activity authentication, company isolation, optional-table behavior
+and retention; integrate source commits; clarify fiscal navigation and the empty
+invoice tray; validate backend, real disposable PostgreSQL, Flutter, browser
+layout and regressions; review provenance and publish one reviewable PR.
+The client reporting build flag and server collection flag stay off by default.
+The new additive migration is tested only on dedicated local fixtures56701.
+No production migration, data/configuration change, deployment or real emission.
+Main merge and deployment remain review gates; further requested design edits
+can be added to this same PR before release.
+
+Local results: API build/schema PASS, migrations only on disposable local DBs
+PASS, backend3362 PASS/101 conditional skips, fiscal PostgreSQL32 PASS,
+HTTP56 PASS, Flutter767 PASS, analysis PASS89.1s, real app web build PASS80.7s.
+Published draft PR47 targets production-main and has22 changed paths with a
+matching remote/local inventory. The synthetic browser harness compiles, but
+its header action labels were not rendered, preventing navigation validation
+by accessible name. The completed-view screenshot was inspected; this does not
+grant visual PASS. Further design changes/review remain in the same PR.
+NO-GO for main merge/deploy until visual acceptance and final GitHub gates.
+
 ## Current work — consolidate deployed CRM licenses and PR45 (2026-11-15)
 
 Owner authorized local consolidation after the deployed backend changed to
