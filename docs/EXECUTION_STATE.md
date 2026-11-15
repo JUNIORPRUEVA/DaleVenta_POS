@@ -1,5 +1,52 @@
 # Execution State
 
+## Current work — consolidate deployed CRM licenses and PR45 (2026-11-15)
+
+Owner authorized local consolidation after the deployed backend changed to
+crm-license-daleventas:87316912. Own worktree C:/src/fullpos-license-fiscal-20261115,
+branch agent/consolidate-license-fiscal-20261115. Base221d530c contains PR45 and
+all approved design/fiscal work. Commit87316912 is merged without conflicts,
+preserving its ancestry; only six license files are added/changed by that merge.
+The original license worktree has uncommitted usage/activity work and is read-only;
+none of those unfinished changes or migrations enter this consolidation.
+Plan: preserve the deployed license implementation, verify HTTP authentication
+and tenant-safe/idempotent commands, run license and fiscal PostgreSQL regression,
+then review the final diff and create the reviewable checkpoint. No merge into
+production-main, production migration/configuration change or deploy is authorized.
+Dedicated local PostgreSQL56701 will contain separate disposable fiscal and CRM
+fixture databases, with synthetic credentials and external emission disabled.
+The CRM fixture guard admits that exact loopback port and name, rejecting URL
+query/hash. Build PASS, CRM PostgreSQL12 PASS, HTTP boundary6 PASS, fiscal
+atomic/readiness/returns PostgreSQL32 PASS. Docker lock756 packages PASS.
+Full backend suite3353 PASS/101 skipped,280 suites PASS/13 skipped (300.688s).
+Additional license/fiscal preservation regression1 PASS, executed separately.
+Fiscal HTTP regression44 PASS/3 suites. Full built Nest application HTTP smoke
+8 PASS with synthetic companies:bridge auth, legacy license endpoint, versioning,
+deduplicated command and tenant-specific session revocation. Additional regression
+typecheck PASS. Audit generators168 models/435 endpoints; CI YAML parse PASS.
+Local consolidation validated; preserve both parent histories in its checkpoint.
+GitHub checks for the review head are still a separate gate. No product UI,
+schema/migration/lockfile/Dockerfile changes. Do not deploy the old221d530c API
+over the live license backend. Owner retains main merge and deployment.
+Original activity
+writer changed two uncommitted activity files during this task; original HEAD
+remains87316912 and no edits from this consolidation target that worktree.
+Do not claim the original worktree is frozen. Deploy remains NO-GO.
+
+First consolidation commit643dffe9 preserves parents221d530c/87316912 and is
+published in draft PR46. CI43736648017:API/site/Windows PASS; Flutter failed7
+reports goldens that use the real date (reference14 Nov, execution15 Nov).
+No reports code differed from PR45 at that commit. Minimal follow-up provides
+an optional reference date, defaulting to the system date, and fixes only the
+golden fixture date. Existing PNGs/tolerances remain unchanged. Initial reports
+regression18 PASS on Windows and Linux; explicit system-date regression added.
+Final follow-up19 reports tests PASS on Windows and19 PASS on Linux, without
+updating golden references. Full Flutter analysis PASS61.5s and Linux scoped
+analysis PASS24.3s. New CI remains a gate. Do not publish the API candidate
+from643dffe9 on the strength of the failed first run; prepare images tied to
+the final reviewed head. The old UI-byte-identical claim applies only to the
+initial consolidation; this follow-up changes the optional report date seam.
+
 ## Current acceptance — PR45 (2026-11-14)
 
 Owned worktree/branch below; PR45 targets production-main and remains owner-controlled.

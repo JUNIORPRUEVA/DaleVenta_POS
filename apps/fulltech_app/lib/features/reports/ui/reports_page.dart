@@ -294,7 +294,10 @@ class CategoryProfitData {
 }
 
 class ReportsPage extends ConsumerStatefulWidget {
-  const ReportsPage({super.key});
+  const ReportsPage({super.key, this.currentDate});
+
+  /// Reference date for report periods; omitted callers use the system date.
+  final DateTime? currentDate;
 
   @override
   ConsumerState<ReportsPage> createState() => _ReportsPageState();
@@ -382,6 +385,7 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
 
   DateTimeRange get _range => DateRangeHelper.getRangeForPeriod(
     _selectedPeriod,
+    now: widget.currentDate,
     customStart: _customStart,
     customEnd: _customEnd,
   );
@@ -518,7 +522,7 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
   Future<List<_ComparisonRowData>> _loadComparisons(
     VentasRepository repo,
   ) async {
-    final now = DateTime.now();
+    final now = widget.currentDate ?? DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     // Aritmetica de dias con el constructor (DST-proof): `subtract(Duration)`
     // es tiempo ABSOLUTO y en zonas con cambio de horario devuelve otro dia.
@@ -682,7 +686,11 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
     bool applyCategory = false,
   }) async {
     final initial = _range;
-    final picked = await _showReportsDateRangePicker(context, initial);
+    final picked = await _showReportsDateRangePicker(
+      context,
+      initial,
+      currentDate: widget.currentDate,
+    );
     if (picked == null) return;
     setState(() {
       var next = _filters.withCustomRange(picked.start, picked.end);
@@ -709,6 +717,7 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
               selectedRangeLabel:
                   '${_date.format(_range.start)} - ${_date.format(_range.end)}',
               selectedDateRange: _range,
+              currentDate: widget.currentDate,
               categories: _categories,
               selectedCategory: _selectedCategory,
             ),
@@ -1114,14 +1123,16 @@ class _ReportsFilterDraft {
 
 Future<DateTimeRange?> _showReportsDateRangePicker(
   BuildContext context,
-  DateTimeRange initial,
-) {
-  final today = DateTime.now();
+  DateTimeRange initial, {
+  DateTime? currentDate,
+}) {
+  final today = currentDate ?? DateTime.now();
   return showDateRangePicker(
     context: context,
     firstDate: DateTime(2020),
     lastDate: DateTime(today.year, today.month, today.day + 1),
     initialDateRange: initial,
+    currentDate: today,
     helpText: 'Selecciona el intervalo',
     saveText: 'Aplicar',
     confirmText: 'Aplicar',
@@ -1193,6 +1204,7 @@ class ReportsFilterDrawer extends StatefulWidget {
     required this.selectedDateRange,
     required this.categories,
     required this.selectedCategory,
+    this.currentDate,
   });
 
   final DateRangePeriod selectedPeriod;
@@ -1200,6 +1212,7 @@ class ReportsFilterDrawer extends StatefulWidget {
   final DateTimeRange selectedDateRange;
   final List<String> categories;
   final String? selectedCategory;
+  final DateTime? currentDate;
 
   @override
   State<ReportsFilterDrawer> createState() => _ReportsFilterDrawerState();
@@ -1238,7 +1251,10 @@ class _ReportsFilterDrawerState extends State<ReportsFilterDrawer> {
       return '${date.format(_customRange.start)} - ${date.format(_customRange.end)}';
     }
     if (_period == widget.selectedPeriod) return widget.selectedRangeLabel;
-    final range = DateRangeHelper.getRangeForPeriod(_period);
+    final range = DateRangeHelper.getRangeForPeriod(
+      _period,
+      now: widget.currentDate,
+    );
     return '${date.format(range.start)} - ${date.format(range.end)}';
   }
 

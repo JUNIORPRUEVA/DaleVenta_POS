@@ -368,7 +368,7 @@ export class LicenseService {
     }
   }
 
-  private async getCompanyLicenseStatus(
+  async getCompanyLicenseStatus(
     companyId: string,
     db: PrismaExecutor = this.prisma,
   ) {
@@ -622,7 +622,7 @@ export class LicenseService {
     );
   }
 
-  private async syncAppConfigCompanyName(
+  async syncAppConfigCompanyName(
     tx: Prisma.TransactionClient,
     companyId: string,
     companyName: string,
@@ -952,6 +952,10 @@ export class LicenseService {
 
   private jsonValue(value: unknown): Prisma.InputJsonValue {
     return JSON.parse(JSON.stringify(value ?? null)) as Prisma.InputJsonValue;
+  }
+
+  publishCrmLicenseChange(companyId: string, action: string, license: unknown) {
+    this.emitLicenseEvent(companyId, `license.crm.${action}`, license);
   }
 
   private emitLicenseEvent(companyId: string, type: string, license: unknown) {
