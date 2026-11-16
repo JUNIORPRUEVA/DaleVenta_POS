@@ -42,6 +42,7 @@ import '../ai_assistant/presentation/ai_screen.dart';
 import '../auth/admin_authorization_session.dart';
 import '../auth/app_bootstrap_status.dart';
 import '../auth/auth_provider.dart';
+import '../auth/public_website_entry.dart';
 import '../auth/app_permissions.dart';
 import '../auth/business_registration_policy.dart';
 import '../company/company_settings_model.dart';
@@ -97,7 +98,9 @@ final routerProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(
         path: Routes.landing,
-        builder: (context, state) => const LandingScreen(),
+        builder: (context, state) => kIsWeb
+            ? const PublicWebsiteEntry()
+            : const LandingScreen(),
       ),
       GoRoute(
         path: Routes.splash,

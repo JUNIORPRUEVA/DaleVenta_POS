@@ -259,10 +259,6 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     final shellActions = routeActions?.route == location
         ? routeActions!.actions
         : const <DesktopShellActionItem>[];
-    // Una sola acción en la bandeja: la habilitación es el destino útil del
-    // módulo. «Configuración e-CF» solo era un paso intermedio hacia este mismo
-    // lugar y, para una empresa en habilitación, mostraba secciones vacías.
-    final isEcfHome = location == Routes.ecf;
     // Destino del botón «volver» de la barra. La PRIMERA pantalla de un módulo
     // vuelve a la pantalla principal —el mismo destino que el router resuelve
     // al iniciar sesión, según el rol—; los niveles internos vuelven al nivel
@@ -280,29 +276,6 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
               location == Routes.ecfAdmin
         ? () => context.go(Routes.ecf)
         : null;
-    // La autorización y la configuración del módulo viven ahora dentro del
-    // recorrido de e-CF (paso «Autorización»), no en un botón aparte: el
-    // cliente no tiene que descubrir un destino oculto para terminar su
-    // trámite.
-    final ecfActions = isEcfHome
-        ? <DesktopShellActionItem>[
-            DesktopShellActionItem(
-              icon: Icons.receipt_long_outlined,
-              tooltip: 'Facturas electrónicas generadas',
-              label: 'Facturas electrónicas',
-              onPressed: () => context.go(Routes.ecfDocuments),
-            ),
-            // Cuando la postulación termina, el módulo deja de mostrar el
-            // recorrido. Lo que queda —facturar, revisar comprobantes, ajustar
-            // la configuración— vive aquí, en la barra, en un solo sitio.
-            DesktopShellActionItem(
-              icon: Icons.verified_outlined,
-              tooltip: 'Numeración y configuración fiscal',
-              label: 'Gestión fiscal',
-              onPressed: () => _openEcfPostulationMenu(context),
-            ),
-          ]
-        : const <DesktopShellActionItem>[];
     final customFooter = _footerContent;
     final footerBuilder = customFooter?.route == location
         ? customFooter!.builder
@@ -333,7 +306,7 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                         onToggleSidebar: () =>
                             _shellScaffoldKey.currentState?.openDrawer(),
                         onBack: shellBack,
-                        extraActions: [...shellActions, ...ecfActions],
+                        extraActions: shellActions,
                       ),
                     ),
                   Expanded(
@@ -374,66 +347,6 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     super.dispose();
   }
 
-  /// Opciones de la postulación electrónica ya cerrada.
-  ///
-  /// El módulo deja de mostrar los pasos cuando la empresa queda autorizada:
-  /// repetirlos haría creer que falta algo. Lo que sí se sigue necesitando
-  /// —facturar, revisar lo emitido y ajustar la configuración— se agrupa aquí,
-  /// en un solo sitio de la barra.
-  ///
-  /// No incluye «eliminar postulación»: el backend no expone esa operación. Lo
-  /// que sí existe es revocar la autorización de emisión, que es una decisión
-  /// aparte y no se ofrece desde un menú de navegación.
-  void _openEcfPostulationMenu(BuildContext context) {
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      builder: (sheetContext) {
-        void go(String route) {
-          Navigator.of(sheetContext).pop();
-          context.go(route);
-        }
-
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Padding(
-                padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
-                child: Text(
-                  'Gestión fiscal',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
-                ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.point_of_sale_outlined),
-                title: const Text('Ir a ventas'),
-                subtitle: const Text('Emitir con la numeración autorizada'),
-                onTap: () => go(Routes.cotizaciones),
-              ),
-              ListTile(
-                leading: const Icon(Icons.receipt_long_outlined),
-                title: const Text('Facturas electrónicas'),
-                subtitle: const Text('Ver lo emitido y lo pendiente de envío'),
-                onTap: () => go(Routes.ecfDocuments),
-              ),
-              ListTile(
-                leading: const Icon(Icons.tune_outlined),
-                title: const Text('Numeración y configuración fiscal'),
-                subtitle: const Text(
-                  'Consultar y administrar los rangos autorizados',
-                ),
-                onTap: () => go(Routes.ecfConfig),
-              ),
-              const SizedBox(height: 8),
-            ],
-          ),
-        );
-      },
-    );
-  }
 }
 
 class DesktopShellFooter extends ConsumerWidget {

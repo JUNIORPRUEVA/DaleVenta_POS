@@ -30,6 +30,8 @@ import 'ecf_fiscal_data_page.dart';
 import 'ecf_postulation_xml_card.dart';
 import 'ecf_production_activation_action.dart';
 import 'ecf_support_grant_card.dart';
+import 'ecf_ready_home.dart';
+import 'ecf_fiscal_overview.dart';
 import 'debug/ecf_debug_screen_selector.dart';
 import 'flow/ecf_authorization_step.dart';
 import 'flow/ecf_completed_view.dart';
@@ -152,10 +154,7 @@ class _EcfDgiiHabilitationPageState
       _fiscalOpen ||
       (_step != null && _step != EcfFlowStep.welcome);
 
-  /// Publica el acceso a «Ayuda y soporte» en la barra del shell.
-  ///
-  /// La pantalla no tiene barra propia: el icono vive en la del shell y solo se
-  /// muestra mientras la ruta sea esta.
+  /// Conserva el regreso contextual y las herramientas exclusivas de depuración.
   @override
   void initState() {
     super.initState();
@@ -198,11 +197,6 @@ class _EcfDgiiHabilitationPageState
         route: Routes.ecf,
         onBack: _navigateBack,
         actions: [
-          DesktopShellActionItem(
-            icon: Icons.headset_mic_outlined,
-            tooltip: 'Ayuda y soporte',
-            onPressed: _openSupport,
-          ),
           // Exclusivo de depuración. En release esta rama es constante y el
           // selector no se registra ni se puede habilitar por URL/dart-define.
           if (kDebugMode)
@@ -642,12 +636,32 @@ class _EcfDgiiHabilitationPageState
                       // Volver a los pasos haría creer que falta algo, así que el
                       // módulo abre en el cierre y desde ahí se va a facturar.
                       if (_invoicingReady(view)) {
+                        if (capabilities.valueOrNull?.posReady == true) {
+                          return EcfReadyHome(
+                            overview: EcfFiscalOverview(
+                              capabilities: capabilities.requireValue,
+                              sequences: ref.watch(ecfSequencesProvider),
+                              onRetry: () => ref.invalidate(ecfSequencesProvider),
+                            ),
+                            key: ValueKey('ecf-ready-${user?.companyId}-${user?.id}'),
+                            companyId: user?.companyId ?? '',
+                            userId: user?.id ?? '',
+                            canManageNumbering: canManageSequences,
+                            onSales: _goToSales,
+                            onDocuments: () => context.go(Routes.ecfDocuments),
+                            onNumbering: () => context.go(Routes.ecfConfig),
+                          );
+                        }
                         return EcfCompletedView(
                           invoicingReady: capabilities.valueOrNull?.posReady == true,
                           numbering: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               const EcfProductionActivationAction(),
+                              TextButton(
+                                onPressed: _openSupport,
+                                child: const Text('Solicitar asistencia'),
+                              ),
                               if (showNumbering) EcfSequenceRangeSection(
                                 key: ValueKey('ecf-completed-numbering-${user?.companyId}'),
                                 canManage: canManageSequences,

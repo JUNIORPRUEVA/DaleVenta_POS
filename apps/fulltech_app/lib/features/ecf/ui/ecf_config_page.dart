@@ -162,21 +162,6 @@ class EcfConfigPage extends ConsumerWidget {
                                       ),
                                     ),
                                   ],
-                                  // Solo tiene sentido cuando la empresa YA factura
-                                  // electrónicamente: sin e-CF no hay comprobante del que
-                                  // prescindir.
-                                  if (caps != null && caps.enabled) ...[
-                                    _Panel(
-                                      child: EcfSalesWithoutDocumentSection(
-                                        embedded: true,
-                                        capabilities: caps,
-                                        canManage: hasUserPermission(
-                                          ref.watch(authStateProvider).user,
-                                          AppPermission.manageEcfConfig,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
                                   if (sequenceItems.isNotEmpty) ...[
                                     _Panel(
                                       child: Column(

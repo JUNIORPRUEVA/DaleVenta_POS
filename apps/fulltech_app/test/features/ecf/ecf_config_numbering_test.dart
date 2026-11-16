@@ -225,7 +225,9 @@ void main() {
       await pump(tester, _Repo(environment: 'PRODUCTION'), height: 640);
       expect(find.text('Estado del módulo').hitTestable(), findsOneWidget);
       expect(find.text('Rangos de numeración').hitTestable(), findsOneWidget);
-      expect(find.text('Vender sin comprobante').hitTestable(), findsOneWidget);
+      // This company preference belongs exclusively to Configuración → Empresa.
+      expect(find.byType(EcfSalesWithoutDocumentSection), findsNothing);
+      expect(find.text('Vender sin comprobante'), findsNothing);
       expect(find.text('Tipos de comprobante'), findsNothing);
       final declare = find.byKey(const ValueKey('ecf_dgii_declare_another'));
       expect(declare.hitTestable(), findsOneWidget);
