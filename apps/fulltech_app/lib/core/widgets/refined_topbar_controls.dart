@@ -60,16 +60,24 @@ class RefinedTurnChip extends StatelessWidget {
     required this.open,
     required this.unverified,
     required this.activity,
+    this.stale = false,
   });
 
   final bool open;
   final bool unverified;
   final Widget activity;
 
+  /// Turno abierto de un día anterior: no admite ventas hasta cerrarlo y abrir
+  /// el del día. Se muestra distinto para que nadie lo confunda con un turno
+  /// operativo.
+  final bool stale;
+
   @override
   Widget build(BuildContext context) => RefinedTopbarSurface(
     height: 32,
-    background: open ? AppColors.primarySoft : AppColors.surfaceAlt,
+    background: stale
+        ? const Color(0xFFFFF7E6)
+        : (open ? AppColors.primarySoft : AppColors.surfaceAlt),
     child: Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10),
       child: Row(
@@ -78,9 +86,13 @@ class RefinedTurnChip extends StatelessWidget {
           activity,
           const SizedBox(width: 7),
           Text(
-            open ? 'Turno abierto' : 'Turno cerrado',
+            stale
+                ? 'Turno de otro día'
+                : (open ? 'Turno abierto' : 'Turno cerrado'),
             style: Theme.of(context).textTheme.labelMedium?.copyWith(
-              color: open ? AppColors.primaryDark : AppColors.textSecondary,
+              color: stale
+                  ? const Color(0xFFB54708)
+                  : (open ? AppColors.primaryDark : AppColors.textSecondary),
               fontWeight: FontWeight.w600,
             ),
           ),
