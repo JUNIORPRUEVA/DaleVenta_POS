@@ -887,15 +887,14 @@ void main() {
       technical: false,
     );
 
-    expect(find.text('¡Felicidades!'), findsOneWidget);
-    expect(
-      find.textContaining('ya puede facturar electrónicamente'),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey('ecf_completed_go_sales')),
-      findsOneWidget,
-    );
+    expect(find.text('¡Felicidades!'), findsNothing);
+    expect(find.text('Facturas electrónicas'), findsOneWidget);
+    expect(find.text('Numeración fiscal'), findsOneWidget);
+    expect(find.text('Ir a ventas'), findsOneWidget);
+    final shellActions = ProviderScope.containerOf(
+      tester.element(find.byType(EcfDgiiHabilitationPage)),
+    ).read(desktopShellRouteActionsProvider);
+    expect(shellActions?.actions.any((action) => action.tooltip == 'Ayuda y soporte'), isFalse);
     // Ni rail ni pasos del proceso.
     expect(find.text('Bienvenida'), findsNothing);
     expect(find.byType(EcfPreparationStep), findsNothing);

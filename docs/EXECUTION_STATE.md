@@ -1,5 +1,28 @@
 # Execution State
 
+## Current work — state-aware fiscal home and public logout (2026-11-15)
+
+Owner requests visual audit before local fixes: no fiscal bottom-sheet menu or
+help appbar action, no perpetual congratulations, correct new public website on
+logout, preserve unfinished certification. Own worktree fullpos-fiscal-home-logout-20261115,
+branch agent/fiscal-home-logout-20261115, base a495c356. Captures/code audited:
+completed state rendered celebration permanently; shell added duplicate menu;
+internal Flutter '/' rendered legacy landing rather than server-side Astro.
+Plan: direct compact fiscal home gated by backend readiness, local once-only
+company/user acknowledgement, retain pending wizard, full-document public route
+only on Web; tests and synthetic desktop/mobile preview; no deploy/production writes.
+
+Local results: full Flutter analysis PASS91.9s; regression544 PASS covering e-CF,
+auth, routing and startup; initial focused54 PASS. Full app UAT web build PASS72.2s,
+private gallery PASS31.4s. Browser1440/390 PASS on notice acknowledgement,
+re-entry, company isolation, incomplete readiness and full-document public exit
+that clears Astro session. Public exit used local compiled Astro as a fixture;
+no real company login/logout/emission. Screenshots inspected. Gallery available
+127.0.0.1:53900. New views use actual widgets and private synthetic callbacks.
+No appbar fiscal menu or help registered; debug-only selector preserved.
+No API/schema/credentials/ranges/production changes. No commit/push/merge/deploy.
+GO for local review; owner must review before publication/deployment.
+
 ## Current work — public website, startup and three histories (2026-11-15)
 
 Owner requests a separate electronic-invoicing announcement above the public
@@ -977,3 +1000,16 @@ exist.
 
 READY_FOR_WINDOWS_RELEASE_AUTOMATION. Production NO-GO until Authenticode
 certificate and explicit production approval exist.
+
+## Portada fiscal con datos — ajuste local 2026-11-15
+
+- En `agent/fiscal-home-logout-20261115`, worktree aislado
+  `C:/src/fullpos-fiscal-home-logout-20261115`.
+- Empresa lista: resumen de tipos y rangos del backend; empresas pendientes
+  conservan el asistente. Ventas sin comprobante solo en Empresa, sin cambiar
+  su comportamiento. Se mantienen correcciones locales de appbar y salida web.
+- Análisis PASS; 546 pruebas PASS; build web UAT PASS. Informe e inventario:
+  `docs/AUDITORIA_PORTADA_FISCAL_SALIDA_20261115.md`.
+- El 2026-11-16 el usuario pidió preparar el proceso de publicación. Se prepara
+  commit/PR y se verifican sus controles; no hacer merge automáticamente.
+  Sin despliegue ni cambios productivos durante la preparación.
