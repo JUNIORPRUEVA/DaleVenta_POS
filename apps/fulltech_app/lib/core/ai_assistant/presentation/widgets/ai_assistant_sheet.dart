@@ -185,7 +185,7 @@ class _GlobalAiChatSheetState extends ConsumerState<GlobalAiChatSheet> {
                       ],
                     ),
                   ),
-                  _QuickActionsGrid(
+                  _QuickActionLinks(
                     actions: _quickPromptsForContext(aiState.context),
                     enabled: !busy && !_recording,
                     onSelected: (action) =>
@@ -335,28 +335,23 @@ class _GlobalAiChatSheetState extends ConsumerState<GlobalAiChatSheet> {
     return [
       const _QuickAction(
         'Explícame esta pantalla',
-        Icons.visibility_rounded,
         'Explícame esta pantalla paso a paso',
       ),
       _QuickAction(
-        'Qué puedo hacer en $module',
-        Icons.dashboard_customize_rounded,
+        'Qué puedo hacer aquí',
         'Qué puedo hacer en el módulo $module',
       ),
       const _QuickAction(
-        'Normas del manual aquí',
-        Icons.menu_book_rounded,
+        'Normas del manual',
         'Qué normas del manual interno aplican en esta pantalla',
       ),
       const _QuickAction(
         'Reportar una avería',
-        Icons.report_problem_rounded,
         'Quiero reportar una avería',
         tone: _QuickActionTone.alert,
       ),
       const _QuickAction(
-        'Hablar con soporte humano',
-        Icons.support_agent_rounded,
+        'Soporte humano',
         'Quiero hablar con soporte humano',
         tone: _QuickActionTone.support,
       ),
@@ -598,20 +593,18 @@ class _GlobalAiChatSheetState extends ConsumerState<GlobalAiChatSheet> {
   }
 }
 
-/// Acción sugerida del asistente: etiqueta, icono, pregunta que se envía y tono.
+/// Acción sugerida del asistente: texto que se envía y tono.
 ///
-/// El tono separa las acciones normales de las dos que abren un caso con una persona
-/// (reportar una avería y hablar con soporte), que se ven con su color para encontrarlas antes.
+/// El tono sólo cambia el color: las dos acciones que abren un caso con una persona (avería y
+/// soporte) se ven distintas sin necesidad de una caja que ocupe media pantalla.
 class _QuickAction {
   const _QuickAction(
     this.label,
-    this.icon,
     this.prompt, {
     this.tone = _QuickActionTone.normal,
   });
 
   final String label;
-  final IconData icon;
   final String prompt;
   final _QuickActionTone tone;
 }
@@ -661,13 +654,13 @@ class _StatusChip extends StatelessWidget {
   }
 }
 
-/// Rejilla de acciones rápidas.
+/// Acciones rápidas como enlaces de texto.
 ///
-/// Antes eran cápsulas en una fila que se desplazaba: se cortaban y las dos acciones que abren un
-/// caso (avería y soporte) quedaban ocultas al final. En tarjetas se ven todas a la vez y cada una
-/// ocupa el mismo ancho, sin depender de la longitud del texto.
-class _QuickActionsGrid extends StatelessWidget {
-  const _QuickActionsGrid({
+/// Antes eran tarjetas grandes que tapaban la conversación. Ahora son una o dos líneas de texto
+/// pequeño, sin cajas ni iconos: se leen como parte del panel y dejan el espacio para los mensajes.
+/// Las dos acciones que abren un caso con una persona conservan su color para no perderse.
+class _QuickActionLinks extends StatelessWidget {
+  const _QuickActionLinks({
     required this.actions,
     required this.enabled,
     required this.onSelected,
@@ -679,54 +672,31 @@ class _QuickActionsGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final rows = <Widget>[];
-    for (var index = 0; index < actions.length; index += 2) {
-      final left = actions[index];
-      final right = index + 1 < actions.length ? actions[index + 1] : null;
-      if (index > 0) {
-        rows.add(const SizedBox(height: 8));
-      }
-      rows.add(
-        SizedBox(
-          height: 54,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: _QuickActionCard(
-                  action: left,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 4, 14, 0),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Wrap(
+          spacing: 16,
+          runSpacing: 0,
+          children: actions
+              .map(
+                (action) => _QuickActionLink(
+                  action: action,
                   enabled: enabled,
                   onSelected: onSelected,
                 ),
-              ),
-              if (right == null)
-                // Número impar de acciones: la última ocupa la fila entera en vez de dejar un hueco.
-                const SizedBox.shrink()
-              else ...[
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _QuickActionCard(
-                    action: right,
-                    enabled: enabled,
-                    onSelected: onSelected,
-                  ),
-                ),
-              ],
-            ],
-          ),
+              )
+              .toList(growable: false),
         ),
-      );
-    }
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
-      child: Column(mainAxisSize: MainAxisSize.min, children: rows),
+      ),
     );
   }
 }
 
-/// Tarjeta de una acción: esquinas rectas, icono a la izquierda y texto a dos líneas.
-class _QuickActionCard extends StatelessWidget {
-  const _QuickActionCard({
+/// Un enlace de acción: texto pequeño, sin fondo ni borde.
+class _QuickActionLink extends StatelessWidget {
+  const _QuickActionLink({
     required this.action,
     required this.enabled,
     required this.onSelected,
@@ -739,39 +709,24 @@ class _QuickActionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final accent = switch (action.tone) {
+    final color = switch (action.tone) {
       _QuickActionTone.alert => AppColors.error,
       _QuickActionTone.support => AppColors.accent,
-      _QuickActionTone.normal => AppColors.primary,
+      _QuickActionTone.normal => AppColors.textSecondary,
     };
-    return Material(
-      color: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.zero,
-        side: BorderSide(color: AppColors.border),
-      ),
-      child: InkWell(
-        onTap: enabled ? () => onSelected(action) : null,
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 54),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          child: Row(
-            children: [
-              Icon(action.icon, size: 18, color: accent),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  action.label,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: AppColors.textSecondary,
-                    fontWeight: FontWeight.w600,
-                    height: 1.2,
-                  ),
-                ),
-              ),
-            ],
+    return InkWell(
+      onTap: enabled ? () => onSelected(action) : null,
+      borderRadius: BorderRadius.circular(4),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 2),
+        child: Text(
+          action.label,
+          style: theme.textTheme.labelSmall?.copyWith(
+            fontSize: 11.5,
+            height: 1.15,
+            color: color,
+            fontWeight: FontWeight.w500,
+            letterSpacing: 0.1,
           ),
         ),
       ),
