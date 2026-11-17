@@ -185,55 +185,11 @@ class _GlobalAiChatSheetState extends ConsumerState<GlobalAiChatSheet> {
                       ],
                     ),
                   ),
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Text(
-                      'Consulta sobre esta pantalla, resuelve dudas del sistema o reporta una avería.',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        fontWeight: FontWeight.w400,
-                        height: 1.5,
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: _PromptChipsRow(
-                      children: _quickPromptsForContext(aiState.context)
-                          .map(
-                            (action) => Padding(
-                              padding: const EdgeInsets.only(right: 8),
-                              child: ActionChip(
-                                avatar: Icon(
-                                  action.icon,
-                                  size: 16,
-                                  color: AppColors.primary,
-                                ),
-                                onPressed: busy || _recording
-                                    ? null
-                                    : () => _sendPreset(
-                                        controller,
-                                        action.prompt,
-                                      ),
-                                backgroundColor: AppColors.surface,
-                                elevation: 0,
-                                pressElevation: 0,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                side: const BorderSide(color: AppColors.border),
-                                label: Text(
-                                  action.label,
-                                  style: theme.textTheme.labelMedium?.copyWith(
-                                    color: AppColors.textSecondary,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          )
-                          .toList(growable: false),
-                    ),
+                  _QuickActionsGrid(
+                    actions: _quickPromptsForContext(aiState.context),
+                    enabled: !busy && !_recording,
+                    onSelected: (action) =>
+                        _sendPreset(controller, action.prompt),
                   ),
                   Expanded(
                     child: _ChatMessagesList(
@@ -260,26 +216,16 @@ class _GlobalAiChatSheetState extends ConsumerState<GlobalAiChatSheet> {
                     ),
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.all(12),
                     decoration: const BoxDecoration(
                       color: AppColors.surface,
-                      border: Border(top: BorderSide(color: AppColors.border)),
+                      border: Border(
+                        top: BorderSide(color: AppColors.borderStrong),
+                      ),
                     ),
                     child: Container(
                       key: const ValueKey('ai-assistant-composer'),
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: AppColors.surface,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: AppColors.borderStrong),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: AppColors.shadow,
-                            blurRadius: 16,
-                            offset: Offset(0, 6),
-                          ),
-                        ],
-                      ),
+                      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                      decoration: const BoxDecoration(color: AppColors.surface),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -299,7 +245,7 @@ class _GlobalAiChatSheetState extends ConsumerState<GlobalAiChatSheet> {
                           TextField(
                             controller: _messageController,
                             enabled: !_recording,
-                            minLines: 2,
+                            minLines: 1,
                             maxLines: 4,
                             textInputAction: TextInputAction.send,
                             onSubmitted: busy ? null : (_) => _send(controller),
@@ -406,11 +352,13 @@ class _GlobalAiChatSheetState extends ConsumerState<GlobalAiChatSheet> {
         'Reportar una avería',
         Icons.report_problem_rounded,
         'Quiero reportar una avería',
+        tone: _QuickActionTone.alert,
       ),
       const _QuickAction(
-        'Hablar con un representante',
+        'Hablar con soporte humano',
         Icons.support_agent_rounded,
-        'Quiero hablar con un representante',
+        'Quiero hablar con soporte humano',
+        tone: _QuickActionTone.support,
       ),
     ];
   }
@@ -650,13 +598,25 @@ class _GlobalAiChatSheetState extends ConsumerState<GlobalAiChatSheet> {
   }
 }
 
-/// Acción sugerida del asistente: etiqueta, icono y pregunta que se envía.
+/// Acción sugerida del asistente: etiqueta, icono, pregunta que se envía y tono.
+///
+/// El tono separa las acciones normales de las dos que abren un caso con una persona
+/// (reportar una avería y hablar con soporte), que se ven con su color para encontrarlas antes.
 class _QuickAction {
-  const _QuickAction(this.label, this.icon, this.prompt);
+  const _QuickAction(
+    this.label,
+    this.icon,
+    this.prompt, {
+    this.tone = _QuickActionTone.normal,
+  });
+
   final String label;
   final IconData icon;
   final String prompt;
+  final _QuickActionTone tone;
 }
+
+enum _QuickActionTone { normal, alert, support }
 
 /// Estado del asistente.
 ///
@@ -701,35 +661,120 @@ class _StatusChip extends StatelessWidget {
   }
 }
 
-/// Fila de sugerencias: se desplaza a mano, de borde a borde del panel.
+/// Rejilla de acciones rápidas.
 ///
-/// Antes avanzaba sola 150 px cada 4 s; el efecto dejaba la primera sugerencia
-/// cortada por la mitad en reposo, que se veía como un error de maquetación.
-class _PromptChipsRow extends StatefulWidget {
-  const _PromptChipsRow({required this.children});
+/// Antes eran cápsulas en una fila que se desplazaba: se cortaban y las dos acciones que abren un
+/// caso (avería y soporte) quedaban ocultas al final. En tarjetas se ven todas a la vez y cada una
+/// ocupa el mismo ancho, sin depender de la longitud del texto.
+class _QuickActionsGrid extends StatelessWidget {
+  const _QuickActionsGrid({
+    required this.actions,
+    required this.enabled,
+    required this.onSelected,
+  });
 
-  final List<Widget> children;
-
-  @override
-  State<_PromptChipsRow> createState() => _PromptChipsRowState();
-}
-
-class _PromptChipsRowState extends State<_PromptChipsRow> {
-  final ScrollController _scroller = ScrollController();
-
-  @override
-  void dispose() {
-    _scroller.dispose();
-    super.dispose();
-  }
+  final List<_QuickAction> actions;
+  final bool enabled;
+  final ValueChanged<_QuickAction> onSelected;
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      controller: _scroller,
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(children: widget.children),
+    final rows = <Widget>[];
+    for (var index = 0; index < actions.length; index += 2) {
+      final left = actions[index];
+      final right = index + 1 < actions.length ? actions[index + 1] : null;
+      if (index > 0) {
+        rows.add(const SizedBox(height: 8));
+      }
+      rows.add(
+        SizedBox(
+          height: 54,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: _QuickActionCard(
+                  action: left,
+                  enabled: enabled,
+                  onSelected: onSelected,
+                ),
+              ),
+              if (right == null)
+                // Número impar de acciones: la última ocupa la fila entera en vez de dejar un hueco.
+                const SizedBox.shrink()
+              else ...[
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _QuickActionCard(
+                    action: right,
+                    enabled: enabled,
+                    onSelected: onSelected,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+      child: Column(mainAxisSize: MainAxisSize.min, children: rows),
+    );
+  }
+}
+
+/// Tarjeta de una acción: esquinas rectas, icono a la izquierda y texto a dos líneas.
+class _QuickActionCard extends StatelessWidget {
+  const _QuickActionCard({
+    required this.action,
+    required this.enabled,
+    required this.onSelected,
+  });
+
+  final _QuickAction action;
+  final bool enabled;
+  final ValueChanged<_QuickAction> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final accent = switch (action.tone) {
+      _QuickActionTone.alert => AppColors.error,
+      _QuickActionTone.support => AppColors.accent,
+      _QuickActionTone.normal => AppColors.primary,
+    };
+    return Material(
+      color: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.zero,
+        side: BorderSide(color: AppColors.border),
+      ),
+      child: InkWell(
+        onTap: enabled ? () => onSelected(action) : null,
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 54),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          child: Row(
+            children: [
+              Icon(action.icon, size: 18, color: accent),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  action.label,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w600,
+                    height: 1.2,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
