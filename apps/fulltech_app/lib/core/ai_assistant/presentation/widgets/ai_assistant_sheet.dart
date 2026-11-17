@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -7,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/ai_assistant_controller.dart';
 import '../../data/voice_note_recorder.dart';
+import '../../domain/models/ai_assistant_citation.dart';
 import '../../domain/models/ai_chat_context.dart';
 import '../../domain/models/ai_assistant_message.dart';
 import '../../../widgets/app_navigation.dart';
@@ -267,41 +269,26 @@ class _GlobalAiChatSheetState extends ConsumerState<GlobalAiChatSheet> {
                       key: const ValueKey('ai-assistant-composer'),
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: AppColors.surfaceAlt,
-                        borderRadius: BorderRadius.circular(16),
+                        color: AppColors.surface,
+                        borderRadius: BorderRadius.circular(20),
                         border: Border.all(color: AppColors.borderStrong),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: AppColors.shadow,
+                            blurRadius: 16,
+                            offset: Offset(0, 6),
+                          ),
+                        ],
                       ),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           if (aiState.attachment != null)
-                            Row(
-                              children: [
-                                const Icon(
-                                  Icons.attach_file_rounded,
-                                  size: 16,
-                                  color: AppColors.primary,
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    aiState.attachment!.filename,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: theme.textTheme.bodySmall,
-                                  ),
-                                ),
-                                IconButton(
-                                  onPressed: busy
-                                      ? null
-                                      : controller.clearAttachment,
-                                  tooltip: 'Quitar adjunto',
-                                  icon: const Icon(
-                                    Icons.close_rounded,
-                                    size: 18,
-                                  ),
-                                ),
-                              ],
+                            _PendingAttachmentChip(
+                              attachment: aiState.attachment!,
+                              onRemove: busy
+                                  ? null
+                                  : controller.clearAttachment,
                             ),
                           if (_recording)
                             _RecordingBar(
@@ -339,66 +326,39 @@ class _GlobalAiChatSheetState extends ConsumerState<GlobalAiChatSheet> {
                           const SizedBox(height: 4),
                           Row(
                             children: [
-                              IconButton(
+                              _ComposerIconButton(
+                                tooltip: 'Adjuntar imagen o documento',
+                                semanticsLabel: 'Adjuntar imagen o documento',
+                                icon: Icons.image_outlined,
+                                busy: aiState.uploadingAttachment,
                                 onPressed: busy || _recording
                                     ? null
                                     : () => _pickAttachment(controller),
-                                icon: aiState.uploadingAttachment
-                                    ? const SizedBox(
-                                        width: 16,
-                                        height: 16,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                        ),
-                                      )
-                                    : const Icon(
-                                        Icons.add_rounded,
-                                        semanticLabel:
-                                            'Adjuntar documento, foto, video o audio',
-                                      ),
-                                color: AppColors.textSecondary,
                               ),
-                              IconButton(
+                              const SizedBox(width: 6),
+                              _ComposerIconButton(
+                                tooltip: _recording
+                                    ? 'Detener y enviar la nota de voz'
+                                    : 'Grabar nota de voz',
+                                semanticsLabel: _recording
+                                    ? 'Detener y enviar la nota de voz'
+                                    : 'Grabar nota de voz',
+                                icon: _recording
+                                    ? Icons.stop_rounded
+                                    : Icons.mic_none_rounded,
+                                active: _recording,
                                 onPressed: busy
                                     ? null
                                     : (_recording
                                           ? () => _finishRecording(controller)
                                           : _startRecording),
-                                icon: _recording
-                                    ? const Icon(
-                                        Icons.stop_rounded,
-                                        color: AppColors.error,
-                                        semanticLabel:
-                                            'Detener y enviar la nota de voz',
-                                      )
-                                    : const Icon(
-                                        Icons.mic_none_rounded,
-                                        semanticLabel: 'Grabar nota de voz',
-                                      ),
-                                color: AppColors.textSecondary,
                               ),
                               const Spacer(),
-                              IconButton.filled(
+                              _SendButton(
+                                busy: aiState.sending || _finishingRecording,
                                 onPressed: busy || _recording
                                     ? null
                                     : () => _send(controller),
-                                style: IconButton.styleFrom(
-                                  backgroundColor: AppColors.primary,
-                                  foregroundColor: AppColors.surface,
-                                ),
-                                icon: aiState.sending || _finishingRecording
-                                    ? const SizedBox(
-                                        width: 16,
-                                        height: 16,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                        ),
-                                      )
-                                    : const Icon(
-                                        Icons.arrow_upward_rounded,
-                                        size: 20,
-                                        semanticLabel: 'Enviar',
-                                      ),
                               ),
                             ],
                           ),
@@ -842,6 +802,14 @@ class _ChatMessagesList extends StatelessWidget {
   }
 }
 
+/// Burbuja de un mensaje de la conversación.
+///
+/// Decisiones de aspecto:
+/// - El lado y el color identifican a quién habla; no hace falta repetir «Tú» en cada mensaje.
+/// - La esquina inferior del lado que habla va más cerrada: la burbuja «se apoya» en la
+///   conversación en vez de quedar flotando como una tarjeta.
+/// - Si el mensaje lleva una imagen, se enseña la miniatura dentro de la burbuja y se puede abrir a
+///   tamaño completo; un audio o un documento se muestran como ficha con su icono.
 class _MessageBubble extends StatelessWidget {
   const _MessageBubble({required this.message});
 
@@ -851,63 +819,421 @@ class _MessageBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isUser = message.isUser;
-
-    final background = isUser ? AppColors.primary : Colors.white;
-
-    final foreground = isUser ? Colors.white : AppColors.textPrimary;
+    final attachment = message.attachment;
 
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 460),
-        child: DecoratedBox(
+        constraints: const BoxConstraints(maxWidth: 480),
+        child: Container(
           decoration: BoxDecoration(
-            color: background,
-            borderRadius: BorderRadius.circular(18),
+            color: isUser ? AppColors.primary : AppColors.surface,
+            borderRadius: BorderRadius.only(
+              topLeft: const Radius.circular(20),
+              topRight: const Radius.circular(20),
+              bottomLeft: Radius.circular(isUser ? 20 : 6),
+              bottomRight: Radius.circular(isUser ? 6 : 20),
+            ),
             border: isUser ? null : Border.all(color: AppColors.border),
+            boxShadow: const [
+              BoxShadow(
+                color: AppColors.shadow,
+                blurRadius: 14,
+                offset: Offset(0, 4),
+              ),
+            ],
           ),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 13),
             child: Column(
-              crossAxisAlignment: isUser
-                  ? CrossAxisAlignment.end
-                  : CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  isUser ? 'Tú' : 'FullPOS IA',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: isUser
-                        ? Colors.white.withValues(alpha: 0.84)
-                        : AppColors.primary,
-                    fontWeight: FontWeight.w500,
-                    fontSize: 11,
-                    letterSpacing: 0.1,
+                if (!isUser) ...[
+                  Text(
+                    'FullPOS IA',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 11,
+                      letterSpacing: 0.3,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 5),
+                  const SizedBox(height: 6),
+                ],
+                if (attachment != null) ...[
+                  _AttachmentPreview(attachment: attachment, isUser: isUser),
+                  if (message.content.trim().isNotEmpty) const SizedBox(height: 10),
+                ],
                 Text(
                   message.content,
                   style: theme.textTheme.bodyMedium?.copyWith(
-                    color: foreground,
-                    fontSize: 14,
-                    height: 1.55,
+                    color: isUser ? Colors.white : AppColors.textPrimary,
+                    fontSize: 14.5,
+                    height: 1.6,
                     letterSpacing: 0.1,
                     fontWeight: FontWeight.w400,
                   ),
                 ),
                 if (!isUser && message.citations.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    'Fuentes: ${message.citations.map((c) => c.title).take(3).join(' • ')}',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: AppColors.textMuted,
-                    ),
-                  ),
+                  const SizedBox(height: 10),
+                  _SourceChips(citations: message.citations),
                 ],
               ],
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Miniatura del archivo que acompaña al mensaje.
+///
+/// Se apoya en el `mediaJobId`: los bytes son sólo para dibujar la vista previa. Si no hay bytes
+/// (archivo grande) se enseña la ficha con el nombre, nunca un hueco vacío.
+class _AttachmentPreview extends StatelessWidget {
+  const _AttachmentPreview({required this.attachment, required this.isUser});
+
+  final AiAssistantAttachment attachment;
+  final bool isUser;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final onUser = isUser ? Colors.white : AppColors.textPrimary;
+    final onUserMuted = isUser
+        ? Colors.white.withValues(alpha: 0.78)
+        : AppColors.textMuted;
+
+    if (!attachment.hasPreview) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            attachment.isAudio
+                ? Icons.graphic_eq_rounded
+                : (attachment.isImage
+                      ? Icons.image_outlined
+                      : Icons.description_outlined),
+            size: 18,
+            color: isUser ? Colors.white : AppColors.primary,
+          ),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              attachment.isAudio ? 'Nota de voz' : attachment.filename,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: onUser,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    final bytes = attachment.bytes!;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Stack(
+            children: [
+              Image.memory(
+                Uint8List.fromList(bytes),
+                width: double.infinity,
+                height: 190,
+                fit: BoxFit.cover,
+                gaplessPlayback: true,
+                filterQuality: FilterQuality.medium,
+                semanticLabel: 'Imagen adjunta: ${attachment.filename}',
+              ),
+              Positioned.fill(
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () => _openFullImage(context, bytes, attachment.filename),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          attachment.filename,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.labelSmall?.copyWith(color: onUserMuted),
+        ),
+      ],
+    );
+  }
+
+  void _openFullImage(BuildContext context, List<int> bytes, String name) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: const EdgeInsets.all(24),
+        child: Stack(
+          children: [
+            InteractiveViewer(
+              maxScale: 4,
+              child: Image.memory(
+                Uint8List.fromList(bytes),
+                fit: BoxFit.contain,
+                semanticLabel: 'Imagen adjunta: $name',
+              ),
+            ),
+            Positioned(
+              top: 4,
+              right: 4,
+              child: IconButton(
+                tooltip: 'Cerrar',
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                icon: const Icon(Icons.close_rounded, color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Fuentes citadas: cápsulas cortas en vez de una línea de texto larga.
+class _SourceChips extends StatelessWidget {
+  const _SourceChips({required this.citations});
+
+  final List<AiAssistantCitation> citations;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        for (final citation in citations.take(3))
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+            decoration: BoxDecoration(
+              color: AppColors.primarySoft,
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: AppColors.secondaryBorder),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.menu_book_rounded,
+                  size: 12,
+                  color: AppColors.primary,
+                ),
+                const SizedBox(width: 5),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 200),
+                  child: Text(
+                    citation.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: AppColors.primaryDark,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// Botón redondo del compositor (adjuntar, micrófono).
+///
+/// Un fondo suave permanente hace que se vea como un control y no como un icono suelto; en rojo
+/// cuando se está grabando, para que el estado se lea sin buscarlo.
+class _ComposerIconButton extends StatelessWidget {
+  const _ComposerIconButton({
+    required this.tooltip,
+    required this.semanticsLabel,
+    required this.icon,
+    required this.onPressed,
+    this.busy = false,
+    this.active = false,
+  });
+
+  final String tooltip;
+  final String semanticsLabel;
+  final IconData icon;
+  final VoidCallback? onPressed;
+  final bool busy;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      onPressed: onPressed,
+      tooltip: tooltip,
+      style: IconButton.styleFrom(
+        minimumSize: const Size(40, 40),
+        foregroundColor: active ? AppColors.error : AppColors.textSecondary,
+        backgroundColor: active
+            ? AppColors.errorSoft
+            : AppColors.surfaceSubtle,
+        disabledBackgroundColor: AppColors.surfaceSubtle,
+        shape: const CircleBorder(),
+      ),
+      icon: busy
+          ? const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : Icon(icon, size: 20, semanticLabel: semanticsLabel),
+    );
+  }
+}
+
+/// Botón de enviar: círculo relleno con sombra, separado del resto de controles.
+class _SendButton extends StatelessWidget {
+  const _SendButton({required this.busy, required this.onPressed});
+
+  final bool busy;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: Color(0x331957E6),
+            blurRadius: 12,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: IconButton.filled(
+        onPressed: onPressed,
+        tooltip: 'Enviar',
+        style: IconButton.styleFrom(
+          backgroundColor: AppColors.primary,
+          foregroundColor: Colors.white,
+          disabledBackgroundColor: AppColors.borderStrong,
+          minimumSize: const Size(44, 44),
+        ),
+        icon: busy
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation(Colors.white),
+                ),
+              )
+            : const Icon(
+                Icons.send_rounded,
+                size: 20,
+                semanticLabel: 'Enviar',
+              ),
+      ),
+    );
+  }
+}
+
+/// Ficha del archivo que se enviará con el siguiente mensaje.
+///
+/// Si es una imagen se ve la miniatura: es la forma de confirmar que se adjuntó la captura
+/// correcta antes de enviarla.
+class _PendingAttachmentChip extends StatelessWidget {
+  const _PendingAttachmentChip({
+    required this.attachment,
+    required this.onRemove,
+  });
+
+  final AiPendingAttachment attachment;
+  final VoidCallback? onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final bytes = attachment.bytes;
+    final canPreview = attachment.isImage && bytes != null && bytes.isNotEmpty;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(6),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceSubtle,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: SizedBox(
+              width: 44,
+              height: 44,
+              child: canPreview
+                  ? Image.memory(
+                      Uint8List.fromList(bytes),
+                      fit: BoxFit.cover,
+                      gaplessPlayback: true,
+                      semanticLabel: 'Vista previa de ${attachment.filename}',
+                    )
+                  : ColoredBox(
+                      color: AppColors.primarySoft,
+                      child: Icon(
+                        attachment.isAudio
+                            ? Icons.graphic_eq_rounded
+                            : Icons.description_outlined,
+                        size: 22,
+                        color: AppColors.primary,
+                      ),
+                    ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  attachment.isAudio ? 'Nota de voz lista' : attachment.filename,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Se enviará con tu mensaje',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: AppColors.textMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            onPressed: onRemove,
+            tooltip: 'Quitar adjunto',
+            icon: const Icon(Icons.close_rounded, size: 18),
+            color: AppColors.textSecondary,
+          ),
+        ],
       ),
     );
   }

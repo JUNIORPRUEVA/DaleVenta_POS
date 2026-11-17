@@ -1,5 +1,7 @@
 import '../../support/platform_goldens.dart';
 
+import 'dart:convert';
+
 import 'package:daleventa_pos/core/ai_assistant/application/ai_assistant_controller.dart';
 import 'package:daleventa_pos/core/ai_assistant/data/datasources/ai_assistant_datasource.dart';
 import 'package:daleventa_pos/core/ai_assistant/data/voice_note_recorder.dart';
@@ -59,10 +61,10 @@ void main() {
     await pumpSheet(tester);
 
     expect(find.byType(TextField), findsOneWidget);
-    expect(find.byIcon(Icons.add_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.image_outlined), findsOneWidget);
     expect(find.byIcon(Icons.mic_none_rounded), findsOneWidget);
     expect(
-      find.bySemanticsLabel('Adjuntar documento, foto, video o audio'),
+      find.bySemanticsLabel('Adjuntar imagen o documento'),
       findsOneWidget,
     );
     expect(find.bySemanticsLabel('Grabar nota de voz'), findsOneWidget);
@@ -72,7 +74,7 @@ void main() {
   testWidgets('envía el texto desde el compositor integrado', (tester) async {
     await pumpSheet(tester);
     await tester.enterText(find.byType(TextField), 'Cómo usar esta pantalla');
-    await tester.tap(find.byIcon(Icons.arrow_upward_rounded));
+    await tester.tap(find.byIcon(Icons.send_rounded));
     await tester.pumpAndSettle();
     expect(find.text('Cómo usar esta pantalla'), findsOneWidget);
     expect(find.text('respuesta de prueba'), findsOneWidget);
@@ -80,6 +82,36 @@ void main() {
       tester.widget<TextField>(find.byType(TextField)).controller!.text,
       isEmpty,
     );
+  });
+
+  testWidgets('el mensaje con imagen enseña la miniatura adjunta', (
+    tester,
+  ) async {
+    await pumpSheet(tester);
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(Scaffold)),
+    );
+    final controller = container.read(aiAssistantControllerProvider.notifier);
+    // PNG 1×1 válido: lo único necesario es que `Image.memory` tenga algo que decodificar.
+    final png = base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+    );
+
+    // 1) Con el archivo ya subido, el compositor enseña la vista previa antes de enviar.
+    await controller.attachFile(
+      filename: 'captura.png',
+      bytes: png,
+      mimeType: 'image/png',
+    );
+    await tester.pump();
+    expect(find.bySemanticsLabel('Vista previa de captura.png'), findsOneWidget);
+
+    // 2) Al enviar, la imagen se queda en la burbuja del mensaje (no como texto «Adjunto: …»).
+    await controller.sendMessage('mira esta pantalla');
+    await tester.pump();
+    expect(find.bySemanticsLabel('Imagen adjunta: captura.png'), findsOneWidget);
+    expect(find.textContaining('Adjunto:'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   for (final size in [const Size(1280, 800), const Size(390, 844)]) {
@@ -95,9 +127,9 @@ void main() {
       );
       for (final finder in [
         find.byType(TextField),
-        find.byIcon(Icons.add_rounded),
+        find.byIcon(Icons.image_outlined),
         find.byIcon(Icons.mic_none_rounded),
-        find.byIcon(Icons.arrow_upward_rounded),
+        find.byIcon(Icons.send_rounded),
       ]) {
         final rect = tester.getRect(finder);
         expect(composer.contains(rect.topLeft), isTrue);
@@ -199,7 +231,7 @@ void main() {
       find.byType(TextField),
       'Pregunta con teclado abierto',
     );
-    await tester.tap(find.byIcon(Icons.arrow_upward_rounded));
+    await tester.tap(find.byIcon(Icons.send_rounded));
     await tester.pumpAndSettle();
     expect(find.text('respuesta de prueba'), findsOneWidget);
     expect(tester.takeException(), isNull);

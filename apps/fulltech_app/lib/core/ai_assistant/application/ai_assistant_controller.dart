@@ -50,13 +50,19 @@ class AiPendingAttachment {
   final String mediaJobId;
   final String mimeType;
 
+  /// Bytes del archivo, **sólo** para enseñar la miniatura en la burbuja.
+  /// `null` cuando el archivo supera el límite de vista previa.
+  final List<int>? bytes;
+
   const AiPendingAttachment({
     required this.filename,
     required this.mediaJobId,
     this.mimeType = '',
+    this.bytes,
   });
 
   bool get isAudio => mimeType.toLowerCase().startsWith('audio/');
+  bool get isImage => mimeType.toLowerCase().startsWith('image/');
 }
 
 final aiAssistantControllerProvider =
@@ -73,6 +79,10 @@ class AiAssistantController extends StateNotifier<AiAssistantState> {
     : super(AiAssistantState(context: const AiChatContext(module: 'general')));
 
   static const _uuid = Uuid();
+
+  /// Tope para guardar los bytes de la miniatura. Por encima, la burbuja enseña una ficha con el
+  /// nombre: no merece la pena retener un vídeo entero en memoria para una vista previa.
+  static const int _maxPreviewBytes = 3 * 1024 * 1024;
 
   final AiAssistantService _service;
 
@@ -132,6 +142,7 @@ class AiAssistantController extends StateNotifier<AiAssistantState> {
           filename: filename,
           mediaJobId: mediaJobId,
           mimeType: mimeType,
+          bytes: bytes.length <= _maxPreviewBytes ? bytes : null,
         ),
       );
     } catch (e) {
@@ -217,11 +228,16 @@ class AiAssistantController extends StateNotifier<AiAssistantState> {
         AiAssistantMessage(
           id: TraceId.next('ai-user'),
           role: AiAssistantMessageRole.user,
-          // El nombre del archivo queda en el mensaje: si el turno falla, el usuario ve a qué
-          // mensaje pertenecía el adjunto en lugar de un texto sin contexto.
-          content: pendingAttachment == null
-              ? turnText
-              : '$turnText\n\nAdjunto: ${pendingAttachment.filename}',
+          // El archivo viaja como adjunto del mensaje: la burbuja enseña la miniatura y el nombre,
+          // y si el turno falla se ve igual a qué mensaje pertenecía.
+          content: turnText,
+          attachment: pendingAttachment == null
+              ? null
+              : AiAssistantAttachment(
+                  filename: pendingAttachment.filename,
+                  mimeType: pendingAttachment.mimeType,
+                  bytes: pendingAttachment.bytes,
+                ),
           createdAt: now,
         ),
       );
