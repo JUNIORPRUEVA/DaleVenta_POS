@@ -170,7 +170,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(_companyMenuItem('Empresa'), findsOneWidget);
-    expect(_companyMenuItem('Plan actual'), findsOneWidget);
+    expect(_companyMenuItem('Licencias'), findsOneWidget);
     expect(_companyMenuItem('Configuracion'), findsOneWidget);
     expect(find.text('Actualización'), findsNothing);
     expect(find.text('Impresora'), findsNothing);

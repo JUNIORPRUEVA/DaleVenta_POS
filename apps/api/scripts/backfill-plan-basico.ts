@@ -38,6 +38,7 @@ type Options = {
   company: string | null;
   operator: string;
   reportPath: string | null;
+  authorizedBy: string | null;
 };
 
 type CompanyRow = {
@@ -82,6 +83,7 @@ function parseArgs(argv: string[]): Options {
     company: get('company'),
     operator: get('operator') ?? 'deploy-backfill',
     reportPath: get('report'),
+    authorizedBy: get('autorizado-por'),
   };
 }
 
@@ -92,6 +94,17 @@ function monthsBetween(from: Date, to: Date) {
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
+
+  // Candado: este script cambia el plan de clientes reales. Sin una
+  // autorizacion escrita no se aplica, aunque se pase --apply. En produccion se
+  // queda en simulacion (que es lo que se revisa antes de decidir).
+  if (options.apply && !options.authorizedBy) {
+    throw new Error(
+      'El backfill se queda en simulacion: para aplicar hace falta ' +
+        '--autorizado-por="<quien autoriza>" ademas de --apply.',
+    );
+  }
+
   const prisma = new PrismaClient();
   const results: Result[] = [];
 
@@ -344,7 +357,6 @@ async function migrateCompany(
       if (!fresh || fresh.planCode) {
         throw new Error('la empresa ya tiene plan: no se toca');
       }
-
       await tx.company.update({
         where: { id: company.id },
         data: {

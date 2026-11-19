@@ -80,23 +80,31 @@ límites del catálogo. **No** toca empresas.
 > No activar `RUN_SEED=true`: ese seed es el general de la aplicación y no hace
 > falta para los planes.
 
-### Paso 3 — Migrar a los clientes activos (simulación primero)
+### Paso 3 — Revisar a los clientes activos (siempre en simulación)
 
 ```bash
-npm run license:backfill
+npm run license:backfill -- --report=/tmp/planes-simulacion.json
 ```
 
 Esto **no escribe nada**: imprime, empresa por empresa, a qué plan iría, hasta
-cuándo tiene pagado y qué excepciones se le concederían. Revisar la lista y,
-sobre todo, que ninguna salga como `SALTADA`.
+cuándo tiene pagado y qué excepciones se le concederían.
 
-Cuando la lista cuadre:
+> **Decisión vigente (2026-11-19):** el backfill **no se aplica en producción**.
+> Las empresas ACTIVO sin plan conservan su acceso actual y se clasifican para
+> revisión empresa por empresa. El script queda como herramienta de simulación.
+> Las empresas en TRIAL **nunca** entran en la migración automática (habría que
+> pedirlo con `--include-trial`, y no está autorizado).
+
+El script tiene un candado: aunque se pase `--apply`, exige además
+`--autorizado-por="<quien autoriza>"`. Sin esa frase se queda en simulación.
+
+Cuando exista autorización escrita, la ejecución sería:
 
 ```bash
-npm run license:backfill -- --apply --operator=deploy-2026-11-19
+npm run license:backfill -- --apply --autorizado-por="<nombre>" --operator=deploy-<fecha>
 ```
 
-Qué hace por cada empresa **activa sin plan**:
+Qué haría por cada empresa **activa sin plan**:
 
 1. Le asigna `plan_code = 'basico'` y la versión del catálogo.
 2. **No toca** el estado, el vencimiento, los límites ni los interruptores de la
@@ -231,10 +239,11 @@ de la ida y de la vuelta.
 
 ## 7. Decisiones que necesito confirmadas antes de desplegar
 
-1. **Plan destino**: el script usa `basico`. Si se quiere otro, `--plan=<code>`
-   (el catálogo tiene `negocio`, `pro` y `empresa`).
-2. **Empresas en prueba**: por defecto el backfill **solo** toca `ACTIVE`. Con
-   `--include-trial` también migra las que están en demo.
-3. **Excepciones**: se crean sin caducidad para no interrumpir. Conviene revisar
-   en enero cuáles siguen teniendo sentido cuando esos clientes renueven.
+1. **Plan destino**: el script usa `basico`, pero **no se aplica** en producción
+   con la decisión vigente. Si algún día se autoriza, `--plan=<code>` permite
+   elegir `negocio`, `pro` o `empresa`.
+2. **Empresas en prueba**: quedan fuera siempre. `--include-trial` existe pero
+   no está autorizado.
+3. **Clientes activos sin plan**: conservan su acceso y se revisan uno a uno con
+   el informe de simulación (`--report`).
 4. **`LICENSE_BANK_ACCOUNT`**: hay que confirmar la cuenta real antes del humo.
