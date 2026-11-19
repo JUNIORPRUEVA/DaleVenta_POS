@@ -299,6 +299,47 @@ export class LicenseService {
   // licencia o ampliar cupos y fecha sin pagar. La activacion solo ocurre al
   // subir el comprobante (`LicenseActivationService`) o desde el equipo con el
   // secreto de administracion.
+  /**
+   * RESUMEN DE LA CUENTA PARA EL ASISTENTE (APPYRA IA).
+   *
+   * El asistente tiene que poder decir «tu licencia venció el 12 de marzo» o «estás en el plan
+   * Emprendedor con 3 de 5 usuarios» sin inventarlo. Este método devuelve **sólo** lo que sirve para
+   * responder eso.
+   *
+   * QUÉ SE QUEDA FUERA, Y POR QUÉ
+   * -----------------------------
+   * - `licenseKey`: es una credencial. Un asistente que la repita en un chat la deja escrita en un
+   *   historial.
+   * - `notes`: son notas internas del equipo de soporte.
+   * - `account.*`: correo y teléfono del responsable y cédula del representante legal son datos
+   *   personales y no hacen falta para responder por el plan.
+   *
+   * Es de **sólo lectura** y siempre de una empresa concreta, la que viene firmada en el token.
+   */
+  async getAssistantAccountSummary(companyId: string) {
+    const status = await this.getCompanyLicenseStatus(companyId);
+    return {
+      companyName: status.companyName,
+      plan: status.plan,
+      planLabel: status.licenseTypeLabel,
+      status: status.status,
+      isUsable: status.isUsable,
+      blockReason: status.blockReason,
+      activatedAt: status.licenseActivatedAt,
+      expiresAt: status.periodEndsAt,
+      daysRemaining: status.daysRemaining,
+      isTrial: status.status === LicenseStatus.TRIAL,
+      limits: {
+        maxUsers: status.limits.maxUsers,
+        maxProducts: status.limits.maxProducts,
+      },
+      usage: {
+        users: status.usage.users,
+        products: status.usage.products,
+      },
+    };
+  }
+
 
   async activateCompany(companyId: string, dto: LicenseUpdateInput) {
     const before = await this.companySnapshot(companyId);
