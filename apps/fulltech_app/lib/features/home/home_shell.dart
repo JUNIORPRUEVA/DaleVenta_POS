@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/auth/auth_provider.dart';
 import '../../core/routing/app_navigator.dart';
 import '../../core/widgets/responsive_shell.dart';
+import '../plans/presentation/widgets/license_expiry_gate.dart';
 
 /// ShellRoute wrapper.
 ///
@@ -34,7 +35,12 @@ class _HomeShellState extends ConsumerState<HomeShell> {
         if (didPop) return;
         await AppNavigator.handleSystemBack(context);
       },
-      child: ResponsiveShell(child: widget.child),
+      child: LicenseExpiryGate(
+        // La capa envuelve **todo** el armazon (barra superior, contenido y
+        // barra inferior de tickets) para que con la licencia vencida no quede
+        // ni un trozo de la app sin desenfocar ni operativo.
+        child: ResponsiveShell(child: widget.child),
+      ),
     );
   }
 }

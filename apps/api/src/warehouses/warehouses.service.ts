@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
   Optional,
@@ -20,6 +21,7 @@ import {
 import { PrismaService } from "../prisma/prisma.service";
 import { ProductSourceResolver } from "../products/product-source.resolver";
 import { UsageTelemetryService } from "../usage-telemetry/usage-telemetry.service";
+import { LicenseEntitlementsService } from "../license/plans/license-entitlements.service";
 import {
   CreateWarehouseTransferDto,
   CreateWarehouseDto,
@@ -38,6 +40,7 @@ export class WarehousesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly productSourceResolver: ProductSourceResolver,
+    private readonly entitlements: LicenseEntitlementsService,
     @Optional()
     private readonly telemetry?: UsageTelemetryService,
   ) {}
@@ -101,6 +104,9 @@ export class WarehousesService {
     const name = this.cleanName(dto.name);
     const code = this.cleanCode(dto.code);
     return this.prisma.$transaction(async (tx) => {
+      // Limite del plan dentro de la transaccion: dos altas simultaneas no
+      // pueden pasarse del tope de almacenes.
+      await this.assertWarehouseSlot(tx, companyId);
       const warehouse = await tx.warehouse.create({
         data: {
           companyId,
@@ -655,11 +661,47 @@ export class WarehousesService {
       where: { id: companyId },
       select: { multiWarehouseEnabled: true },
     });
-    if (company?.multiWarehouseEnabled !== true) {
-      throw new BadRequestException(
-        "La gestion de multiples almacenes no esta activa para esta empresa.",
-      );
+    if (company?.multiWarehouseEnabled === true) return;
+
+    // El interruptor de la empresa esta apagado. Si ademas el plan no incluye
+    // multi-almacen, la respuesta correcta es 403 «no incluido en el plan»
+    // (antes salia un 400 que parecia un error del cliente). **Los permisos no
+    // cambian**: en los dos casos la operacion sigue sin permitirse.
+    const entitlements = await this.entitlements.getEntitlements(companyId);
+    if (!entitlements.multiWarehouse) {
+      throw new ForbiddenException({
+        code: "PLAN_FEATURE_NOT_INCLUDED",
+        message:
+          `El plan ${entitlements.planName ?? "actual"} no incluye la gestion de ` +
+          "multiples almacenes. Puedes cambiar de plan desde la seccion Planes.",
+        feature: "multiWarehouse",
+        planCode: entitlements.planCode,
+      });
     }
+    throw new BadRequestException(
+      "Tu plan incluye multiples almacenes, pero no estan activados. Activalos en Ajustes.",
+    );
+  }
+
+  /**
+   * Cuantos almacenes permite el plan. El modulo sigue activo en todos los
+   * planes; lo que cambia es el tope (1 / 1 / 5 / 10 ampliable por excepcion).
+   */
+  private async assertWarehouseSlot(tx: Tx, companyId: string) {
+    const entitlements = await this.entitlements.getEntitlements(companyId);
+    const active = await tx.warehouse.count({
+      where: { companyId, isActive: true },
+    });
+    if (active < entitlements.maxWarehouses) return;
+    throw new ForbiddenException({
+      code: "PLAN_LIMIT_WAREHOUSES",
+      message:
+        `Tu plan permite ${entitlements.maxWarehouses} almacen(es) activo(s). ` +
+        "Desactiva uno o amplia tu plan para crear otro.",
+      limit: entitlements.maxWarehouses,
+      current: active,
+      planCode: entitlements.planCode,
+    });
   }
 
   private async ensureActiveWarehouse(companyId: string, id: string, tx: Tx) {

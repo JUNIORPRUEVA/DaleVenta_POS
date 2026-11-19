@@ -70,9 +70,9 @@ export class AuthService {
     if (!ok) throw new UnauthorizedException("Invalid credentials");
 
     const session = this.resolveCompanySession(user);
-    await this.licenses.assertCompanyCanUseApp(
-      session.activeCompany?.id ?? user.companyId,
-    );
+    // La demo **no** se abre sola al entrar: la crea el registro o una accion
+    // administrativa explicita. Asi una empresa antigua sin fechas de prueba no
+    // recibe siete dias nuevos por cerrar sesion y volver a abrir.
     const sessionRecord = await this.createAuthSession(
       user.id,
       session.activeCompany?.id ?? user.companyId ?? null,
@@ -166,9 +166,8 @@ export class AuthService {
     }
 
     const session = this.resolveCompanySession(user);
-    await this.licenses.assertCompanyCanUseApp(
-      session.activeCompany?.id ?? user.companyId,
-    );
+    // El token se renueva igual para una licencia vencida o una cuenta
+    // suspendida: la restriccion de rutas la aplica el interceptor, no el JWT.
     const nextSessionRecord = await this.rotateAuthSession(existingSession.id);
     const accessToken = await this.jwt.signAsync({
       sub: user.id,
@@ -963,10 +962,8 @@ export class AuthService {
     }
 
     const session = this.resolveCompanySession(user);
-    await this.licenses.assertCompanyCanUseApp(
-      session.activeCompany?.id ?? user.companyId,
-    );
-
+    // Handoff: se emite el token igual; el interceptor decide que rutas puede
+    // usar segun el nivel de licencia (FULL, vencida o suspendida).
     const rotated = await this.rotateAuthSession(row.sessionId);
     const accessToken = await this.jwt.signAsync({
       sub: user.id,

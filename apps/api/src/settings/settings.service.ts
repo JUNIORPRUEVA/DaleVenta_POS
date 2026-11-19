@@ -28,6 +28,7 @@ import {
 import { DEFAULT_UNIT_OF_MEASURE_ID } from "../products/unit-of-measure.util";
 import { isEcfPortalPilotCompany } from "../ecf/portal/ecf-portal-pilot.policy";
 import { decidePortalEligibility } from "../ecf/portal/ecf-portal-enrollment.policy";
+import { LicenseEntitlementsService } from "../license/plans/license-entitlements.service";
 
 type SettingsPayload = Record<string, unknown>;
 
@@ -39,6 +40,7 @@ export class SettingsService {
     private readonly realtime: CatalogRealtimeRelayService,
     private readonly productSourceResolver: ProductSourceResolver,
     private readonly taxes: TaxService,
+    private readonly entitlements: LicenseEntitlementsService,
   ) {}
 
   async getSettings(user: TenantUser) {
@@ -53,6 +55,7 @@ export class SettingsService {
   async updateSettings(user: TenantUser, dto: SettingsPayload) {
     this.requireAdmin(user);
     const companyId = requireTenant(user);
+    await this.assertPlanAllowsFlags(companyId, dto);
     // `Company.name` es dato MAESTRO. El PATCH genérico de settings NUNCA lo
     // modifica: un payload legacy (p. ej. de una build Android antigua) que
     // incluya `companyName` se ignora deliberadamente aquí. El nombre solo
@@ -164,6 +167,29 @@ export class SettingsService {
       fiscal,
       productSource,
     );
+  }
+
+  /**
+   * El plan decide que se puede **encender**. Apagar siempre esta permitido:
+   * nadie queda atrapado dentro de una funcion que ya no paga.
+   */
+  private async assertPlanAllowsFlags(
+    companyId: string,
+    dto: SettingsPayload,
+  ) {
+    const wants = (key: string) => this.boolValue(dto, key) === true;
+    if (wants("wholesalePriceListsEnabled")) {
+      await this.entitlements.assertFeatureAllowed(companyId, "wholesale");
+    }
+    if (wants("measurementUnitsEnabled")) {
+      await this.entitlements.assertFeatureAllowed(companyId, "uom");
+    }
+    if (wants("ncfEnabled")) {
+      await this.entitlements.assertFeatureAllowed(companyId, "ecf");
+    }
+    if (wants("taxEnabled")) {
+      await this.entitlements.assertFeatureAllowed(companyId, "taxes");
+    }
   }
 
   async updateCompanyName(user: TenantUser, dto: { companyName?: unknown }) {

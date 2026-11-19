@@ -1,0 +1,571 @@
+FULLPOS CLOUD  /  AUDITORÍA Y EVALUACIÓN  /  07 NOV 2026
+1
+INFORME INTEGRAL DE
+INVESTIGACIÓN
+FullPOS Cloud: planes, transferencias, comprobantes, IA, WhatsApp, vencimientos y
+administración de licencias
+Fecha: 7 de noviembre de 2026    Versión: 1.0 — Informe de diagnóstico, no autorización de implementación
+Alcance: Consolidación de auditorías de código aportadas por el usuario; revisión de la propuesta arquitectónica
+más reciente; investigación documental externa sobre pagos, privacidad, WhatsApp y facturación. No se
+realizaron conexiones a las bases de datos de producción ni pruebas de activación.
+Conclusión ejecutiva
+El modelo comercial es viable con un solo centro de administración, una sola cuenta bancaria y un expediente
+de pago compartido entre FullPOS y WhatsApp. La activación definitiva automática solo debe ocurrir tras
+acreditación bancaria verificable. La IA puede leer y clasificar comprobantes, pero no certificar por sí misma que
+se recibió dinero.
+Decisión de experiencia del propietario: no cambiar el registro ni el login del cliente mientras la licencia esté
+vigente. Tras un vencimiento ordinario, mantener la sesión y conducirlo únicamente a Planes y Soporte; no
+permitir ventas ni modificaciones operativas. Un bloqueo administrativo debe estar diferenciado del vencimiento.
+Estado documental: el informe utiliza como evidencia principal los archivos de auditoría de Copilot compartidos en esta
+conversación. Los hallazgos de código son reportados, pero no se revalidaron directamente contra los repositorios desde este
+entorno. Los valores actuales de la base administrativa siguen sin verificarse.
+
+
+===== PAGE BREAK =====
+
+FULLPOS CLOUD  /  AUDITORÍA Y EVALUACIÓN  /  07 NOV 2026
+2
+1. Resumen ejecutivo y criterio de viabilidad
+Pregunta
+Conclusión
+¿Se puede hacer una sola página
+de Planes y pagos?
+Sí. FullPOS puede actuar como interfaz y pasarela, con administración comercial central en
+FULLTECHPOS_BAKEND_LICENCIA.
+¿Puede recibir vouchers desde POS
+y WhatsApp?
+Sí, si ambos canales escriben sobre la misma orden, con identificación segura de empresa y
+controles de duplicados.
+¿La IA puede validar el contenido
+del voucher?
+Puede extraer datos, revisar coherencia y detectar señales de riesgo. No prueba
+acreditación ni descarta todos los fraudes.
+¿Puede activarse automáticamente
+con transferencia?
+Sí, cuando exista una fuente independiente y fiable del abono bancario, y se concilie
+inequívocamente con la orden.
+¿Puede activarse solo con una
+imagen que «parece real»?
+Técnicamente sí, pero no es una prueba de pago segura. No recomendado como activación
+definitiva automática.
+¿Puede el administrador conceder
+tiempo de pago?
+Sí, como autorización provisional explícita con fecha límite, alcance y auditoría; no como
+pago verificado.
+¿El usuario vencido podrá entrar?
+Es viable, pero el código auditado actualmente bloquea login y JWT. Se necesita cambiar la
+autorización, sin alterar el flujo normal vigente.
+Evaluación de tres esquemas de activación
+Esquema
+Ventaja
+Riesgo / dictamen
+Voucher aceptado por IA →
+activar
+Rápido y sin esperar operador
+Alto riesgo de fraude, duplicados y transferencias no
+acreditadas. No recomendable como licencia definitiva.
+Voucher + aprobación humana
+Operable desde el primer día; usa
+la administración existente
+Hay intervención manual. Adecuado para MVP mientras
+no exista conciliación fiable.
+Voucher + abono bancario
+acreditado y conciliado
+Automatización genuina, trazable
+Requiere acceso autorizado a movimientos o
+confirmación bancaria. Objetivo recomendado.
+La mejor estrategia es automatizar inmediatamente la recepción, extracción, clasificación y comunicación;
+automatizar la licencia definitiva solo después de conciliar el abono. Si se desea brindar acceso anticipado, debe
+registrarse como crédito o gracia provisional asumida por el negocio, con controles y sin representar el pago
+como confirmado.
+
+
+===== PAGE BREAK =====
+
+FULLPOS CLOUD  /  AUDITORÍA Y EVALUACIÓN  /  07 NOV 2026
+3
+2. Sistemas existentes y responsabilidades verificadas por
+auditoría
+Sistema
+Responsabilidad propuesta / evidencia
+FULLTECHPOS_BAKEND_LIC
+ENCIA
+Proyecto administrativo independiente Node.js/Express/PostgreSQL. Administra licencias y clientes;
+tiene catálogos históricos, órdenes de pago, PayPal y puente a FullPOS. Autoridad comercial a
+preservar.
+FullPOS Cloud API
+NestJS/PostgreSQL. Tiene Company, LicenseStatus TRIAL/ACTIVE/BLOCKED/EXPIRED, trial de siete
+días, cuotas de usuarios/productos y endpoints de administración de licencia. Autoridad de
+enforcement.
+FullPOS Flutter
+Windows, Android, iPhone y Web. Consume GET /license. La pantalla actual «Licencias» debe
+evolucionar a «Planes» sin crear un motor comercial paralelo.
+Sitio Astro
+Expone planes y registro; su catálogo hoy diverge de las migraciones del administrador. Debe leer
+un catálogo vigente y confirmado.
+APPYRA_AI
+Proyecto diferente de IA. Puede prestar servicio de extracción/clasificación si se decide, pero no
+debe duplicar suscripciones o licencias.
+WhatsApp
+Canal de mensajería y captura, no segunda base comercial; requiere identificar empresa y asociar
+cada envío a una orden existente.
+El proyecto anterior «WED Y LICENCIA_ FULLTECH» apareció como repositorio independiente/legado en las auditorías. No asumir
+que es el desplegado ni integrarlo sin identificar los servicios vigentes.
+3. Catálogo comercial: contradicciones pendientes
+Plan
+Migración 052 (histórico)
+Astro (publicado)
+Verificación pendiente
+Básico
+RD$1,000 / mes
+RD$1,000 / mes
+Condiciones y límites vigentes
+Negocio
+RD$1,500 / mes
+RD$2,000 / mes
+Precio contractual
+Pro
+RD$2,500 / mes
+RD$3,000 / mes
+Precio contractual
+Empresa
+No existe en CHECK de esa
+tabla
+RD$4,500 / mes
+Crear o retirar tras decisión
+• La migración administrativa incluye un mínimo histórico de tres meses; la oferta reciente del sitio pretende
+ contratación mensual. Es una decisión comercial pendiente, no un defecto a corregir automáticamente.
+• En FullPOS el enum técnico es STANDARD/ENTERPRISE y se propagan maxUsers/maxProducts. Almacenes y
+ e-CF no tienen los límites/licencias anunciados implementados según la auditoría.
+• Nadie verificó los valores actuales de la base productiva. No asumir que los seeds históricos siguen siendo el
+ contrato vigente.
+4. Resultado de la auditoría de bases de datos
+Se reportaron 53 migraciones y alrededor de 78 tablas en el proyecto administrativo. La base local de licencias
+no pudo auditarse: el .env apunta a un host de producción y no existía una copia aislada verificada. La ausencia
+de lectura de datos reales es una limitación importante, no una razón para consultar producción.
+
+
+===== PAGE BREAK =====
+
+FULLPOS CLOUD  /  AUDITORÍA Y EVALUACIÓN  /  07 NOV 2026
+4
+Hallazgo de código
+Implicación
+Catálogos coexistentes: product_plans, saas_planes,
+daleventas_commercial_plans y Company.plan
+Riesgo de doble verdad; conservar histórico y definir autoridades por
+dominio.
+Tablas company_subscriptions,
+subscription_payments, license_payment_orders y
+paypal_orders
+Reutilizarlas tras mapear dependencias antes de crear tablas nuevas.
+demo_trials aparece en varias migraciones con
+esquemas potencialmente divergentes
+Comparar esquemas en UAT nuevo y migrado antes de permitir
+despliegue.
+Dos migraciones con prefijo 044
+Comprobar orden efectivo de ejecución e idempotencia.
+admin_sessions se crea al iniciar, fuera de
+migraciones
+Control de esquema y despliegue necesita revisión.
+Se replican datos de negocio POS en la BD
+administrativa
+Examinar minimización de datos y permisos de lectura.
+Órdenes con divisas no alineadas (DOP y default USD)
+Evitar errores de monto/cobro en catálogo y órdenes.
+5. Hallazgo crítico: vencimiento y autenticación
+El reporte técnico localiza la comprobación assertCompanyCanUseApp durante login, refresh, handoff y
+validación JWT. Una licencia EXPIRED actualmente puede bloquear incluso la autenticación. No existe el flujo
+deseado «vence, permanece dentro y paga».
+Requisito definitivo del propietario
+ • Mientras la licencia esté vigente: no modificar el registro, login, navegación ni uso normal del POS salvo lo
+ indispensable para compatibilidad y seguridad.
+• Cuando venza normalmente: no expulsar, invalidar credenciales ni borrar información. Mantener o recuperar
+ la sesión autenticada; presentar una experiencia restringida a Planes y Soporte, con posibilidad de consultar
+estado de solicitud, subir voucher y recibir confirmación.
+• No permitir: ventas nuevas, compras, movimientos de inventario, cambios de caja, usuarios, configuraciones,
+ ni acceso por API directa fuera de la lista blanca. Excepción de datos/exportaciones solo si la política y el
+marco legal la requieren; evaluar separadamente.
+• Bloqueo administrativo: distinguir de expiración y de «pago pendiente». El cliente deberá conservar vías
+ mínimas y seguras para conocer el estado, regularizar y contactar soporte, salvo restricciones por fraude o
+seguridad.
+Corrección al diseño anterior
+Un diseño genérico de «READ_ONLY = permitir todos los GET del negocio» es más amplio que la experiencia
+que el propietario acaba de definir. El objetivo inicial para licencia vencida es Planes + Soporte + endpoints
+mínimos de identidad/sesión/estado. Otras consultas deben definirse expresamente; no habilitar todas las
+lecturas de manera automática.
+
+
+===== PAGE BREAK =====
+
+FULLPOS CLOUD  /  AUDITORÍA Y EVALUACIÓN  /  07 NOV 2026
+5
+Riesgos técnicos a resolver
+ • Separar identidad autenticada de licencia autorizada, con guard servidor fail-closed, y probar endpoints de los
+ 54 controladores reportados, incluyendo GET con efectos secundarios y rutas públicas.
+• El cliente Flutter no debe interpretar LICENSE_EXPIRED como fallo de contraseña ni cerrar sesión por un 403.
+ Rehabilitación tras activación debe ocurrir al refrescar el estado de licencia.
+• Revisar el manejo de caja ya abierta, operaciones offline válidas capturadas antes del vencimiento y
+ solicitudes de sincronización posteriores. Nunca descartar la cola offline por un 403.
+6. Experiencia única del cliente: página «Planes»
+Pantalla compacta, profesional y adaptable: cabecera con empresa y estado; plan actual y fecha; recursos
+usados; comparador de planes; detalle de cuota mensual; selección; pago; subida; seguimiento; renovación y
+soporte. Todo en un mismo destino funcional con pasos internos, sin ventanas inconexas.
+Paso
+Experiencia exigida
+1. Elegir
+El cliente ve planes disponibles, límites efectivamente aplicados, precio vigente, impuestos/total y
+periodo, sin duplicidades.
+2. Orden
+Se genera una orden única e inmutable con companyId, plan/version, moneda DOP, total, vencimiento de
+orden y referencia.
+3. Transferencia
+Solo una cuenta oficial de cobro (banco, titular, tipo, número) desde configuración segura. Instrucciones
+para pagar desde otro banco y conservar el comprobante.
+4. Voucher
+Adjuntar JPG/PNG/PDF desde Windows/Web/Android/iOS. Validación de formato/tamaño; progreso y
+confirmación de recepción.
+5. Evaluación
+La IA extrae monto, fecha, referencia, banco emisor/receptor y datos visibles, con incertidumbre explícita.
+6. Resolución
+Pago acreditado → activación definitiva; sin confirmación → pendiente/revisión; anomalía → solicitud de
+aclaración/soporte.
+7. Seguimiento
+Estado de pago y licencia claro, avisos al cliente, WhatsApp y registro administrativo compartidos.
+Texto recomendado: «Sube tu comprobante para que revisemos tu transferencia. Si podemos confirmar el
+ingreso, activaremos tu plan automáticamente. En caso contrario, te avisaremos para completar la verificación».
+No prometer «activación instantánea garantizada» si se depende de ACH o revisión manual.
+7. Voucher, inteligencia artificial y prueba de pago
+El voucher es una declaración/documento del banco emisor o del usuario; puede ser legítimo y seguir pendiente
+de crédito. La IA no tiene acceso mágico al libro contable del banco. La puntuación visual no equivale a dinero
+recibido.
+Señal
+Uso correcto
+No concluye
+Monto y moneda
+Comparar orden con importe visible
+Que el abono llegó
+Cuenta destino
+Detectar cuenta o banco incorrecto
+Que titular recibió los fondos
+Fecha y hora
+Evaluar ventana temporal y demoras
+Que transferencia terminó
+
+
+===== PAGE BREAK =====
+
+FULLPOS CLOUD  /  AUDITORÍA Y EVALUACIÓN  /  07 NOV 2026
+6
+Señal
+Uso correcto
+No concluye
+Referencia
+Ayuda a conciliación si el banco la transmite
+Que referencia sea única en banco
+Hash de archivo
+Identifica reenvío exacto de imagen
+Que dos capturas diferentes no sean del mismo
+pago
+Score de IA
+Priorizar revisión manual
+Autenticidad inequívoca
+Movimiento acreditado
+Prueba independiente de ingreso, sujeto a
+estado bancario
+Ausencia absoluta de disputas futuras
+La activación provisional pedida por el propietario
+Si la empresa desea que el usuario continúe mientras un administrador confirma o acuerda un día de pago,
+habilitar gracia comercial temporal como decisión del administrador: fecha límite, motivo, actor, alcance, política
+de revocación, notificación y auditoría. Nunca marcar la orden como PAID/VERIFIED por esa concesión. No
+habilitar automáticamente por imagen de voucher, incluso si la IA la considera convincente.
+Si se decide asumir riesgo comercial para cuentas muy conocidas, definir un régimen de crédito con elegibilidad,
+duración corta, límites y aprobación humana; no confundirlo con verificación bancaria ni usarlo para solicitudes
+anónimas.
+8. Una cuenta bancaria y conciliación de transferencias en
+RD
+La operación con una sola cuenta receptora es viable. Los clientes podrán enviar desde bancos distintos dentro
+de los esquemas habilitados. La plataforma debe confirmar exactamente qué banco, titular y cuenta empresarial
+se utilizarán; no incorporar datos bancarios hasta validarlos fuera del código.
+Las transferencias ACH no son necesariamente inmediatas. ProUsuario distingue ACH y pagos al instante LBTR;
+el Banco Central describe que la liquidación LBTR aceptada es irrevocable en el sistema, sin que eso vuelva
+automáticamente auténtica una captura. Las reglas/horarios de cada entidad deben consultarse por separado.
+Fuentes [E1], [E2], [E3].
+Opciones técnicas de conciliación, de menor a mayor automatización
+Alternativa
+Ventajas
+Limitaciones
+Admin revisa banca empresarial
+Funciona sin API bancaria;
+trazabilidad humana
+Tiempo operativo y riesgo de error.
+Importación manual de estado de
+cuenta (CSV/Excel)
+Reduce tecleo; conciliación
+reproducible
+Requiere validar formato/origen y evitar importar
+archivos alterados.
+Archivo bancario empresarial
+automatizado
+Permite conciliación periódica
+Disponibilidad y contrato deben confirmarse con
+banco.
+API bancaria autorizada /
+notificación de abono
+Objetivo de activación automática
+No se confirmó acceso a abonos para la cuenta
+del usuario. Portal público no equivale a permiso
+comercial.
+Tarjeta / pasarela futura
+Confirmación programática y mejor
+UX
+Comisiones, contracargos y contrato; no
+disponible ahora.
+
+
+===== PAGE BREAK =====
+
+FULLPOS CLOUD  /  AUDITORÍA Y EVALUACIÓN  /  07 NOV 2026
+7
+El Banco Popular anunció un portal de APIs. Esa existencia no demuestra que permita consultar depósitos de la cuenta elegida,
+recibir webhooks de créditos o acceder al historial bancario mediante un contrato comercial concreto. Confirmar con el banco
+antes de elegir proveedor. Fuente [E4].
+9. Arquitectura del pago compartido y sincronización
+Responsabilidad propuesta: el administrador existente conserva orden, recibos, pago, periodo, concesiones de
+crédito y decisión comercial; FullPOS actúa como intermediario autenticado y aplica estado técnico. WhatsApp es
+otra interfaz del mismo expediente.
+Flujo lógico: Cliente POS/WhatsApp → companyId verificado → misma PaymentOrder → voucher y metadatos → IA
+(solo prevalidación) → conciliación o revisión autorizada → estado VERIFIED → aprobación/aplicación idempotente
+→ puente administrativo existente → FullPOS LicenseService → refresco de UI.
+Estados separados (no mezclar conceptos)
+Objeto
+Ejemplos de estados
+Orden de cobro
+CREATED, AWAITING_TRANSFER, EVIDENCE_RECEIVED, REVIEW, SETTLED, CANCELLED, EXPIRED
+Comprobante
+RECEIVED, EXTRACTED, LOW_CONFIDENCE, DUPLICATE, FLAGGED, REVIEWED
+Dinero
+UNCONFIRMED, CREDITED, MATCHED, PARTIAL, OVERPAID, RETURNED, DISPUTED
+Suscripción
+TRIAL, ACTIVE, PAST_DUE, GRACE, CANCELLED, PAUSED
+Licencia técnica
+TRIAL, ACTIVE, EXPIRED, BLOCKED (reutilizar enums existentes)
+Integración
+PENDING_SYNC, APPLIED, RETRYING, FAILED_REQUIRES_ATTENTION
+El modelo concreto debe reconciliarse con estados y tablas existentes. No crear todos esos enums/tablas sin
+examinar primero migraciones, dependencias y los requisitos del módulo comercial ya implementado.
+Reglas de consistencia y seguridad
+ • Idempotencia por orden, evento y aprobación; una misma acreditación no puede pagar dos órdenes ni
+ extender dos veces una licencia.
+• Versionado y registro de destino: la orden puede quedar «pago acreditado, activación pendiente» si el puente
+ falla; reintentar y reconciliar sin duplicar meses.
+• No confiar en companyId enviado desde el cliente: derivarlo de la sesión. En WhatsApp, vincular teléfono a
+ empresa solo tras prueba de control/autorización.
+• Acceso mínimo para administradores, comprobantes privados, datos bancarios cifrados, validación
+ anti-malware y logs auditables sin secretos.
+10. WhatsApp unificado, administrador y acuerdos de pago
+El asistente de WhatsApp y FullPOS deben mostrar la misma orden, importe, referencia, comprobante y estado.
+El cliente puede comenzar en Flutter y continuar en WhatsApp sin generar una segunda solicitud. El
+administrador recibe un aviso con referencia, importe, estado y acceso seguro al voucher; evitar enviar datos
+financieros completos sin necesidad.
+
+
+===== PAGE BREAK =====
+
+FULLPOS CLOUD  /  AUDITORÍA Y EVALUACIÓN  /  07 NOV 2026
+8
+Intervención del administrador
+ • Puede ver voucher, extracción de IA, orden, historial de conciliación, empresa, licencias, pagos anteriores y
+ advertencias de fraude.
+• Puede marcar «pendiente de confirmación», solicitar información, registrar verificación bancaria o rechazar
+ con motivo; no sustituir la conciliación por una opinión de la IA.
+• Puede registrar una promesa de pago / fecha acordada y conceder acceso temporal separado del estado de
+ pago, con vencimiento automático, notificaciones y auditoría.
+• Puede pausar/reactivar por impago según reglas y permisos de administración; la pausa debe ser reversible y
+ mostrar una vía de regularización o soporte, evitando pérdida de datos.
+• Si se recibe dinero tras una suspensión, el sistema debe conciliarlo y reactivar de forma autorizada, incluso
+ cuando la propia licencia esté bloqueada para operaciones.
+Políticas de WhatsApp relevantes
+Meta exige plantillas aprobadas para iniciar conversaciones fuera de la ventana de atención de 24 horas y una
+vía clara para escalar a una persona. Verificar consentimiento, opt-out, tarifas de mensajes y proveedor real
+(Cloud API/Evolution) antes de enviar notificaciones automáticas. Fuente [E5].
+
+
+===== PAGE BREAK =====
+
+FULLPOS CLOUD  /  AUDITORÍA Y EVALUACIÓN  /  07 NOV 2026
+9
+11. Casos límite y resultados esperados
+Escenario
+Resultado requerido
+Voucher subido antes del abono
+Recibido/pendiente; no activación definitiva.
+ACH en fin de semana o fuera de ventana
+Mostrar estado y tiempos variables; permitir seguimiento sin repetir pago.
+Voucher visualmente válido sin movimiento
+bancario
+Revisión/espera; no afirmar «pagado».
+Documento editado o de mala calidad
+Solicitar mejor evidencia; revisión humana; evitar acusaciones automáticas.
+Archivo duplicado o referencia ya utilizada
+Vincular al expediente existente; no cobrar/activar dos veces.
+Dos capturas distintas del mismo pago
+Conciliar por movimiento bancario único, no solo hash.
+Abono sin referencia o pago por tercero
+Matching asistido con monto/fecha/contexto; revisión adicional.
+Monto inferior
+Registrar pago parcial; política explícita de saldo; no marcar pagado.
+Monto superior
+Registrar excedente y política de crédito/devolución; no extender sin autorización.
+Dos transferencias para la misma orden
+Admitir sumatoria controlada y trazabilidad individual si política lo permite.
+Una transferencia reclamada por dos
+empresas
+Bloqueo de doble asignación; resolver identidad del pagador.
+Pago después de vencer la orden
+Propuesta de reasignación autorizada; conservar evidencia.
+Upgrade a mitad de ciclo
+Prorrateo o nuevo periodo según reglas comerciales por aprobar.
+Downgrade con consumo mayor que límite
+No borrar datos; impedir nuevas altas sujetas a cuota y fijar fecha efectiva.
+Licencia vence con caja abierta
+Regla de cierre/conciliación y registros pendientes definida explícitamente.
+Ventas offline capturadas antes de vencer
+No descartar. Definir fecha de autorización, orden de eventos y conciliación.
+WhatsApp y POS envían el mismo voucher
+Una orden y varias evidencias/canales con deduplicación de mensajes.
+Banco/IA/WhatsApp fuera de servicio
+Operación degradada: estado pendiente, reintento, revisión y soporte.
+Admin otorga plazo de pago
+Gracia registrada con fecha límite, sin simular pago confirmado.
+Falsificación detectada después de gracia
+Auditar, notificar, pausar conforme a política; no borrar datos.
+Abono confirmado pero puente falla
+Estado «acreditado / pendiente activación», outbox o reintento idempotente.
+Cliente con varias empresas
+Seleccionar empresa verificada; una suscripción/orden por companyId.
+Usuario cambia de número de WhatsApp
+Reverificar vinculación, revocar vínculo antiguo y conservar expediente.
+
+
+===== PAGE BREAK =====
+
+FULLPOS CLOUD  /  AUDITORÍA Y EVALUACIÓN  /  07 NOV 2026
+10
+12. Seguridad, privacidad y obligaciones en RD
+Riesgos concretos de código reportados
+ • Autenticación admin basada en x-session-id; permisos granulares sin aplicar, según el reporte. No habilitar
+ una interfaz pública de pagos/activación sin cerrar rutas y permisos.
+• Puente HTTP con x-license-admin-secret estático; fortalecer con autenticación de servicio, integridad del
+ cuerpo, timestamp/nonce, idempotencia y logging seguro, de forma compatible y gradual.
+• Restringir uploads (tipo real/MIME, firma mágica, tamaño, virus, PDFs peligrosos), normalizar imagen,
+ almacenar fuera del webroot y aplicar retención limitada.
+• Separar permisos para registrar comprobante, conciliar, conceder gracia, aprobar pago, activar y pausar
+ licencia; exigir registro de actor, motivo y fecha.
+Protección de datos y cumplimiento
+Los vouchers contienen nombres, cuentas y referencias. La Ley 172-13 de República Dominicana regula la
+protección de datos personales y figura vigente en el portal de la Superintendencia de Bancos. Documentar
+finalidad, acceso, conservación, encargados y eliminación; validar tratamiento con asesoría local. Fuente [E6].
+Los cobros de suscripción deben tener tratamiento contable y fiscal definido. La DGII dispone de reglas de
+comprobantes e-CF y respuestas técnicas específicas sobre licencias/arrendamiento de software; no asumir
+automáticamente un tratamiento idéntico para cada paquete mixto de software, soporte y servicios. Obtener
+criterio contable/fiscal aplicable al producto de FULLTECH SRL antes de fijar impuestos y emisión. Fuentes [E7],
+[E8].
+
+
+===== PAGE BREAK =====
+
+FULLPOS CLOUD  /  AUDITORÍA Y EVALUACIÓN  /  07 NOV 2026
+11
+13. Matriz de decisiones de negocio por aprobar
+Decisión
+Estado / criterio
+Precios y número de planes
+No confirmados en DB vigente. Básico, Negocio, Pro y Empresa deben conciliarse
+con ofertas actuales.
+Contratación mensual o mínimo 3 meses
+Propuesta del propietario: mensual. Requiere actualización contractual coherente y
+tratamiento de clientes históricos.
+Una cuenta receptora
+Sí, pero falta banco, nombre legal, tipo, moneda y confirmación de titular.
+Banco y método de consulta de abonos
+Bloqueante para activación definitiva automática.
+Política de IA voucher
+Extracción/prevalidación; no prueba de pago.
+Gracia antes de verificar pago
+Solo decisión administrativa; definir máximo, elegibilidad, límites, renovaciones y
+revocación.
+Acceso al vencer
+Solo Planes + Soporte y endpoints técnicos mínimos, sin alterar login normal
+vigente.
+Pausa por impago/fraude
+Operación administrativa reversible y auditada; distinguir de vencimiento ordinario.
+Cierre de caja y offline pendientes
+Debe decidirse antes de introducir guard de vencimiento.
+Permisos del administrador
+Definir aprobador financiero, operador de soporte y autorización de gracia.
+WhatsApp de empresa y administrador
+Verificar números, proveedor, consentimiento y capacidad real de
+adjuntos/plantillas.
+Tratamiento tributario y factura
+Validar con contable, DGII y reglas de e-CF aplicables.
+14. Qué falta verificar antes de cualquier edición
+ • Identificar inequívocamente el servicio administrativo desplegado y la versión de código que utiliza la
+ empresa; el reporte no confirmó despliegue real.
+• Crear por procedimiento separado un entorno UAT de licencias sin credenciales productivas ni datos
+ personales; validar el árbol de migraciones y estados reales allí.
+• Obtener un inventario de tablas y dependencias efectivas: qué endpoints usan cada generación de catálogo,
+ pagos y suscripciones; no borrar nada.
+• Verificar catálogo vigente mediante acceso autorizado y controlado; no convertir los seeds históricos en
+ precios contractuales.
+• Confirmar cuenta bancaria única e investigar, con la entidad, si ofrece crédito acreditado por API, archivo de
+ movimientos, notificación firmada o extracto empresarial automatizado.
+• Auditar endpoints de los 54 controladores para asegurar que la restricción al vencer sea realmente
+ «Planes/Soporte» sin bypass por rutas GET mutantes o públicas.
+• Ensayar en UAT los flujos de alta, vencimiento, solicitud, comprobante, conciliación manual, activación,
+ gracia, bloqueo, reactivación y offline.
+• Comprobar proveedor WhatsApp existente y capacidad de recibir archivos y enviar notificaciones de plantilla,
+ sin mensajes reales durante auditoría.
+
+
+===== PAGE BREAK =====
+
+FULLPOS CLOUD  /  AUDITORÍA Y EVALUACIÓN  /  07 NOV 2026
+12
+• Validar política de acceso/exportación de datos, retención de voucher y condiciones de suspensión con
+ revisión legal y contractual.
+15. Veredicto y separación respecto del futuro Plan Maestro
+Veredicto final del informe
+La solución debe preservar los tres componentes que ya existen: motor de licencia FullPOS, administración
+comercial FULLTECHPOS_BAKEND_LICENCIA y alta/trial del cliente. El siguiente documento, tras la revisión de
+este informe, será el Plan Maestro de Implementación con dependencias, cambios exactos, pruebas, riesgos,
+responsables y fases. Este PDF es diagnóstico y especificación de criterios, no autorización de ediciones.
+La automatización comercial es viable por fases: carga inmediata, revisión IA, gestión de órdenes y
+notificaciones desde el primer lanzamiento; activación automática definitiva únicamente después de conciliación
+bancariamente corroborada. El administrador puede conceder tiempo de uso por excepción, sin falsificar el
+estado de pago.
+16. Fuentes y trazabilidad
+Fuentes internas: auditorías de Copilot proporcionadas en la conversación, especialmente los informes de
+7/11/2026 sobre FULLTECHPOS_BAKEND_LICENCIA, auditoría de DB/guard y el diseño de acceso vencido. Se
+citan como evidencia indirecta; no equivalen a tests de producción ni lectura de base real.
+[E1] ProUsuario, preguntas frecuentes ACH/LBTR
+https://www.prousuario.gob.do/educacion-financiera/preguntas-frecuentes/
+[E2] Banco Central RD, Sistema LBTR
+https://www.bancentral.gov.do/a/d/2650-sistema-lbtr
+[E3] Banco Central RD, Sistema de Gestión de Pagos Instantáneos (proyecto)
+https://www.bancentral.gov.do/a/d/6142
+[E4] Grupo Popular, lanzamiento API Portal (30 jun 2025)
+https://grupopopular.com/Noticias/Pages/Popular-lanza-API-Portal-plataforma-pionera-open-banking-pais.aspx
+[E5] WhatsApp Business, política oficial
+https://whatsappbusiness.com/policy/
+[E6] Superintendencia de Bancos, Ley 172-13
+https://www.sb.gob.do/regulacion/leyes/ley-no-172-13-proteccion-de-los-datos/
+[E7] DGII, facturación electrónica e-CF
+https://dgii.gov.do/cicloContribuyente/facturacion/comprobantesFiscalesElectronicosE-CF/Paginas/TipoyEstructurae-CF.aspx
+[E8] DGII, consulta técnica de ITBIS sobre software (contexto no individual)
+https://dgii.gov.do/legislacion/consultas/Consultas%20Tecnicas%202024/Septiembre/Consulta%2017-ITBIS%20a%20software.pdf
+[E9] Resolución SIPARD 2025 (documento normativo)
+https://sb.gob.do/media/jjzluzox/20250828-segunda-res-jm-reglamento-sipard.pdf
+Advertencia de investigación: horarios y disponibilidad de pagos, condiciones de API bancaria y régimen fiscal pueden cambiar.
+Verificar directamente con la entidad/autoridad al momento de contratar o publicar. Las fuentes no prueban una integración
+bancaria concreta ni que el banco haya otorgado credenciales a FULLTECH SRL.

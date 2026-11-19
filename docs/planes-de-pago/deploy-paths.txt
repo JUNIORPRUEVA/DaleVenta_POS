@@ -1,0 +1,94 @@
+# Rutas exactas del despliegue del sistema de planes
+
+El despliegue **solo** puede incluir lo que está en Git. Estas son las rutas que
+componen el sistema de planes y que hoy están **sin añadir** (`??`) o
+modificadas en el worktree `agent/planes-de-pago-impl-20261116`.
+
+## Añadir (nuevas)
+
+```
+apps/api/prisma/migrations/20261116180000_license_plans_and_orders/
+apps/api/prisma/migrations/20261117170000_license_plan_requests/
+apps/api/prisma/migrations/20261117190000_evidence_insights/
+apps/api/prisma/migrations/20261117200000_provisional_activation/
+apps/api/prisma/migrations/20261117210000_evidence_validation/
+apps/api/prisma/migrations/20261119200000_license_override_multiwarehouse/
+apps/api/scripts/seed-license-plans.ts
+apps/api/scripts/backfill-plan-basico.ts
+apps/api/scripts/plan-migration-check.ts
+apps/api/scripts/deploy-preflight.ts
+apps/api/scripts/license-state.ps1
+apps/api/scripts/license-scenarios-evidence.ps1
+apps/api/src/license/orders/
+apps/api/src/license/plans/
+apps/api/src/license/renewal/
+apps/api/src/license/notifications/
+apps/api/src/license/license-access.interceptor.ts
+apps/api/src/license/license-access.interceptor.spec.ts
+apps/api/src/license/license-active-protection.spec.ts
+apps/api/src/license/license-company-purge.spec.ts
+apps/api/src/license/license-trial.spec.ts
+apps/api/src/license/license.access.policy.ts
+apps/api/src/license/license.access.policy.spec.ts
+apps/fulltech_app/lib/core/license/license_demo_state.dart
+apps/fulltech_app/lib/features/plans/
+apps/fulltech_app/test/features/plans/
+docs/planes-de-pago/
+```
+
+## Modificados que hay que revisar (no todos son de planes)
+
+Estos archivos están modificados en el mismo worktree. Los de esta lista **sí**
+forman parte del sistema de planes:
+
+```
+apps/api/prisma/schema.prisma
+apps/api/package.json
+apps/api/src/license/license.controller.ts
+apps/api/src/license/license.module.ts
+apps/api/src/license/license.service.ts
+apps/api/src/license/license.service.spec.ts
+apps/api/src/license/crm-license.controller.ts
+apps/api/src/license/crm-license.service.ts
+apps/api/src/license/crm-license-http.e2e-spec.ts
+apps/fulltech_app/lib/core/api/api_routes.dart
+apps/fulltech_app/lib/core/license/license_repository.dart
+apps/fulltech_app/lib/core/routing/routes.dart
+apps/fulltech_app/lib/core/routing/app_router.dart
+apps/fulltech_app/lib/core/routing/route_access.dart
+apps/fulltech_app/lib/features/home/home_shell.dart
+```
+
+## Cambios ajenos a este despliegue (no mezclar sin revisar)
+
+```
+apps/api/src/auth/*
+apps/api/src/settings/*
+apps/api/src/warehouses/*
+apps/api/src/ecf/sandbox/e32-sandbox.cli.ts
+apps/api/src/guardian/guardian.alert.channels.ts
+apps/api/.env.example
+apps/fulltech_app/lib/core/widgets/responsive_shell.dart
+apps/fulltech_app/lib/modules/cotizaciones/cotizaciones_screen.dart
+apps/fulltech_app/test/features/onboarding/onboarding_flow_test.dart
+apps/fulltech_app/test/modules/cotizaciones/*
+apps/fulltech_app/windows/flutter/generated_plugin_registrant.*
+apps/fulltech_app/windows/flutter/generated_plugins.cmake
+website/**
+```
+
+## Nunca añadir
+
+```
+docs/backups/                 # respaldos: pueden contener datos reales
+```
+
+## Comprobación antes de construir la imagen
+
+```bash
+git ls-files --error-unmatch apps/api/src/license/plans/license-plans.service.ts
+git ls-files --error-unmatch apps/fulltech_app/lib/features/plans/presentation/screens/plans_catalog_screen.dart
+```
+
+Si alguno de los dos comandos falla, la imagen saldrá **sin** el sistema de
+planes y la app no podrá mostrar el catálogo ni cobrar.

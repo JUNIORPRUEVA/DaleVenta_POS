@@ -5,6 +5,8 @@ import request from 'supertest';
 import { CrmLicenseController } from './crm-license.controller';
 import { CrmLicenseService } from './crm-license.service';
 import { LicenseService } from './license.service';
+import { LicenseOrdersService } from './orders/license-orders.service';
+import { LicensePlanRequestService } from './renewal/license-plan-request.service';
 
 describe('CRM license HTTP boundary after fiscal consolidation', () => {
   let app: INestApplication;
@@ -22,9 +24,18 @@ describe('CRM license HTTP boundary after fiscal consolidation', () => {
       controllers: [CrmLicenseController],
       providers: [
         { provide: CrmLicenseService, useValue: crm },
+        { provide: LicenseOrdersService, useValue: { getAdminEvidence: jest.fn() } },
+        {
+          provide: LicensePlanRequestService,
+          useValue: {
+            listAdmin: jest.fn(async () => ({ requests: [] })),
+            setStatus: jest.fn(async () => ({ ok: true })),
+          },
+        },
         { provide: LicenseService, useFactory: () => new LicenseService(
           {} as any,
           { get: (key: string) => key === 'LICENSE_ADMIN_SECRET' ? secret : undefined } as ConfigService,
+          {} as any,
           {} as any,
         ) },
       ],
@@ -55,7 +66,15 @@ describe('CRM license HTTP boundary after fiscal consolidation', () => {
     const response = await request(app.getHttpServer())
       .get('/license/integrations/crm/capabilities').set('x-license-admin-secret', secret);
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({ licenseRead: true, licenseWrite: false, bankTransfers: false });
+    // `payments` y `overrides` dicen si el puente puede marcar pagos y conceder
+    // excepciones; siguen colgando del mismo interruptor de escritura.
+    expect(response.body).toEqual({
+      licenseRead: true,
+      licenseWrite: false,
+      bankTransfers: false,
+      payments: true,
+      overrides: true,
+    });
     expect(crm.command).not.toHaveBeenCalled();
   });
 

@@ -4,7 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/account/account_menu_screens.dart';
-import '../../features/auth/presentation/landing_screen.dart';
+import '../../features/plans/presentation/screens/license_overview_screen.dart';
+import '../../features/plans/presentation/screens/orders_history_screen.dart';
+import '../../features/plans/presentation/screens/payment_screen.dart';
+import '../../features/plans/presentation/screens/plans_catalog_screen.dart';import '../../features/auth/presentation/landing_screen.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/forgot_password_screen.dart';
 import '../../features/home/home_shell.dart';
@@ -146,6 +149,28 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: Routes.registrarVenta,
         redirect: (context, state) => Routes.cotizaciones,
       ),
+      // Pantallas de Planes fuera del armazon del POS: se abren a pantalla
+      // completa y «regresar» vuelve exactamente a donde se estaba.
+      GoRoute(
+        path: Routes.planes,
+        builder: (context, state) => const LicenseOverviewScreen(),
+      ),
+      GoRoute(
+        path: Routes.planesCatalogo,
+        builder: (context, state) => const PlansCatalogScreen(),
+      ),
+      GoRoute(
+        path: Routes.planesPago,
+        builder: (context, state) => PaymentScreen(
+          planCode: state.uri.queryParameters['plan'],
+          months: int.tryParse(state.uri.queryParameters['meses'] ?? ''),
+          startPayment: state.uri.queryParameters['paso'] == 'pagar',
+        ),
+      ),
+      GoRoute(
+        path: Routes.planesHistorial,
+        builder: (context, state) => const OrdersHistoryScreen(),
+      ),
       ShellRoute(
         builder: (context, state, child) => HomeShell(child: child),
         routes: [
@@ -171,7 +196,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: Routes.licencias,
-            builder: (context, state) => const AccountLicensesScreen(),
+            redirect: (context, state) => Routes.planes,
           ),
           GoRoute(
             path: Routes.actualizaciones,

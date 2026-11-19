@@ -63,7 +63,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       sessionCompanyId ??
       user.companyId ??
       null;
-    await this.licenses.assertCompanyCanUseApp(companyId);
+    const licenseAccess = await this.licenses.getLicenseAccess(companyId);
     const role = membership
       ? this.mapMemberRoleToLegacyRole(membership.role)
       : this.normalizeLegacyRole(user.role);
@@ -75,6 +75,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       companyId,
       sessionId: payload.sessionId ?? null,
       userPermissions: user.userPermissions ?? {},
+      /** FULL | RESTRICTED | BLOCKED. Lo usa el interceptor de acceso. */
+      licenseAccess: {
+        level: licenseAccess.level,
+        reason: licenseAccess.reason,
+        daysRemaining: licenseAccess.daysRemaining,
+        periodEndsAt: licenseAccess.periodEndsAt,
+      },
     };
   }
 
@@ -105,28 +112,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       },
     });
     if (!session) throw new UnauthorizedException("Invalid session");
-    if (session.company && session.company.status !== "ACTIVE") {
-      throw new UnauthorizedException("Company inactive");
-    }
-    if (session.company) {
-      const now = Date.now();
-      const trialExpired =
-        session.company.licenseStatus === "TRIAL" &&
-        !!session.company.trialEndsAt &&
-        session.company.trialEndsAt.getTime() < now;
-      const paidExpired =
-        session.company.licenseStatus === "ACTIVE" &&
-        !!session.company.licenseExpiresAt &&
-        session.company.licenseExpiresAt.getTime() < now;
-      if (
-        session.company.licenseStatus === "BLOCKED" ||
-        session.company.licenseStatus === "EXPIRED" ||
-        trialExpired ||
-        paidExpired
-      ) {
-        throw new UnauthorizedException("Licencia no activa");
-      }
-    }
+    // Una licencia vencida **o una cuenta suspendida** no se rechazan aqui: el
+    // cliente entra y `LicenseAccessInterceptor` limita las rutas con el nivel
+    // que calcula `resolveLicenseAccess`. Si se devolviera 401, la app no podria
+    // ni pintar la pantalla de cuenta suspendida ni dejar pagar desde ella.
+    // Lo que si importa es que la sesion siga viva (arriba) y que el usuario no
+    // este bloqueado (abajo).
     return session.company?.id ?? null;
   }
 

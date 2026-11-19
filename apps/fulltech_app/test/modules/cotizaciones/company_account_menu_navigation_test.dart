@@ -1,6 +1,7 @@
 import 'package:daleventa_pos/core/auth/auth_provider.dart';
 import 'package:daleventa_pos/core/company/company_settings_model.dart';
 import 'package:daleventa_pos/core/company/company_settings_repository.dart';
+import 'package:daleventa_pos/core/license/license_repository.dart';
 import 'package:daleventa_pos/core/models/user_model.dart';
 import 'package:daleventa_pos/core/routing/routes.dart';
 import 'package:daleventa_pos/features/onboarding/application/activation_controller.dart';
@@ -76,6 +77,11 @@ Future<GoRouter> _pumpCompanyMenu(WidgetTester tester) async {
       overrides: [
         authStateProvider.overrideWith(_MenuAuthController.new),
         activationControllerProvider.overrideWith(_MenuActivation.new),
+        // La licencia se consulta para el menu; en pruebas se resuelve al
+        // instante para no dejar el temporizador de la peticion pendiente.
+        licenseStatusProvider.overrideWith(
+          (_) async => LicenseStatusModel.fromJson({}),
+        ),
         companySettingsProvider.overrideWith(
           (_) async =>
               CompanySettings.empty().copyWith(companyName: 'FullPOS Test'),
@@ -164,7 +170,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(_companyMenuItem('Empresa'), findsOneWidget);
-    expect(_companyMenuItem('Licencias'), findsOneWidget);
+    expect(_companyMenuItem('Plan actual'), findsOneWidget);
     expect(_companyMenuItem('Configuracion'), findsOneWidget);
     expect(find.text('Actualización'), findsNothing);
     expect(find.text('Impresora'), findsNothing);

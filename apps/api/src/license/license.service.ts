@@ -11,6 +11,12 @@ import { randomUUID } from 'node:crypto';
 import { isAdminLike, requireTenant, type TenantUser } from '../auth/tenant-context';
 import { PrismaService } from '../prisma/prisma.service';
 import { CatalogRealtimeRelayService } from '../products/catalog-realtime-relay.service';
+import { buildEntitlements } from './plans/license-entitlements.service';
+import { LicenseRenewalService } from './renewal/license-renewal.service';
+import {
+  resolveLicenseAccess,
+  type LicenseAccess,
+} from './license.access.policy';
 
 type LicenseUpdateInput = {
   maxUsers?: unknown;
@@ -44,36 +50,119 @@ export class LicenseService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly realtime: CatalogRealtimeRelayService,
+    private readonly renewal: LicenseRenewalService,
   ) {}
 
-  async ensureTrialForCompany(companyId: string) {
+  /**
+   * Inicia la **demo de 7 dias** de una empresa (una sola vez en su vida).
+   *
+   * No se llama sola en ningun sitio: el registro ya crea la prueba, y para el
+   * resto de empresas la demo se abre con una **accion administrativa
+   * explicita** (`POST /license/admin/:companyId/trial`). Asi una empresa
+   * antigua sin fechas de prueba no recibe una demo nueva por el simple hecho
+   * de entrar, y cerrar sesion o reinstalar no renueva nada.
+   *
+   * Reglas cerradas, todas comprobadas antes de escribir:
+   * - Si ya tuvo prueba (`trialStartedAt`), no hay otra: se lanza 409.
+   * - Si ya pago alguna vez (`licenseActivatedAt`), no se le cambia a demo.
+   * - Si la licencia esta activa, bloqueada o vencida por pago, tampoco.
+   * La fecha de fin es **siempre** 7 dias despues del inicio.
+   */
+  async ensureTrialForCompany(companyId: string, actorEmail?: string | null) {
     const company = await this.prisma.company.findUnique({
       where: { id: companyId },
-      select: { id: true, trialStartedAt: true, trialEndsAt: true },
+      select: {
+        id: true,
+        licenseStatus: true,
+        trialStartedAt: true,
+        trialEndsAt: true,
+        licenseActivatedAt: true,
+        licenseExpiresAt: true,
+        licenseBlockedAt: true,
+      },
     });
-    if (!company) return;
-    if (company.trialStartedAt && company.trialEndsAt) return;
+    if (!company) throw new ForbiddenException('Empresa no encontrada');
+    if (company.trialStartedAt) {
+      throw new ConflictException({
+        code: 'TRIAL_ALREADY_USED',
+        message: 'Esta empresa ya tuvo su prueba gratuita de 7 dias.',
+      });
+    }
+    if (
+      company.licenseActivatedAt ||
+      company.licenseExpiresAt ||
+      company.licenseBlockedAt ||
+      company.licenseStatus !== LicenseStatus.TRIAL
+    ) {
+      throw new ConflictException({
+        code: 'TRIAL_NOT_ALLOWED',
+        message:
+          'La empresa ya tiene historial de licencia; la demo solo se abre a empresas nuevas.',
+      });
+    }
 
-    const started = company.trialStartedAt ?? new Date();
+    const started = new Date();
+    const endsAt = this.addDays(started, 7);
     await this.prisma.company.update({
       where: { id: companyId },
       data: {
         trialStartedAt: started,
-        trialEndsAt: company.trialEndsAt ?? this.addDays(started, 7),
+        trialEndsAt: endsAt,
+        licenseStatus: LicenseStatus.TRIAL,
+        status: 'ACTIVE',
         maxUsers: 2,
         maxProducts: 100,
       },
       select: { id: true },
     });
+    await this.writeAuditLog(
+      companyId,
+      'license.trial_started',
+      { trialStartedAt: null, trialEndsAt: null, licenseStatus: company.licenseStatus },
+      { trialStartedAt: started, trialEndsAt: endsAt, licenseStatus: LicenseStatus.TRIAL },
+      { actorEmail: actorEmail ?? null, notes: 'Demo de 7 dias iniciada' },
+    );
+    return { startedAt: started, endsAt, days: 7 };
   }
 
+  /**
+   * Compuerta del **trabajo offline** (autorizacion de emergencia de 48 h).
+   *
+   * Solo se autoriza con acceso `FULL`: una licencia vencida o una cuenta
+   * suspendida pueden entrar a la app para renovar o pedir ayuda, pero **no**
+   * deben poder seguir vendiendo sin conexion, que es justo lo que la
+   * suspension tiene que impedir.
+   *
+   * El login ya no llama aqui: la app entra siempre y es
+   * `LicenseAccessInterceptor` el que limita las rutas con el nivel que calcula
+   * `resolveLicenseAccess`.
+   */
   async assertCompanyCanUseApp(companyId?: string | null) {
     const id = (companyId ?? '').trim();
     if (!id) return;
-    const status = await this.getCompanyLicenseStatus(id);
-    if (!status.isUsable) {
-      throw this.licenseInactiveException(status);
-    }
+    const access = await this.getLicenseAccess(id);
+    if (access.level === 'FULL') return;
+    throw this.licenseInactiveException(await this.getCompanyLicenseStatus(id));
+  }
+
+  /**
+   * Lectura minima para el JWT y el interceptor de acceso: una sola consulta a
+   * `Company`, sin contar usuarios ni productos.
+   */
+  async getLicenseAccess(companyId?: string | null): Promise<LicenseAccess> {
+    const id = (companyId ?? '').trim();
+    if (!id) return resolveLicenseAccess(null);
+    const company = await this.prisma.company.findUnique({
+      where: { id },
+      select: {
+        status: true,
+        licenseStatus: true,
+        trialEndsAt: true,
+        licenseExpiresAt: true,
+        licenseActivatedAt: true,
+      },
+    });
+    return resolveLicenseAccess(company);
   }
 
   async assertCanCreateUser(companyId: string) {
@@ -104,7 +193,15 @@ export class LicenseService {
 
   async getMyLicense(user: TenantUser) {
     const companyId = requireTenant(user);
-    return this.getCompanyLicenseStatus(companyId);
+    const status = await this.getCompanyLicenseStatus(companyId);
+    // La proxima cuota se calcula **solo** para esta ruta: las comprobaciones
+    // de cupo no pagan dos consultas extra por cada producto creado.
+    const renewal = await this.renewal.snapshot(companyId);
+    // El nivel de acceso (FULL/RESTRICTED/BLOCKED) sale de la **misma**
+    // politica que usa el guard y el login: la app no repite la regla de si la
+    // licencia vencio ni puede discrepar del servidor.
+    const access = await this.getLicenseAccess(companyId);
+    return { ...status, renewal, access };
   }
 
   async listAdminCompanies(params: {
@@ -197,23 +294,11 @@ export class LicenseService {
     };
   }
 
-  async activateMyLicense(user: TenantUser, dto: LicenseUpdateInput) {
-    this.requireAdmin(user);
-    const companyId = requireTenant(user);
-    return this.activateCompany(companyId, this.withRequestActor(user, dto));
-  }
-
-  async blockMyLicense(user: TenantUser, dto: LicenseUpdateInput) {
-    this.requireAdmin(user);
-    const companyId = requireTenant(user);
-    return this.blockCompany(companyId, this.withRequestActor(user, dto));
-  }
-
-  async updateMyLimits(user: TenantUser, dto: LicenseUpdateInput) {
-    this.requireAdmin(user);
-    const companyId = requireTenant(user);
-    return this.updateCompanyLicense(companyId, this.withRequestActor(user, dto));
-  }
+  // Los antiguos `activateMyLicense`, `blockMyLicense` y `updateMyLimits`
+  // (autoservicio del propietario) se eliminaron: permitian activar la
+  // licencia o ampliar cupos y fecha sin pagar. La activacion solo ocurre al
+  // subir el comprobante (`LicenseActivationService`) o desde el equipo con el
+  // secreto de administracion.
 
   async activateCompany(companyId: string, dto: LicenseUpdateInput) {
     const before = await this.companySnapshot(companyId);
@@ -390,6 +475,9 @@ export class LicenseService {
         licenseNotes: true,
         maxUsers: true,
         maxProducts: true,
+        maxWarehouses: true,
+        planCode: true,
+        planCatalogVersion: true,
         updatedAt: true,
       },
     });
@@ -467,6 +555,8 @@ export class LicenseService {
       companyName: company.name,
       slug: company.slug,
       plan: company.plan,
+      planCode: company.planCode,
+      planCatalogVersion: company.planCatalogVersion,
       licenseType: this.licenseType(company.plan, effectiveStatus, effectiveLimits),
       licenseTypeLabel: this.licenseTypeLabel(company.plan, effectiveStatus, effectiveLimits),
       status: effectiveStatus,
@@ -487,8 +577,10 @@ export class LicenseService {
       limits: {
         maxUsers: effectiveLimits.maxUsers,
         maxProducts: effectiveLimits.maxProducts,
+        maxWarehouses: company.maxWarehouses ?? 1,
         configuredMaxUsers: company.maxUsers,
         configuredMaxProducts: company.maxProducts,
+        configuredMaxWarehouses: company.maxWarehouses,
       },
       usage: {
         users,
@@ -536,13 +628,45 @@ export class LicenseService {
       throw new ForbiddenException(status.blockReason ?? 'Licencia no activa');
     }
 
-    const limit =
-      resource === 'users' ? status.limits.maxUsers : status.limits.maxProducts;
+    // El cupo sale del **plan + las excepciones vigentes** del CRM, no solo del
+    // numero copiado en la empresa: si soporte concede usuarios extra, tienen
+    // que servir de verdad.
+    const limits = await this.effectivePlanLimits(tx, companyId);
+    const limit = resource === 'users' ? limits.maxUsers : limits.maxProducts;
     const current =
       resource === 'users' ? status.usage.users : status.usage.products;
     if (limit > 0 && current >= limit) {
       throw this.planLimitReachedException(resource, limit, current, status.plan);
     }
+  }
+
+  /** Cupos vigentes: catalogo del plan + excepcion del CRM, si la hay. */
+  private async effectivePlanLimits(
+    tx: Prisma.TransactionClient,
+    companyId: string,
+  ) {
+    const [company, override] = await Promise.all([
+      tx.company.findUnique({
+        where: { id: companyId },
+        select: {
+          planCode: true,
+          planCatalogVersion: true,
+          maxUsers: true,
+          maxProducts: true,
+          maxWarehouses: true,
+        },
+      }),
+      tx.licenseCompanyOverride.findUnique({ where: { companyId } }),
+    ]);
+    if (!company) throw new ForbiddenException('Empresa no encontrada');
+    const plan = company.planCode
+      ? await tx.licensePlan.findUnique({ where: { code: company.planCode } })
+      : null;
+    const entitlements = buildEntitlements(company, plan, override);
+    return {
+      maxUsers: entitlements.maxUsers,
+      maxProducts: entitlements.maxProducts,
+    };
   }
 
   private async lockCompanyQuota(
@@ -899,29 +1023,36 @@ export class LicenseService {
     return company;
   }
 
+  /**
+   * Deja la empresa lista para borrarse.
+   *
+   * Antes se intentaba borrar tabla por tabla en orden alfabetico y fallaba con
+   * 500: entre tablas de la misma empresa hay claves foraneas
+   * `ON DELETE RESTRICT` (por ejemplo
+   * `terminals(company_id, default_warehouse_id) -> warehouses`), asi que
+   * `warehouses` se intentaba vaciar antes que `terminals`.
+   *
+   * La base ya esta bien disenada para esto: **todas** las claves foraneas hacia
+   * `companies` son `ON DELETE CASCADE` salvo dos (`users`, que el llamador
+   * desvincula, y `password_reset_audit_logs`, que se limpia aqui). Por eso el
+   * borrado del grafo completo lo hace Postgres en una sola sentencia al
+   * eliminar la empresa, y las dependencias RESTRICT entre tablas de la misma
+   * empresa se resuelven juntas en lugar de en un orden arbitrario.
+   *
+   * Las pruebas de la base local confirman que `DELETE FROM companies` con datos
+   * de inventario, terminales y comprobantes funciona.
+   */
   private async deleteCompanyOwnedRows(
     tx: Prisma.TransactionClient,
     companyId: string,
   ) {
-    const rows = await tx.$queryRaw<Array<{ table_name: string }>>(Prisma.sql`
-      SELECT table_name
-      FROM information_schema.columns
-      WHERE table_schema = 'public'
-        AND column_name = 'company_id'
-        AND table_name NOT IN ('companies', 'company_members', 'users')
-      ORDER BY table_name ASC
-    `);
-
-    for (const row of rows) {
-      const tableName = row.table_name;
-      if (!/^[a-zA-Z0-9_]+$/.test(tableName)) {
-        throw new Error(`Unsafe table name discovered: ${tableName}`);
-      }
-      await tx.$executeRawUnsafe(
-        `DELETE FROM "${tableName}" WHERE company_id = $1`,
-        companyId,
-      );
-    }
+    // Unica tabla con datos de la empresa que **no** cae en cascada. El cast es
+    // necesario: `$executeRawUnsafe` manda el parametro como texto y la columna
+    // es uuid (Postgres no compara uuid con text sin conversion explicita).
+    await tx.$executeRawUnsafe(
+      'DELETE FROM "password_reset_audit_logs" WHERE company_id = $1::uuid',
+      companyId,
+    );
   }
 
   private async writeAuditLog(

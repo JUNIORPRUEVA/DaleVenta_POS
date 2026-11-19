@@ -10,6 +10,12 @@ export type GuardianAlertPayload = {
   templateLanguage?: string;
   /** Parámetros posicionales del cuerpo de la plantilla HSM. */
   templateParams?: string[];
+  /**
+   * Imagen ya subida a Meta (`POST /{phoneNumberId}/media`). Si existe, la
+   * plantilla debe tener cabecera de tipo IMAGE. Es opcional: las alertas
+   * actuales siguen enviándose sin cabecera.
+   */
+  headerImageId?: string;
 };
 
 export type GuardianChannelClassification = 'transient' | 'permanent';
@@ -153,6 +159,15 @@ export class WhatsAppCloudChannel implements GuardianAlertChannel {
       type: 'text',
       text: String(value ?? '').slice(0, 400),
     }));
+    const headerImageId = String(payload.headerImageId ?? '').trim();
+    const components: Record<string, unknown>[] = [];
+    if (headerImageId) {
+      components.push({
+        type: 'header',
+        parameters: [{ type: 'image', image: { id: headerImageId } }],
+      });
+    }
+    if (params.length) components.push({ type: 'body', parameters: params });
 
     return {
       messaging_product: 'whatsapp',
@@ -164,7 +179,7 @@ export class WhatsAppCloudChannel implements GuardianAlertChannel {
           code:
             String(payload.templateLanguage ?? this.options.templateLanguage ?? 'es').trim() || 'es',
         },
-        ...(params.length ? { components: [{ type: 'body', parameters: params }] } : {}),
+        ...(components.length ? { components } : {}),
       },
     };
   }
