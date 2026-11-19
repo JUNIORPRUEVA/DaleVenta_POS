@@ -3,9 +3,17 @@
 Fecha: 2026-11-19
 Estado: procedimiento preparado. **No se ha desplegado nada.**
 
-Commit candidato local: `21f61aeb` (rama `agent/planes-de-pago-impl-20261116`).
+Commit candidato local: **`7f1abb04`** (rama `agent/planes-de-pago-impl-20261116`),
+compuesto por dos commits locales sin publicar:
+
+```
+7f1abb04 chore(license): candado de autorizacion en el backfill y plan de publicacion
+21f61aeb feat(license): sistema de planes, ordenes, comprobantes y migracion segura
+```
+
 Base: `origin/production-main` = `e6e7e8fc`. **No hay commits de producción que
-falten**: el commit candidato es esa base + el sistema de planes.
+falten**: el commit candidato es esa base + el sistema de planes (0 archivos
+borrados respecto a producción).
 
 ## 1. Respaldo previo (obligatorio)
 
@@ -50,6 +58,12 @@ El `Dockerfile` de `apps/api` ya:
 - copia `prisma/` (migraciones),
 - ejecuta `prisma generate` en el build,
 - arranca con `scripts/start-prod.sh`, que aplica `prisma migrate deploy`.
+
+> **Requisito que no está en Git:** `apps/fulltech_app/.env` es un *asset*
+> declarado en `pubspec.yaml` y está en `.gitignore`. Sin él, `flutter test` y
+> `flutter build` fallan con «No file or variants found for asset: .env». En la
+> máquina de build hay que crearlo (o copiarlo del servidor de forma segura).
+> Para producción, pasar además `--dart-define=API_BASE_URL=...` explícito.
 
 ## 4. Orden exacto en el servidor
 
