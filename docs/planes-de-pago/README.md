@@ -1,5 +1,10 @@
 # Planes de pago y administración de licencias
 
+Estado de integración IA/planes del 19/11:
+[procedencia, compatibilidad y salvaguardas vigentes](20-integracion-ia-planes-20261119.md).
+Las instrucciones históricas de migración automática no aplican al candidato
+integrado: mantener `RUN_MIGRATIONS=false` y revisar las migraciones manualmente.
+
 Rama de trabajo: `agent/planes-de-pago-20261116` (worktree `C:\src\fullpos-planes-de-pago-20261116`,
 base `production-main` @ `6b3e38ed`).
 

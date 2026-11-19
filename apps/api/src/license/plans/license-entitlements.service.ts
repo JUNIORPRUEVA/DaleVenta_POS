@@ -1,5 +1,6 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 
 /**
  * Funciones que el plan puede incluir o bloquear. El nombre es el que viaja en
@@ -74,8 +75,8 @@ export class LicenseEntitlementsService {
   /**
    * Paquete efectivo de la empresa: catalogo + excepciones vigentes.
    */
-  async getEntitlements(companyId: string): Promise<EffectiveEntitlements> {
-    const company = await this.prisma.company.findUnique({
+  async getEntitlements(companyId: string, db: Prisma.TransactionClient = this.prisma): Promise<EffectiveEntitlements> {
+    const company = await db.company.findUnique({
       where: { id: companyId },
       select: {
         planCode: true,
@@ -90,7 +91,7 @@ export class LicenseEntitlementsService {
     }
     const [plan, override] = await Promise.all([
       company.planCode
-        ? this.prisma.licensePlan.findUnique({
+        ? db.licensePlan.findUnique({
             where: { code: company.planCode },
             select: {
               code: true,
@@ -108,7 +109,7 @@ export class LicenseEntitlementsService {
             },
           })
         : Promise.resolve(null),
-      this.prisma.licenseCompanyOverride.findUnique({
+      db.licenseCompanyOverride.findUnique({
         where: { companyId },
         select: {
           extraUsers: true,
@@ -153,6 +154,7 @@ export class LicenseEntitlementsService {
    */
   async assertWarehouseSlot(companyId: string, currentWarehouses: number) {
     const entitlements = await this.getEntitlements(companyId);
+    if (entitlements.source === 'none') return entitlements;
     if (currentWarehouses < entitlements.maxWarehouses) return entitlements;
     throw new ForbiddenException({
       code: 'PLAN_LIMIT_WAREHOUSES',

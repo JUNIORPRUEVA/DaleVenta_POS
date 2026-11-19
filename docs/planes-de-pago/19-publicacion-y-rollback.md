@@ -1,5 +1,11 @@
 # 19 — Publicación y rollback
 
+> Procedimiento histórico, no ejecutable como aprobación del candidato integrado.
+> Ver [20-integracion-ia-planes-20261119.md](20-integracion-ia-planes-20261119.md).
+> Se conserva `RUN_MIGRATIONS=false`; las migraciones compartidas requieren
+> revisión y autorización manual separadas. No hacer seed/backfill ni desplegar
+> por seguir los comandos históricos de este archivo.
+
 Fecha: 2026-11-19
 Estado: procedimiento preparado. **No se ha desplegado nada.**
 

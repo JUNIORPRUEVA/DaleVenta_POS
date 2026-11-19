@@ -318,10 +318,12 @@ export class LicenseService {
    */
   async getAssistantAccountSummary(companyId: string) {
     const status = await this.getCompanyLicenseStatus(companyId);
+    const entitlements = await this.effectivePlanLimits(this.prisma, companyId);
     return {
       companyName: status.companyName,
       plan: status.plan,
-      planLabel: status.licenseTypeLabel,
+      planLabel: entitlements.planName ?? status.licenseTypeLabel,
+      planCode: entitlements.planCode,
       status: status.status,
       isUsable: status.isUsable,
       blockReason: status.blockReason,
@@ -330,8 +332,8 @@ export class LicenseService {
       daysRemaining: status.daysRemaining,
       isTrial: status.status === LicenseStatus.TRIAL,
       limits: {
-        maxUsers: status.limits.maxUsers,
-        maxProducts: status.limits.maxProducts,
+        maxUsers: entitlements.maxUsers,
+        maxProducts: entitlements.maxProducts,
       },
       usage: {
         users: status.usage.users,
@@ -580,7 +582,9 @@ export class LicenseService {
     const responsible = owner?.user ?? null;
     const legalResponsibleName = appConfig?.legalRepresentativeName?.trim() || null;
 
-    const effectiveLimits = this.effectiveLimits(company);
+    const effectiveLimits = company.planCode
+      ? await this.effectivePlanLimits(db, companyId)
+      : { ...this.effectiveLimits(company), maxWarehouses: company.maxWarehouses ?? 1 };
 
     const periodStart =
       effectiveStatus === LicenseStatus.TRIAL
@@ -618,7 +622,7 @@ export class LicenseService {
       limits: {
         maxUsers: effectiveLimits.maxUsers,
         maxProducts: effectiveLimits.maxProducts,
-        maxWarehouses: company.maxWarehouses ?? 1,
+        maxWarehouses: effectiveLimits.maxWarehouses,
         configuredMaxUsers: company.maxUsers,
         configuredMaxProducts: company.maxProducts,
         configuredMaxWarehouses: company.maxWarehouses,
@@ -683,7 +687,7 @@ export class LicenseService {
 
   /** Cupos vigentes: catalogo del plan + excepcion del CRM, si la hay. */
   private async effectivePlanLimits(
-    tx: Prisma.TransactionClient,
+    tx: PrismaExecutor,
     companyId: string,
   ) {
     const [company, override] = await Promise.all([
@@ -704,10 +708,7 @@ export class LicenseService {
       ? await tx.licensePlan.findUnique({ where: { code: company.planCode } })
       : null;
     const entitlements = buildEntitlements(company, plan, override);
-    return {
-      maxUsers: entitlements.maxUsers,
-      maxProducts: entitlements.maxProducts,
-    };
+    return entitlements;
   }
 
   private async lockCompanyQuota(

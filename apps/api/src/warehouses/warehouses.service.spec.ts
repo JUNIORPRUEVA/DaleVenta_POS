@@ -358,6 +358,7 @@ function buildService(
       findFirst: jest.fn(async () => null),
       create: jest.fn(),
     },
+    $queryRaw: jest.fn().mockResolvedValue([]),
     $transaction: jest.fn((input: any) =>
       Array.isArray(input) ? Promise.all(input) : input(api),
     ),

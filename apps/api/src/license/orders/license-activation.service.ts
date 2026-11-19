@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { CompanyPlan, LicenseStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { buildEntitlements } from '../plans/license-entitlements.service';
 
 export type ActivationResult = {
   planCode: string;
@@ -20,10 +21,8 @@ export type ActivationResult = {
 /**
  * Aplica el paquete de un plan a la empresa.
  *
- * Regla de negocio cerrada: al activar, **todo lo opcional queda apagado**.
- * El cliente enciende lo que necesita. Si el plan **no** incluye una funcion,
- * se apaga aunque estuviera encendida antes: no se puede quedar mas de lo que
- * se paga.
+ * Conserva los interruptores que el plan o una concesion vigente autorizan.
+ * Una funcion no incluida se apaga; activar un plan no enciende modulos.
  */
 @Injectable()
 export class LicenseActivationService {
@@ -66,18 +65,7 @@ export class LicenseActivationService {
   private async applyInTransaction(
     tx: Prisma.TransactionClient,
     companyId: string,
-    plan: {
-      code: string;
-      name: string;
-      version: number;
-      maxUsers: number;
-      maxProducts: number;
-      maxWarehouses: number;
-      ecf: boolean;
-      taxes: boolean;
-      wholesale: boolean;
-      uom: boolean;
-    },
+    plan: NonNullable<Parameters<typeof buildEntitlements>[1]>,
     months: number,
     now: Date,
   ): Promise<ActivationResult> {
@@ -116,13 +104,19 @@ export class LicenseActivationService {
         : now;
       const periodEnd = addMonths(periodStart, months);
 
+      const override = await tx.licenseCompanyOverride.findUnique({ where: { companyId } });
+      const effective = buildEntitlements({
+        planCode: plan.code, planCatalogVersion: plan.version,
+        maxUsers: plan.maxUsers, maxProducts: plan.maxProducts, maxWarehouses: plan.maxWarehouses,
+      }, plan, override, now);
+
       const turnedOff: string[] = [];
-      const ecfEnabled = plan.ecf ? company.ncfEnabled : false;
-      const taxesEnabled = plan.taxes ? company.taxEnabled : false;
-      const wholesaleEnabled = plan.wholesale
+      const ecfEnabled = effective.features.ecf ? company.ncfEnabled : false;
+      const taxesEnabled = effective.features.taxes ? company.taxEnabled : false;
+      const wholesaleEnabled = effective.features.wholesale
         ? company.wholesalePriceListsEnabled
         : false;
-      const uomEnabled = plan.uom ? company.measurementUnitsEnabled : false;
+      const uomEnabled = effective.features.uom ? company.measurementUnitsEnabled : false;
       if (company.ncfEnabled && !ecfEnabled) turnedOff.push('ncfEnabled');
       if (company.taxEnabled && !taxesEnabled) turnedOff.push('taxEnabled');
       if (company.wholesalePriceListsEnabled && !wholesaleEnabled) {

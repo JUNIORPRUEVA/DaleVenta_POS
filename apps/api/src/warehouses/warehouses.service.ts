@@ -104,6 +104,7 @@ export class WarehousesService {
     const name = this.cleanName(dto.name);
     const code = this.cleanCode(dto.code);
     return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM companies WHERE id = ${companyId}::uuid FOR UPDATE`;
       // Limite del plan dentro de la transaccion: dos altas simultaneas no
       // pueden pasarse del tope de almacenes.
       await this.assertWarehouseSlot(tx, companyId);
@@ -688,7 +689,9 @@ export class WarehousesService {
    * planes; lo que cambia es el tope (1 / 1 / 5 / 10 ampliable por excepcion).
    */
   private async assertWarehouseSlot(tx: Tx, companyId: string) {
-    const entitlements = await this.entitlements.getEntitlements(companyId);
+    const entitlements = await this.entitlements.getEntitlements(companyId, tx);
+    // Antes del catalogo no existia un limite comercial de almacenes.
+    if (entitlements.source === 'none') return;
     const active = await tx.warehouse.count({
       where: { companyId, isActive: true },
     });

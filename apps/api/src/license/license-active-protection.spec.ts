@@ -76,6 +76,7 @@ describe('proteccion de una licencia ACTIVA', () => {
     const expiresAt = new Date('2026-12-01T00:00:00.000Z');
     const update = jest.fn().mockResolvedValue({ id: 'company-1' });
     const tx = {
+      licenseCompanyOverride: { findUnique: jest.fn().mockResolvedValue(null) },
       // A1: la activacion bloquea la fila de la empresa antes de leer.
       $queryRaw: jest.fn().mockResolvedValue([{ id: 'company-1' }]),
       company: {

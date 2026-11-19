@@ -1,5 +1,11 @@
 # 18 — Preparación del despliegue (sin desplegar)
 
+> Procedimiento histórico. Para la integración IA/planes del 19/11 manda
+> [20-integracion-ia-planes-20261119.md](20-integracion-ia-planes-20261119.md):
+> conservar `RUN_MIGRATIONS=false`, revisar/aprobar migraciones manualmente y
+> no aplicar backfill. Las instrucciones automáticas de abajo no autorizan
+> operaciones productivas ni sustituyen esa revisión.
+
 Fecha: 2026-11-19
 Estado: **preparado y probado en local**. No se ha desplegado nada, ni se ha
 tocado la base de producción.
