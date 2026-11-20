@@ -1,9 +1,10 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, InternalServerErrorException, NotFoundException, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve, sep } from 'node:path';
 import { EVIDENCE_MAX_BYTES } from './license-evidence.validation';
+import { R2Service } from '../../storage/r2.service';
 
 /**
  * Tope unico por comprobante: 8 MB. El almacen y la validacion documental usan
@@ -53,13 +54,60 @@ export function evidenceSha256(buffer: Buffer) {
 }
 
 /**
- * Guarda los comprobantes en un directorio **privado**. Nunca en `/uploads`,
+ * Guarda los comprobantes en un directorio o bucket **privado**. Nunca en `/uploads`,
  * que se sirve sin autenticacion: un comprobante bancario no puede quedar
  * accesible por URL.
  */
 @Injectable()
 export class LicenseEvidenceStorage {
-  constructor(private readonly config: ConfigService) {}
+  private privateR2?: R2Service;
+
+  constructor(
+    private readonly config: ConfigService,
+    @Optional() private readonly r2?: R2Service,
+  ) {}
+
+  private privateBucket() {
+    const bucket = this.config.get<string>('LICENSE_EVIDENCE_R2_BUCKET')?.trim();
+    const mediaBucket = (this.config.get<string>('R2_BUCKET') ?? this.config.get<string>('R2_BUCKET_NAME') ?? '').trim();
+    if (!bucket || bucket === mediaBucket || !this.r2) {
+      throw new InternalServerErrorException('Almacenamiento privado de comprobantes no configurado.');
+    }
+    return bucket;
+  }
+
+  private transport() {
+    const accessKeyId = this.config.get<string>('LICENSE_EVIDENCE_R2_ACCESS_KEY_ID')?.trim();
+    const secretAccessKey = this.config.get<string>('LICENSE_EVIDENCE_R2_SECRET_ACCESS_KEY')?.trim();
+    if (Boolean(accessKeyId) !== Boolean(secretAccessKey)) {
+      throw new InternalServerErrorException('Credencial privada de comprobantes incompleta.');
+    }
+    if (!accessKeyId) return this.r2!;
+    if (!this.privateR2) {
+      this.privateR2 = new R2Service(new ConfigService({
+        R2_ENDPOINT: this.config.get<string>('R2_ENDPOINT') ?? this.config.get<string>('R2_S3_ENDPOINT') ?? this.config.get<string>('CLOUDFLARE_R2_ENDPOINT'),
+        R2_REGION: this.config.get<string>('R2_REGION') ?? 'auto',
+        R2_ACCESS_KEY_ID: accessKeyId,
+        R2_SECRET_ACCESS_KEY: secretAccessKey,
+        R2_BUCKET: this.privateBucket(),
+      }));
+    }
+    return this.privateR2;
+  }
+
+  private driver() {
+    const driver = this.config.get<string>('LICENSE_EVIDENCE_STORAGE_DRIVER')?.trim() || 'local';
+    if (driver !== 'local' && driver !== 'r2') {
+      throw new InternalServerErrorException('Almacenamiento de comprobantes no valido.');
+    }
+    return driver;
+  }
+
+  private assertCompany(companyId: string) {
+    if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(companyId)) {
+      throw new BadRequestException('Empresa de comprobante no valida.');
+    }
+  }
 
   rootDir() {
     const configured =
@@ -104,6 +152,18 @@ export class LicenseEvidenceStorage {
     ext: string;
     sha256: string;
   }) {
+    this.assertCompany(input.companyId);
+    const inspected = this.inspect(input.buffer, '');
+    if (inspected.sha256 !== input.sha256 || inspected.ext !== input.ext) {
+      throw new BadRequestException('El contenido del comprobante no coincide con su identificacion.');
+    }
+    if (this.driver() === 'r2') {
+      const bucket = this.privateBucket();
+      const objectKey = `license-evidence/companies/${input.companyId}/${input.sha256}.${input.ext}`;
+      await this.transport().putObject({ bucket, objectKey, body: input.buffer, contentType: inspected.mime });
+      // Persist the driver with the key so switching defaults never hides old files.
+      return { storageKey: `r2:${objectKey}` };
+    }
     const storageKey = `${input.companyId}/${input.sha256}.${input.ext}`;
     const absolutePath = this.resolveStorageKey(storageKey);
     await mkdir(this.resolveStorageKey(input.companyId), { recursive: true });
@@ -111,8 +171,23 @@ export class LicenseEvidenceStorage {
     return { storageKey, absolutePath };
   }
 
-  async read(storageKey: string) {
-    return readFile(this.resolveStorageKey(storageKey));
+  async read(storageKey: string, companyId: string) {
+    this.assertCompany(companyId);
+    const remote = storageKey.startsWith('r2:');
+    const key = remote ? storageKey.slice(3) : storageKey;
+    const relative = remote ? key.replace(/^license-evidence\/companies\//, '') : key;
+    const match = /^([0-9a-f-]{36})\/([0-9a-f]{64})\.(pdf|png|jpg)$/.exec(relative);
+    if (!match || match[1] !== companyId || (remote && !key.startsWith('license-evidence/companies/'))) {
+      throw new NotFoundException('No encontramos ese comprobante.');
+    }
+    const bucket = remote ? this.privateBucket() : null;
+    const buffer = remote
+      ? (await this.transport().getObject(key, bucket!)).body
+      : await readFile(this.resolveStorageKey(key));
+    if (buffer.length > MAX_EVIDENCE_BYTES || evidenceSha256(buffer) !== match[2]) {
+      throw new InternalServerErrorException('No se pudo verificar la integridad del comprobante.');
+    }
+    return buffer;
   }
 
   resolveStorageKey(storageKey: string) {

@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Query, Req, StreamableFile, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Header, Headers, Param, Patch, Post, Query, Req, StreamableFile, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
@@ -122,6 +122,7 @@ export class LicenseController {
   /** Descarga privada del comprobante: solo para la empresa dueña. */
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Get('orders/:id/evidence/:evidenceId')
+  @Header('Cache-Control', 'private, no-store')
   async downloadEvidence(
     @Req() req: Request,
     @Param('id') id: string,

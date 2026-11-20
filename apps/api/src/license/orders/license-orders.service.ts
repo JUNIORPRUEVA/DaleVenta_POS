@@ -771,7 +771,7 @@ export class LicenseOrdersService {
         message: 'No encontramos ese comprobante.',
       });
     }
-    const buffer = await this.storage.read(evidence.storageKey);
+    const buffer = await this.storage.read(evidence.storageKey, companyId);
     return { evidence, buffer };
   }
 
@@ -786,7 +786,7 @@ export class LicenseOrdersService {
         message: 'No encontramos ese comprobante.',
       });
     }
-    const buffer = await this.storage.read(evidence.storageKey);
+    const buffer = await this.storage.read(evidence.storageKey, evidence.companyId);
     return { evidence, buffer };
   }
 
