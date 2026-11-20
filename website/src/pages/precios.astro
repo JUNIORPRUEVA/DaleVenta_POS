@@ -31,8 +31,9 @@ const schema = {
           Prueba 7 días y elige tu plan
         </h1>
         <p class="lead">
-          Todos los planes incluyen los mismos módulos en todos tus dispositivos. Empiezas
-          con la prueba gratuita y pagas por transferencia bancaria al terminar.
+          Los cuatro planes corren en todos tus dispositivos. Cambian la capacidad, los
+          módulos incluidos y el nivel de soporte. Empiezas con la prueba gratuita y pagas
+          por transferencia bancaria al terminar.
         </p>
       </div>
 
@@ -101,6 +102,13 @@ const schema = {
               ))}
             </ul>
 
+            {plan.excluded && plan.excluded.length > 0 && (
+              <p class="plan-excluded">
+                <span class="plan-excluded-title">No incluye</span>
+                {plan.excluded.join(' · ')}
+              </p>
+            )}
+
             <p class="plan-platform">
               <svg
                 viewBox="0 0 24 24"
@@ -136,6 +144,11 @@ const schema = {
       </div>
 
       <p class="pricing-hint only-mobile" aria-hidden="true">Desliza para ver los 4 planes →</p>
+
+      <p class="plans-note">
+        Los módulos que incluye tu plan llegan apagados: tú activas desde Configuración
+        los que necesites, cuando los necesites. Nada se enciende solo.
+      </p>
 
       <p class="plans-note">
         La postulación e-CF se hace con el asistente guiado incluido en el plan. La

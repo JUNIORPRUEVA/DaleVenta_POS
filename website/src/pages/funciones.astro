@@ -17,7 +17,8 @@ import { moduleGroups, icons, site, cta, waLink, billing } from '../config/site'
         </h1>
         <p class="lead">
           Todo lo que necesitas para operar, ordenado por cómo lo usas. Sin módulos que no
-          existen y sin promesas que no se cumplen.
+          existen y sin promesas que no se cumplen. Cada módulo indica desde qué plan está
+          incluido.
         </p>
       </div>
 
@@ -40,6 +41,7 @@ import { moduleGroups, icons, site, cta, waLink, billing } from '../config/site'
                     />
                   </span>
                   {item.name}
+                  {item.plans && <span class="module-tag">{item.plans}</span>}
                 </li>
               ))}
             </ul>
@@ -69,9 +71,9 @@ import { moduleGroups, icons, site, cta, waLink, billing } from '../config/site'
       </ol>
 
       <div class="note" style="margin-top: 22px">
-        <strong>Facturación electrónica:</strong> es uno de los módulos incluidos. Se
-        configura según las reglas fiscales de tu negocio y el equipo te acompaña en el
-        proceso.
+        <strong>Facturación electrónica:</strong> está incluida desde el plan Negocio y no
+        está disponible en Básico. Se configura según las reglas fiscales de tu negocio y
+        el equipo te acompaña en el proceso.
       </div>
 
       <div class="hero-actions" style="margin-top: 26px; margin-bottom: 0">

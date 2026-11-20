@@ -313,6 +313,7 @@ class CashTurnMenuButton extends ConsumerWidget {
     final unverified = ref.watch(cashStateUnverifiedProvider);
     final requiresReview = ref.watch(cashStateRequiresReviewProvider);
     final reviewMessage = ref.watch(cashStateReviewMessageProvider);
+    final staleShift = ref.watch(cashStateStaleShiftProvider);
 
     return PopupMenuButton<String>(
       tooltip: 'Estado del turno',
@@ -350,6 +351,20 @@ class CashTurnMenuButton extends ConsumerWidget {
               helpText:
                   'Sin conexión: el estado del turno no está confirmado con '
                   'el servidor y se actualizará al recuperar conexión.',
+            ),
+          ),
+        // ─────────────────── TURNO DE OTRO DÍA ───────────────────
+        // Aviso antes de vender: el turno abierto no admite operaciones del
+        // día hasta cerrarlo. La acción de cierre está justo debajo.
+        if (staleShift && !requiresReview)
+          const PopupMenuItem(
+            enabled: false,
+            padding: EdgeInsets.zero,
+            child: _TurnMenuNotice(
+              icon: Icons.event_busy_rounded,
+              label: 'Turno de otro día',
+              helpText:
+                  'Cierra este turno y abre uno nuevo para poder facturar.',
             ),
           ),
         // ─────────────────── TURNO ABIERTO (5 opciones) ───────────────────
@@ -496,6 +511,7 @@ class CashTurnMenuButton extends ConsumerWidget {
       child: _TurnTopbarButton(
         open: active != null,
         unverified: unverified,
+        stale: staleShift,
         compact: compact,
         refined: refined,
       ),
@@ -509,12 +525,14 @@ class _TurnTopbarButton extends StatefulWidget {
     required this.unverified,
     required this.compact,
     required this.refined,
+    this.stale = false,
   });
 
   final bool open;
   final bool unverified;
   final bool compact;
   final bool refined;
+  final bool stale;
 
   @override
   State<_TurnTopbarButton> createState() => _TurnTopbarButtonState();
@@ -555,6 +573,7 @@ class _TurnTopbarButtonState extends State<_TurnTopbarButton>
       return RefinedTurnChip(
         open: open,
         unverified: widget.unverified,
+        stale: widget.stale,
         activity: open
             ? _TurnLiveDot(animation: _pulse, compact: true)
             : const _TurnClosedDot(
@@ -569,7 +588,7 @@ class _TurnTopbarButtonState extends State<_TurnTopbarButton>
     final borderColor = open
         ? const Color(0xFF9FB6C8)
         : const Color(0xFF9FB6C8);
-    final label = open ? 'Abierto' : 'Cerrado';
+    final label = widget.stale ? 'Otro día' : (open ? 'Abierto' : 'Cerrado');
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,

@@ -31,6 +31,7 @@ import '../../core/errors/api_exception.dart';
 import '../../features/onboarding/presentation/widgets/activation_tour_overlay.dart';
 import '../../core/errors/user_safe_error_text.dart';
 import '../../core/license/license_repository.dart';
+import '../../features/plans/data/plans_repository.dart';
 import '../../core/models/user_model.dart';
 import '../../core/models/product_model.dart';
 import '../../core/offline/sync_status_menu_button.dart';
@@ -45,6 +46,7 @@ import '../../core/routing/routes.dart';
 import '../../core/tax/product_tax_preview_calculator.dart';
 import '../../core/tax/product_tax_options_provider.dart';
 import '../../core/theme/app_colors.dart';
+import '../../features/plans/presentation/widgets/plan_ui.dart';
 import '../../core/time/business_time.dart';
 import '../../core/uom/uom_formatters.dart';
 import '../../core/utils/build_phase.dart';
@@ -10715,6 +10717,10 @@ class _CompanyAccountMenu extends ConsumerWidget {
           ref.watch(authStateProvider).user,
           AppPermission.manageSettings,
         );
+    // Aviso discreto: solo cuando hay una cuota por pagar sin comprobante.
+    final hasPendingPayment =
+        ref.watch(licenseStatusProvider).valueOrNull?.renewal?.order?.isPayable ==
+            true;
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: PopupMenuButton<String>(
@@ -10764,17 +10770,18 @@ class _CompanyAccountMenu extends ConsumerWidget {
             padding: EdgeInsets.zero,
             child: _CompanyMenuItem(
               icon: Icons.verified_user_outlined,
-              label: 'Licencias',
+              label: 'Plan actual',
+              badge: hasPendingPayment,
               onTap: () => _activateProtectedPanel(
                 context,
                 ref,
                 menuContext,
                 permission: AppPermission.manageSettings,
-                label: 'Licencias',
+                label: 'Plan actual',
                 child: const _CompanyLicensesSidePanel(),
               ),
               helpText:
-                  'Resume el estado de la empresa activa, el plan disponible y la preparación del sistema para trabajo multiempresa.',
+                  'Tu plan, su estado, el uso real y las acciones para transferir, ver el historial o cambiar a un plan superior.',
             ),
           ),
           PopupMenuItem(
@@ -10947,21 +10954,28 @@ class _CompanyLicensesSidePanel extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final company = ref.watch(companySettingsProvider);
     final licenseAsync = ref.watch(licenseStatusProvider);
-    final companyName = company.maybeWhen(
-      data: (settings) => settings.companyName.trim().isEmpty
-          ? 'DaleVenta POS'
-          : settings.companyName.trim(),
-      orElse: () => 'DaleVenta POS',
-    );
+    final catalog = ref.watch(plansCatalogProvider).valueOrNull;
+    final license = licenseAsync.valueOrNull;
+    // El nombre del plan sale del catalogo (la etiqueta heredada `STANDARD`
+    // del backend no es el plan real de la empresa).
+    final planName = license == null
+        ? null
+        : currentPlanName(license, catalog ?? const <PlanOffer>[]);
+    final statusColors = license == null
+        ? null
+        : _licenseStatusColors(license.status);
 
     return _CompanySidePanelScaffold(
-      icon: Icons.verified_user_outlined,
-      title: 'Licencias',
-      subtitle: 'Estado de uso, empresa activa y alcance contratado.',
+      title: planName ?? 'Tu plan',
+      trailing: license == null || statusColors == null
+          ? null
+          : _LicenseStatusPill(
+              label: _licenseStatusLabel(license.status),
+              fg: statusColors.$1,
+              bg: statusColors.$2,
+            ),
       children: [
-        _LicenseAccountCard(companyName: companyName),
         ...licenseAsync.when(
           loading: () => const [_LicenseLoadingTile()],
           error: (error, _) => [
@@ -10972,24 +10986,212 @@ class _CompanyLicensesSidePanel extends ConsumerWidget {
               ),
             ),
           ],
-          data: (license) => [_LicenseDetailsCard(license: license)],
+          data: (license) => [
+            _LicensePlanCard(
+              license: license,
+              plan: _planOfferFor(license, catalog),
+            ),
+          ],
         ),
-        _LicenseUpgradeCard(onPressed: () => _openUpgradeWhatsApp(context)),
+        // Acciones segun el estado: activa (plan superior + transferencia) o
+        // suspendida (regularizar el pago).
+        const _PlanActionsCard(),
       ],
     );
   }
 }
 
-void _openUpgradeWhatsApp(BuildContext context) {
-  safeOpenWhatsApp(
-    context,
-    Uri(
-      scheme: 'https',
-      host: 'wa.me',
-      path: '18295319442',
-      queryParameters: {'text': 'Quiero hacer un upgrade'},
-    ),
-  );
+/// Acciones del plan segun su estado, con el mismo lenguaje visual que la
+/// seccion Planes: tarjetas y botones rectos.
+class _PlanActionsCard extends ConsumerWidget {
+  const _PlanActionsCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final license = ref.watch(licenseStatusProvider).valueOrNull;
+    if (license == null) return const SizedBox.shrink();
+
+    // Se captura el router antes de cerrar el panel. La pagina se abre a
+    // pantalla completa (fuera del armazon del POS) y su boton «regresar»
+    // vuelve al punto de venta por la ruta de respaldo.
+    final router = GoRouter.of(context);
+    void open(String path) {
+      Navigator.of(context).maybePop();
+      router.go(path);
+    }
+
+    // Estado real del cobro, calculado por el servidor.
+    final order = license.renewal?.order;
+    final orderStatus = (order?.status ?? '').toUpperCase();
+    final pending =
+        orderStatus == 'AWAITING_TRANSFER' || orderStatus == 'CREATED';
+    final inReview =
+        orderStatus == 'UNCONFIRMED' || orderStatus == 'EVIDENCE_RECEIVED';
+    final planCode = (license.renewal?.planCode ?? license.planCode ?? '').trim();
+    // Si ya esta en el tope, el boton pide la mejora a soporte (la pantalla de
+    // planes muestra el ticket en vez de planes que no existen).
+    final catalog = ref.watch(plansCatalogProvider).valueOrNull ?? const <PlanOffer>[];
+    final currentPrice = _planOfferFor(license, catalog)?.monthlyPrice;
+    final hasSuperior =
+        currentPrice == null || catalog.any((plan) => plan.monthlyPrice > currentPrice);
+    final upgradeLabel =
+        hasSuperior ? 'Cambiar a un plan superior' : 'Solicitar mejora de plan';
+    // Con un pago pendiente se entra al detalle **ya preparado** para generar
+    // la orden y transferir; sin pendiente, al centro de pagos.
+    final payPath = pending && planCode.isNotEmpty
+        ? '${Routes.planesPago}?plan=$planCode&paso=pagar'
+        : Routes.planesPago;
+    final payLabel = pending ? 'Realizar pago' : 'Transferencia';
+
+    if (!license.isUsable) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.errorSoft,
+          border: Border.all(color: AppColors.errorBorder),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Tu licencia requiere atención',
+              style: TextStyle(
+                fontSize: 14.5,
+                fontWeight: FontWeight.w800,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Revisa su estado y las opciones de pago. Si existe un bloqueo, contacta a soporte.',
+              style: TextStyle(
+                fontSize: 12.5,
+                height: 1.4,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 12),
+            SquareButton(
+              label: pending ? 'Realizar pago' : 'Transferir y subir comprobante',
+              icon: Icons.upload_file_rounded,
+              onPressed: () => open(payPath),
+            ),
+            const SizedBox(height: 8),
+            SquareButton(
+              label: upgradeLabel,
+              variant: SquareVariant.ghost,
+              icon: Icons.trending_up_rounded,
+              onPressed: () => open('${Routes.planesCatalogo}?superiores=1'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final upgradeButton = SquareButton(
+      label: upgradeLabel,
+      icon: Icons.trending_up_rounded,
+      onPressed: () => open('${Routes.planesCatalogo}?superiores=1'),
+    );
+    final transferButton = SquareButton(
+      label: inReview ? 'Ver estado del pago' : payLabel,
+      variant: SquareVariant.outline,
+      icon: pending
+          ? Icons.payments_outlined
+          : Icons.account_balance_outlined,
+      onPressed: () => open(inReview ? Routes.planesPago : payPath),
+    );
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (pending) ...[
+            Text(
+              license.periodEndsAt == null
+                  ? 'Pago pendiente'
+                  : 'Pago pendiente · vence el ${_shortLicenseDate(license.periodEndsAt!)}',
+              style: const TextStyle(
+                fontSize: 12,
+                height: 1.35,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFFB45309),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+          upgradeButton,
+          const SizedBox(height: 8),
+          transferButton,
+        ],
+      ),
+    );
+  }
+}
+
+/// Punto de aviso discreto: late despacio y solo aparece cuando hay una cuota
+/// pendiente de pago. No usa temporizadores sueltos: el controlador se libera
+/// con el widget.
+class _PendingDot extends StatefulWidget {
+  const _PendingDot();
+
+  @override
+  State<_PendingDot> createState() => _PendingDotState();
+}
+
+class _PendingDotState extends State<_PendingDot>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1100),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) {
+        final t = Curves.easeInOut.transform(_controller.value);
+        return Opacity(
+          opacity: 0.45 + (t * 0.55),
+          child: Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: const Color(0xFFF59E0B),
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFF59E0B).withValues(alpha: 0.35 * t),
+                  blurRadius: 6,
+                  spreadRadius: 1,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Fecha corta para los avisos del panel (dd/MM/aaaa).
+String _shortLicenseDate(DateTime value) {
+  final local = value.toLocal();
+  return '${local.day.toString().padLeft(2, '0')}/'
+      '${local.month.toString().padLeft(2, '0')}/${local.year}';
 }
 
 String _licenseStatusLabel(String status) {
@@ -11099,134 +11301,70 @@ class _LicenseErrorTile extends StatelessWidget {
   }
 }
 
-class _LicenseAccountCard extends StatelessWidget {
-  const _LicenseAccountCard({required this.companyName});
-
-  final String companyName;
-
-  @override
-  Widget build(BuildContext context) {
-    return _CompanySideSurface(
-      child: Column(
-        children: [
-          Row(
-            children: [
-              _CompanySideIcon(icon: Icons.business_rounded, size: 30),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Empresa activa', style: _companySideBodyStyle()),
-                    const SizedBox(height: 2),
-                    Text(
-                      companyName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: _companySideTitleStyle(15),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LicenseDetailsCard extends StatefulWidget {
-  const _LicenseDetailsCard({required this.license});
+/// Datos del plan contratado. Solo lo que fija el catalogo —usuarios,
+/// productos y almacenes— mas la vigencia: la empresa y los datos de la
+/// cuenta ya los muestra la cabecera del POS, aqui serian repeticion.
+class _LicensePlanCard extends StatelessWidget {
+  const _LicensePlanCard({required this.license, this.plan});
 
   final LicenseStatusModel license;
-
-  @override
-  State<_LicenseDetailsCard> createState() => _LicenseDetailsCardState();
-}
-
-class _LicenseDetailsCardState extends State<_LicenseDetailsCard> {
-  bool _expanded = false;
+  final PlanOffer? plan;
 
   @override
   Widget build(BuildContext context) {
-    final license = widget.license;
-    final statusLabel = _licenseStatusLabel(license.status);
-    final (fg, bg) = _licenseStatusColors(license.status);
-    final hasKey =
-        license.licenseKey != null && license.licenseKey!.trim().isNotEmpty;
-    final hasNotes = license.notes != null && license.notes!.trim().isNotEmpty;
-    final account = license.account;
-    final responsible = account?.responsibleName?.trim();
-    final whatsapp = account?.responsibleWhatsapp?.trim();
-    final businessPhone = account?.businessPhone?.trim();
-    final taxId = account?.taxId?.trim();
-    final businessAddress = account?.businessAddress?.trim();
-    final legalRole = account?.legalRepresentativeRole?.trim();
     final usersExceeded =
         license.maxUsers > 0 && license.users > license.maxUsers;
     final productsExceeded =
         license.maxProducts > 0 && license.products > license.maxProducts;
+    final warehouses = plan?.maxWarehouses ?? license.maxWarehouses;
+    final price = plan == null
+        ? null
+        : money(plan!.monthlyPrice, plan!.currency);
+    // Beneficios del catalogo. Los tres primeros elementos de `included` son
+    // usuarios, productos y almacenes, que ya se muestran como capacidad.
+    final benefits = (plan?.included ?? const <String>[]).skip(3).toList();
 
     return _CompanySideSurface(
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('PLAN CONTRATADO', style: _licenseSectionStyle()),
-                    const SizedBox(height: 4),
-                    Text(
-                      license.planLabel,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: _companySideTitleStyle(17),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 10),
-              _LicenseStatusPill(label: statusLabel, fg: fg, bg: bg),
-            ],
+          _LicenseMeter(
+            icon: Icons.people_outline_rounded,
+            title: 'Usuarios',
+            used: license.users,
+            max: license.maxUsers,
           ),
-          const SizedBox(height: 14),
-          const _CompanySideDivider(),
-          const SizedBox(height: 12),
-          Text('DATOS DE LA CUENTA', style: _licenseSectionStyle()),
-          const SizedBox(height: 6),
-          _LicenseInfoRow(
-            label: 'Negocio',
-            value: account?.businessName?.trim().isNotEmpty == true
-                ? account!.businessName!
-                : license.companyName,
+          const SizedBox(height: 10),
+          _LicenseMeter(
+            icon: Icons.inventory_2_outlined,
+            title: 'Productos',
+            used: license.products,
+            max: license.maxProducts,
           ),
-          if (responsible != null && responsible.isNotEmpty)
-            _LicenseInfoRow(label: 'Responsable', value: responsible),
-          if (legalRole != null && legalRole.isNotEmpty)
-            _LicenseInfoRow(label: 'Cargo', value: legalRole),
-          if (whatsapp != null && whatsapp.isNotEmpty)
-            _LicenseInfoRow(label: 'WhatsApp', value: whatsapp),
-          if (businessPhone != null &&
-              businessPhone.isNotEmpty &&
-              businessPhone != whatsapp)
-            _LicenseInfoRow(label: 'Teléfono negocio', value: businessPhone),
-          if (taxId != null && taxId.isNotEmpty)
-            _LicenseInfoRow(label: 'RNC/Cédula', value: taxId),
-          const SizedBox(height: 14),
-          const _CompanySideDivider(),
-          const SizedBox(height: 12),
-          Text('VIGENCIA', style: _licenseSectionStyle()),
-          const SizedBox(height: 6),
-          _LicenseInfoRow(label: 'Tipo', value: license.typeLabel),
-          if (license.acquiredAt != null)
-            _LicenseInfoRow(
-              label: 'Inicio',
-              value: _licenseDateLabel(license.acquiredAt),
+          if (license.planCode?.trim().isNotEmpty == true) ...[
+            const SizedBox(height: 10),
+            _LicenseCapacityRow(
+              icon: Icons.storefront_outlined,
+              title: 'Almacenes',
+              value: warehouses > 1 ? 'Hasta $warehouses' : '1',
             ),
+          ],
+          if (usersExceeded || productsExceeded) ...[
+            const SizedBox(height: 10),
+            _LicenseLimitBanner(
+              message: [
+                if (usersExceeded)
+                  'Usuarios: ${license.users} de ${license.maxUsers}',
+                if (productsExceeded)
+                  'Productos: ${license.products} de ${license.maxProducts}',
+              ].join(' · '),
+            ),
+          ],
+          const SizedBox(height: 10),
+          const _CompanySideDivider(),
+          const SizedBox(height: 4),
+          if (price != null)
+            _LicenseInfoRow(label: 'Mensualidad', value: price),
           if (license.periodEndsAt != null)
             _LicenseInfoRow(
               label: 'Vence',
@@ -11238,65 +11376,93 @@ class _LicenseDetailsCardState extends State<_LicenseDetailsCard> {
               value: _licenseRemainingLabel(license),
               valueColor: _licenseRemainingColor(license),
             ),
-          const SizedBox(height: 14),
-          const _CompanySideDivider(),
-          const SizedBox(height: 12),
-          Text('USO DE LA LICENCIA', style: _licenseSectionStyle()),
-          const SizedBox(height: 10),
-          _LicenseMeter(
-            icon: Icons.people_outline_rounded,
-            title: 'Usuarios',
-            used: license.users,
-            max: license.maxUsers,
-          ),
-          const SizedBox(height: 14),
-          _LicenseMeter(
-            icon: Icons.inventory_2_outlined,
-            title: 'Productos',
-            used: license.products,
-            max: license.maxProducts,
-          ),
-          if (usersExceeded || productsExceeded) ...[
-            const SizedBox(height: 12),
-            _LicenseLimitBanner(
-              message: [
-                if (usersExceeded)
-                  'Usuarios: ${license.users} de ${license.maxUsers}',
-                if (productsExceeded)
-                  'Productos: ${license.products} de ${license.maxProducts}',
-              ].join(' · '),
-            ),
-          ],
-          if ((businessAddress != null && businessAddress.isNotEmpty) ||
-              hasKey ||
-              hasNotes) ...[
-            const SizedBox(height: 0),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: () => setState(() => _expanded = !_expanded),
-                icon: Icon(
-                  _expanded
-                      ? Icons.keyboard_arrow_up_rounded
-                      : Icons.keyboard_arrow_down_rounded,
-                ),
-                label: Text(_expanded ? 'Ver menos' : 'Ver más'),
+          if (benefits.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            const _CompanySideDivider(),
+            const SizedBox(height: 8),
+            const Text(
+              'INCLUYE',
+              style: TextStyle(
+                color: Color(0xFF7A8B9F),
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.8,
               ),
             ),
-            if (_expanded) ...[
-              const SizedBox(height: 6),
-              const _CompanySideDivider(),
-              const SizedBox(height: 12),
-              if (businessAddress != null && businessAddress.isNotEmpty)
-                _LicenseInfoRow(label: 'Dirección', value: businessAddress),
-              if (hasKey)
-                _LicenseInfoRow(label: 'Clave', value: license.licenseKey!),
-              if (hasNotes)
-                _LicenseInfoRow(label: 'Notas', value: license.notes!),
-            ],
+            const SizedBox(height: 6),
+            for (final benefit in benefits)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.check_rounded,
+                      size: 15,
+                      color: Color(0xFF15803D),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        benefit,
+                        style: _companySideBodyStyle(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
           ],
         ],
       ),
+    );
+  }
+}
+
+/// Promocion del catalogo que corresponde al codigo de plan de la licencia.
+PlanOffer? _planOfferFor(LicenseStatusModel license, List<PlanOffer>? catalog) {
+  final code = license.planCode?.trim().toLowerCase();
+  if (code == null || code.isEmpty || catalog == null) return null;
+  for (final plan in catalog) {
+    if (plan.code.toLowerCase() == code) return plan;
+  }
+  return null;
+}
+
+/// Capacidad del plan sin medidor: la licencia no informa almacenes en uso.
+class _LicenseCapacityRow extends StatelessWidget {
+  const _LicenseCapacityRow({
+    required this.icon,
+    required this.title,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String title;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: const Color(0xFF64748B)),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: _companySideBodyStyle(),
+          ),
+        ),
+        Text(
+          value,
+          style: const TextStyle(
+            color: Color(0xFF183548),
+            fontSize: 13,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -11449,14 +11615,11 @@ class _LicenseMeter extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 6),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: LinearProgressIndicator(
-            value: fraction,
-            minHeight: 6,
-            backgroundColor: const Color(0xFFE9F0F6),
-            valueColor: AlwaysStoppedAnimation<Color>(barColor),
-          ),
+        LinearProgressIndicator(
+          value: fraction,
+          minHeight: 6,
+          backgroundColor: const Color(0xFFE9F0F6),
+          valueColor: AlwaysStoppedAnimation<Color>(barColor),
         ),
       ],
     );
@@ -11480,7 +11643,6 @@ class _LicenseStatusPill extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         label,
@@ -11495,75 +11657,6 @@ class _LicenseStatusPill extends StatelessWidget {
   }
 }
 
-class _LicenseUpgradeCard extends StatelessWidget {
-  const _LicenseUpgradeCard({required this.onPressed});
-
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF0F6FF),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFC9DCFB)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const _CompanySideIcon(icon: Icons.upgrade_rounded, size: 28),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Solicitar upgrade',
-                      style: _companySideTitleStyle(15),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Más usuarios, más productos o un plan superior.',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: _companySideBodyStyle(),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: onPressed,
-              icon: const Icon(Icons.chat_rounded, size: 18),
-              label: const Text('Solicitar upgrade'),
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF25D366),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                textStyle: const TextStyle(
-                  fontWeight: FontWeight.w900,
-                  fontSize: 13.5,
-                  letterSpacing: 0,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _CompanySideDivider extends StatelessWidget {
   const _CompanySideDivider();
 
@@ -11571,16 +11664,6 @@ class _CompanySideDivider extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(height: 1, color: const Color(0xFFE8EEF4));
   }
-}
-
-TextStyle _licenseSectionStyle() {
-  return const TextStyle(
-    color: Color(0xFF7A8B9F),
-    fontSize: 11,
-    fontWeight: FontWeight.w800,
-    letterSpacing: 0.8,
-    height: 1.2,
-  );
 }
 
 Color _licenseRemainingColor(LicenseStatusModel license) {
@@ -11591,15 +11674,13 @@ Color _licenseRemainingColor(LicenseStatusModel license) {
 
 class _CompanySidePanelScaffold extends StatelessWidget {
   const _CompanySidePanelScaffold({
-    required this.icon,
     required this.title,
-    required this.subtitle,
+    this.trailing,
     required this.children,
   });
 
-  final IconData icon;
   final String title;
-  final String subtitle;
+  final Widget? trailing;
   final List<Widget> children;
 
   @override
@@ -11630,7 +11711,7 @@ class _CompanySidePanelScaffold extends StatelessWidget {
             child: Column(
               children: [
                 Container(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 10, 13),
+                  padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
                   decoration: const BoxDecoration(
                     color: Colors.white,
                     border: Border(
@@ -11639,37 +11720,23 @@ class _CompanySidePanelScaffold extends StatelessWidget {
                   ),
                   child: Row(
                     children: [
-                      _CompanySideIcon(icon: icon, size: 40),
-                      const SizedBox(width: 12),
                       Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              title,
-                              style: const TextStyle(
-                                color: Color(0xFF0F172A),
-                                fontSize: 18,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 0,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              subtitle,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Color(0xFF52667C),
-                                fontSize: 12.5,
-                                height: 1.25,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 0,
-                              ),
-                            ),
-                          ],
+                        child: Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Color(0xFF0F172A),
+                            fontSize: 19,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0,
+                          ),
                         ),
                       ),
+                      if (trailing != null) ...[
+                        const SizedBox(width: 8),
+                        trailing!,
+                      ],
                       IconButton(
                         tooltip: 'Cerrar',
                         onPressed: () => Navigator.of(context).maybePop(),
@@ -11681,9 +11748,10 @@ class _CompanySidePanelScaffold extends StatelessWidget {
                 ),
                 Expanded(
                   child: ListView.separated(
-                    padding: const EdgeInsets.all(16),
+                    // Margen lateral minimo: la columna debe verse llena.
+                    padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
                     itemBuilder: (context, index) => children[index],
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
                     itemCount: children.length,
                   ),
                 ),
@@ -11707,42 +11775,11 @@ class _CompanySideSurface extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: _billingBorderColor),
       ),
       child: child,
     );
   }
-}
-
-class _CompanySideIcon extends StatelessWidget {
-  const _CompanySideIcon({required this.icon, this.size = 34});
-
-  final IconData icon;
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: const Color(0xFFF2F7FF),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: _billingBorderColor),
-      ),
-      child: Icon(icon, size: size * 0.48, color: const Color(0xFF1957E6)),
-    );
-  }
-}
-
-TextStyle _companySideTitleStyle(double size) {
-  return TextStyle(
-    color: const Color(0xFF0F172A),
-    fontSize: size,
-    fontWeight: FontWeight.w900,
-    letterSpacing: 0,
-  );
 }
 
 TextStyle _companySideBodyStyle() {
@@ -12096,6 +12133,7 @@ class _CompanyMenuItem extends StatefulWidget {
     required this.onTap,
     required this.helpText,
     this.danger = false,
+    this.badge = false,
   });
 
   final IconData icon;
@@ -12103,6 +12141,8 @@ class _CompanyMenuItem extends StatefulWidget {
   final VoidCallback onTap;
   final String helpText;
   final bool danger;
+  /// Punto pulsante de aviso (por ejemplo, cuota pendiente de pago).
+  final bool badge;
 
   @override
   State<_CompanyMenuItem> createState() => _CompanyMenuItemState();
@@ -12151,16 +12191,26 @@ class _CompanyMenuItemState extends State<_CompanyMenuItem> {
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: Text(
-                        widget.label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: textColor,
-                          fontWeight: FontWeight.w900,
-                          fontSize: 13,
-                          letterSpacing: 0,
-                        ),
+                      child: Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              widget.label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: textColor,
+                                fontWeight: FontWeight.w900,
+                                fontSize: 13,
+                                letterSpacing: 0,
+                              ),
+                            ),
+                          ),
+                          if (widget.badge) ...[
+                            const SizedBox(width: 6),
+                            const _PendingDot(),
+                          ],
+                        ],
                       ),
                     ),
                     IconButton(

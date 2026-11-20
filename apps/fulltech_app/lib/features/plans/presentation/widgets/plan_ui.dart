@@ -63,7 +63,7 @@ class SquareButton extends StatelessWidget {
               ? BorderSide.none
               : BorderSide(color: disabled ? AppColors.border : border),
           padding: const EdgeInsets.symmetric(horizontal: 18),
-          textStyle: const TextStyle(
+          textStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
             fontSize: 13.5,
             fontWeight: FontWeight.w700,
             letterSpacing: 0.2,

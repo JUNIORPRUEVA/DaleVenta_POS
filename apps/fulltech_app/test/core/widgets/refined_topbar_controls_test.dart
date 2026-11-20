@@ -30,6 +30,41 @@ void main() {
     )..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'))).load();
   });
 
+  testWidgets('el chip distingue turno abierto, de otro día y cerrado', (
+    tester,
+  ) async {
+    Future<void> pumpChip({required bool open, required bool stale}) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(useMaterial3: true),
+          home: Scaffold(
+            body: Center(
+              child: RefinedTurnChip(
+                open: open,
+                unverified: false,
+                stale: stale,
+                activity: const SizedBox(width: 8, height: 8),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    await pumpChip(open: true, stale: false);
+    expect(find.text('Turno abierto'), findsOneWidget);
+
+    // Un turno de un día anterior NO puede presentarse como operativo: si el
+    // vendedor lo confunde, descubre el problema sólo al cobrar (409).
+    await pumpChip(open: true, stale: true);
+    expect(find.text('Turno de otro día'), findsOneWidget);
+    expect(find.text('Turno abierto'), findsNothing);
+
+    await pumpChip(open: false, stale: false);
+    expect(find.text('Turno cerrado'), findsOneWidget);
+  });
+
   for (final width in [1280.0, 960.0, 900.0]) {
     testWidgets('AppBar alineado sin desbordamientos en $width', (
       tester,
