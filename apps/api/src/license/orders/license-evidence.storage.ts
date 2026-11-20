@@ -60,6 +60,8 @@ export function evidenceSha256(buffer: Buffer) {
  */
 @Injectable()
 export class LicenseEvidenceStorage {
+  private privateR2?: R2Service;
+
   constructor(
     private readonly config: ConfigService,
     @Optional() private readonly r2?: R2Service,
@@ -72,6 +74,25 @@ export class LicenseEvidenceStorage {
       throw new InternalServerErrorException('Almacenamiento privado de comprobantes no configurado.');
     }
     return bucket;
+  }
+
+  private transport() {
+    const accessKeyId = this.config.get<string>('LICENSE_EVIDENCE_R2_ACCESS_KEY_ID')?.trim();
+    const secretAccessKey = this.config.get<string>('LICENSE_EVIDENCE_R2_SECRET_ACCESS_KEY')?.trim();
+    if (Boolean(accessKeyId) !== Boolean(secretAccessKey)) {
+      throw new InternalServerErrorException('Credencial privada de comprobantes incompleta.');
+    }
+    if (!accessKeyId) return this.r2!;
+    if (!this.privateR2) {
+      this.privateR2 = new R2Service(new ConfigService({
+        R2_ENDPOINT: this.config.get<string>('R2_ENDPOINT') ?? this.config.get<string>('R2_S3_ENDPOINT') ?? this.config.get<string>('CLOUDFLARE_R2_ENDPOINT'),
+        R2_REGION: this.config.get<string>('R2_REGION') ?? 'auto',
+        R2_ACCESS_KEY_ID: accessKeyId,
+        R2_SECRET_ACCESS_KEY: secretAccessKey,
+        R2_BUCKET: this.privateBucket(),
+      }));
+    }
+    return this.privateR2;
   }
 
   private driver() {
@@ -139,7 +160,7 @@ export class LicenseEvidenceStorage {
     if (this.driver() === 'r2') {
       const bucket = this.privateBucket();
       const objectKey = `license-evidence/companies/${input.companyId}/${input.sha256}.${input.ext}`;
-      await this.r2!.putObject({ bucket, objectKey, body: input.buffer, contentType: inspected.mime });
+      await this.transport().putObject({ bucket, objectKey, body: input.buffer, contentType: inspected.mime });
       // Persist the driver with the key so switching defaults never hides old files.
       return { storageKey: `r2:${objectKey}` };
     }
@@ -161,7 +182,7 @@ export class LicenseEvidenceStorage {
     }
     const bucket = remote ? this.privateBucket() : null;
     const buffer = remote
-      ? (await this.r2!.getObject(key, bucket!)).body
+      ? (await this.transport().getObject(key, bucket!)).body
       : await readFile(this.resolveStorageKey(key));
     if (buffer.length > MAX_EVIDENCE_BYTES || evidenceSha256(buffer) !== match[2]) {
       throw new InternalServerErrorException('No se pudo verificar la integridad del comprobante.');

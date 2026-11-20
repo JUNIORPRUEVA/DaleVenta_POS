@@ -277,3 +277,36 @@ Pendientes: verificar bucket privado sin dominio público ni r2.dev, permisos de
 la credencial y subida/descarga sintética efectiva en Cloudflare. Después revisar
 commit/PR y autorizar configuración/deploy. Mantener NO-GO productivo hasta cerrar
 esas comprobaciones. No se cambiaron licencias, numeraciones ni permisos DOSA.
+
+### Verificación externa y credencial independiente
+
+El propietario creó `fullpos-private-license-evidence` en la cuenta comprobada
+contra el endpoint del backend. El panel muestra Standard, 0 B y Public Access:
+Disabled. La consulta individual de r2.dev/dominios sigue pendiente: la entrada
+nativa del navegador no permitió abrir Settings. No se cambió ninguna clave.
+
+La prueba autorizada de subida de un PDF totalmente ficticio mediante la
+credencial actual devolvió HTTP403 AccessDenied. No se subió ningún archivo,
+accedió a la base de datos ni activó una licencia. Por tanto, esa credencial no
+sirve actualmente para escribir en el bucket nuevo.
+
+El adaptador admite ahora una pareja opcional independiente:
+LICENSE_EVIDENCE_R2_ACCESS_KEY_ID / LICENSE_EVIDENCE_R2_SECRET_ACCESS_KEY. Usa el
+mismo endpoint y transporte existente con esa pareja solo para recibos. Las
+credenciales generales de media se conservan; no se amplían sus permisos ni se
+rotan. La pareja incompleta bloquea la operación antes de hacer una petición.
+Si no se configura una pareja, se conserva la compatibilidad con instalaciones
+cuyo token general ya tenga acceso autorizado al bucket privado.
+
+Se probaron contra HTTP local las firmas de la credencial privada para PUT/GET
+y el uso posterior de la credencial de media en su bucket original, además del
+rechazo de parejas incompletas. Una credencial real nueva, limitada a este bucket,
+requiere autorización específica y un manejo privado; no se crea desde el código
+ni se debe pegar en el chat. Continúan pendientes su vinculación y prueba real.
+
+Revalidación de esta corrección: build API PASS; TypeScript estricto de las pruebas
+de Storage PASS; 3.053 pruebas backend PASS (597 opt-in omitidas); 19 pruebas de
+pagos con PostgreSQL local PASS; 23 pruebas específicas Storage/HTTP PASS.
+El primer intento de Prisma generate encontró EPERM al reemplazar su DLL mientras
+las pruebas PostgreSQL la usaban en Windows. Se esperó su cierre y se repitió el
+build secuencialmente con resultado PASS; no se alteraron dependencias ni flags.

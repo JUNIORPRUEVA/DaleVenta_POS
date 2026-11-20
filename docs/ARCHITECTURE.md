@@ -298,6 +298,12 @@ Subscription bank receipts retain their authenticated order/evidence endpoints.
 `LICENSE_EVIDENCE_R2_BUCKET`, distinct from the existing media bucket. The S3
 transport reuses the current R2 endpoint/credentials; ordinary media callers
 retain their default bucket. No public URL or uploads key is created for receipts.
+If the media credential is restricted, configure both
+LICENSE_EVIDENCE_R2_ACCESS_KEY_ID and LICENSE_EVIDENCE_R2_SECRET_ACCESS_KEY with a
+credential limited to the private bucket. The receipt adapter uses the same R2
+transport with that credential, leaving global media credentials unchanged.
+Partial private credentials fail closed before a request. No credential is
+created, rotated or granted access by application startup.
 Keys persist `r2:license-evidence/companies/<companyId>/<sha256>.<ext>`; legacy
 `<companyId>/<sha256>.<ext>` keys still read from LICENSE_EVIDENCE_DIR, independently
 of the current write driver. Reads validate company ownership and file integrity;

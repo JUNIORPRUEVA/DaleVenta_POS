@@ -13,11 +13,13 @@ describe('Private evidence through the existing S3 transport (local HTTP fixture
   let r2: R2Service;
   let settings: Record<string, string>;
   const requests: { method: string; path: string }[] = [];
+  const accessKeys: string[] = [];
   const body = Buffer.from('%PDF-1.7\nsynthetic receipt\n%%EOF');
 
   beforeAll(async () => {
     server = createServer((req, res) => {
       requests.push({ method: req.method!, path: req.url!.split('?')[0] });
+      accessKeys.push(req.headers.authorization?.includes('Credential=synthetic-private-access/') ? 'private' : 'media');
       req.resume();
       req.on('end', () => {
         if (req.method === 'GET') { res.setHeader('Content-Type', 'application/pdf'); res.end(body); }
@@ -29,7 +31,7 @@ describe('Private evidence through the existing S3 transport (local HTTP fixture
     r2 = new R2Service({ get: (key: string) => settings[key] } as unknown as ConfigService);
   });
   afterAll(async () => { await new Promise<void>(resolve => server.close(() => resolve())); });
-  beforeEach(() => { requests.length = 0; });
+  beforeEach(() => { requests.length = 0; accessKeys.length = 0; });
 
   it('retains the default bucket for existing upload and download callers', async () => {
     await r2.putObject({ objectKey: 'uploads/existing.pdf', body, contentType: 'application/pdf' });
@@ -60,5 +62,22 @@ describe('Private evidence through the existing S3 transport (local HTTP fixture
       expect(requests).toHaveLength(2);
       expect(requests.every(request => request.path.startsWith('/private-receipts/'))).toBe(true);
     } finally { await module.close(); }
+  });
+
+  it('uses a dedicated receipt credential without replacing the media credential', async () => {
+    const privateConfig = { ...settings, LICENSE_EVIDENCE_R2_ACCESS_KEY_ID: 'synthetic-private-access', LICENSE_EVIDENCE_R2_SECRET_ACCESS_KEY: 'synthetic-private-secret-not-real' };
+    const storage = new LicenseEvidenceStorage(new ConfigService(privateConfig), r2);
+    const companyId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const saved = await storage.save({ companyId, buffer: body, ext: 'pdf', sha256: evidenceSha256(body) });
+    await expect(storage.read(saved.storageKey, companyId)).resolves.toEqual(body);
+    await r2.getObject('uploads/existing.pdf');
+    expect(accessKeys).toEqual(['private', 'private', 'media']);
+    expect(requests[2].path).toBe('/public-media/uploads/existing.pdf');
+  });
+
+  it('rejects partial private credentials before making an HTTP request', async () => {
+    const storage = new LicenseEvidenceStorage(new ConfigService({ ...settings, LICENSE_EVIDENCE_R2_ACCESS_KEY_ID: 'synthetic-private-access' }), r2);
+    await expect(storage.save({ companyId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', buffer: body, ext: 'pdf', sha256: evidenceSha256(body) })).rejects.toThrow('incompleta');
+    expect(requests).toHaveLength(0);
   });
 });
