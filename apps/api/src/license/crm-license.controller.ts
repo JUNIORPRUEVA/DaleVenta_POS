@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Headers, Param, Post, Query, StreamableFile } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Header, Headers, Param, Post, Query, StreamableFile } from '@nestjs/common';
 import { CrmLicenseService } from './crm-license.service';
 import { LicenseService } from './license.service';
 import { LicenseOrdersService } from './orders/license-orders.service';
@@ -63,6 +63,7 @@ export class CrmLicenseController {
     return this.orders.saveEvidenceInsights({ orderId, evidenceId, raw: body ?? {} });
   }
   @Get('orders/:orderId/evidence/:evidenceId')
+  @Header('Cache-Control', 'private, no-store')
   async downloadEvidence(
     @Param('orderId') orderId: string,
     @Param('evidenceId') evidenceId: string,

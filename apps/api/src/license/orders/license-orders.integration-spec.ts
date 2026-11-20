@@ -204,6 +204,59 @@ suite('Pago de planes con PostgreSQL aislado', () => {
     expect(await db.licensePaymentEvidence.count({ where: { companyId } })).toBe(1);
   });
 
+  it('conserva la descarga privada de archivos locales para la empresa y el puente administrativo', async () => {
+    const order = await orders.createOrder(user, { planCode: 'pro', months: 1 });
+    const paid = await orders.uploadEvidence(user, order.id, {
+      originalname: 'local.pdf', mimetype: 'application/pdf', size: PDF_A.length, buffer: PDF_A,
+    });
+    await expect(orders.getEvidence(user, order.id, paid.evidence.id)).resolves.toMatchObject({ buffer: PDF_A });
+    await expect(orders.getAdminEvidence(order.id, paid.evidence.id)).resolves.toMatchObject({ buffer: PDF_A });
+    await expect(orders.getEvidence({ ...user, companyId: randomUUID() }, order.id, paid.evidence.id)).rejects.toThrow('No encontramos');
+    await expect(orders.getEvidence(user, randomUUID(), paid.evidence.id)).rejects.toThrow('No encontramos');
+  });
+
+  it('una caida de R2 no registra evidencia ni activa o modifica la licencia', async () => {
+    const config = { get: (key: string) => ({ LICENSE_EVIDENCE_STORAGE_DRIVER: 'r2',
+      LICENSE_EVIDENCE_R2_BUCKET: 'synthetic-private-receipts', R2_BUCKET: 'synthetic-public-media',
+    } as Record<string, string>)[key] } as unknown as ConfigService;
+    const r2 = { putObject: jest.fn().mockRejectedValue(new Error('synthetic R2 unavailable')) };
+    const service = new LicenseOrdersService(db as never, config, new LicenseActivationService(db as never),
+      new LicenseEvidenceStorage(config, r2 as never), new LicenseProvisionalService(),
+      { extractText: jest.fn() } as never);
+    const order = await service.createOrder(user, { planCode: 'pro', months: 1 });
+    const before = await db.company.findUniqueOrThrow({ where: { id: companyId } });
+    await expect(service.uploadEvidence(user, order.id, { originalname: 'failed.pdf',
+      mimetype: 'application/pdf', size: PDF_A.length, buffer: PDF_A,
+    })).rejects.toThrow('synthetic R2 unavailable');
+    expect(await db.licensePaymentEvidence.count({ where: { companyId } })).toBe(0);
+    expect(await db.company.findUniqueOrThrow({ where: { id: companyId } })).toEqual(before);
+    expect((await db.licensePaymentOrder.findUniqueOrThrow({ where: { id: order.id } })).status).toBe('AWAITING_TRANSFER');
+  });
+
+  it('persiste claves R2 sin cambiar el contrato y bloquea la descarga desde otra empresa', async () => {
+    const config = { get: (key: string) => ({
+      LICENSE_EVIDENCE_STORAGE_DRIVER: 'r2', LICENSE_EVIDENCE_R2_BUCKET: 'synthetic-private-receipts',
+      R2_BUCKET: 'synthetic-public-media',
+    } as Record<string, string>)[key] } as unknown as ConfigService;
+    const r2 = { putObject: jest.fn().mockResolvedValue({ ok: true }), getObject: jest.fn().mockResolvedValue({ body: PDF_A }) };
+    const service = new LicenseOrdersService(db as never, config, new LicenseActivationService(db as never),
+      new LicenseEvidenceStorage(config, r2 as never), new LicenseProvisionalService(),
+      { extractText: async () => ({ ok: false, engine: 'synthetic', error: 'not-configured' }) } as never);
+    const order = await service.createOrder(user, { planCode: 'pro', months: 1 });
+    const paid = await service.uploadEvidence(user, order.id, {
+      originalname: 'r2.pdf', mimetype: 'application/pdf', size: PDF_A.length, buffer: PDF_A,
+    });
+    expect(paid.activated).toBe(false);
+    const evidence = await db.licensePaymentEvidence.findFirstOrThrow({ where: { companyId, id: paid.evidence.id } });
+    expect(evidence.storageKey).toMatch(/^r2:license-evidence\/companies\//);
+    await expect(service.getEvidence(user, order.id, evidence.id)).resolves.toMatchObject({ buffer: PDF_A });
+    await expect(service.getAdminEvidence(order.id, evidence.id)).resolves.toMatchObject({ buffer: PDF_A });
+    r2.getObject.mockClear();
+    await expect(service.getEvidence({ ...user, companyId: randomUUID() }, order.id, evidence.id)).rejects.toThrow('No encontramos');
+    expect(r2.getObject).not.toHaveBeenCalled();
+    expect((await db.company.findUniqueOrThrow({ where: { id: companyId } })).licenseStatus).toBe('TRIAL');
+  });
+
   it('renueva sumando al vencimiento existente', async () => {
     const first = await orders.createOrder(user, { planCode: 'pro', months: 1 });
     const one = await orders.uploadEvidence(user, first.id, {

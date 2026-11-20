@@ -109,14 +109,15 @@ export class R2Service {
     return uploadUrl;
   }
 
-  async putObject(params: { objectKey: string; body: Buffer | Uint8Array; contentType: string }) {
-    if (!this.bucket) {
+  async putObject(params: { objectKey: string; body: Buffer | Uint8Array; contentType: string; bucket?: string }) {
+    const bucket = params.bucket ?? this.bucket;
+    if (!bucket) {
       throw new InternalServerErrorException('R2 bucket no configurado');
     }
 
     await this.s3.send(
       new PutObjectCommand({
-        Bucket: this.bucket,
+        Bucket: bucket,
         Key: params.objectKey,
         Body: params.body,
         ContentType: params.contentType,
@@ -141,14 +142,14 @@ export class R2Service {
     });
   }
 
-  async getObject(objectKey: string) {
-    if (!this.bucket) {
+  async getObject(objectKey: string, bucket = this.bucket) {
+    if (!bucket) {
       throw new InternalServerErrorException('R2 bucket no configurado');
     }
 
     const res = (await this.s3.send(
       new GetObjectCommand({
-        Bucket: this.bucket,
+        Bucket: bucket,
         Key: objectKey,
       }),
     )) as GetObjectCommandOutput;

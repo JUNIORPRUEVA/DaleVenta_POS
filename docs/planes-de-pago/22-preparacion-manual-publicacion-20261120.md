@@ -104,10 +104,22 @@ un manifiesto del 20/11 no demuestra que otro día el servidor siga igual.
 La cuenta oficial ya fue confirmada por el propietario. Preparar su registro
 explícito con los mismos datos de Planes; no inventar otra ni incluirla en Git.
 
-La ruta de evidencias propuesta es privada y persistente. Agregar un volumen
-dedicado sin sustituir montajes existentes. Si la ruta ya tiene archivos cuando
-se vaya a intervenir, detenerse y preparar su respaldo/traslado verificado;
-un montaje vacío no debe ocultar comprobantes ya guardados.
+Actualización autorizada por el propietario: preferir Storage R2 para los recibos
+bancarios. Preparar un bucket dedicado **privado**, distinto del de media y sin
+dominio público ni acceso r2.dev. Verificar esas restricciones en Cloudflare y
+probar que una petición sin autorización no puede descargar un recibo sintético.
+Después de esa comprobación, habilitar LICENSE_EVIDENCE_STORAGE_DRIVER=r2 y
+LICENSE_EVIDENCE_R2_BUCKET con las credenciales R2 existentes autorizadas para ese
+bucket. No cambiar la privacidad del bucket de imágenes ni publicar enlaces de
+recibos. Esta revisión del código no crea buckets ni cambia producción.
+
+Conservar la ruta local y sus montajes para leer archivos antiguos. Si contiene
+archivos, respaldarlos antes de cualquier traslado; no moverlos ni reescribir
+storageKey automáticamente. La auditoría de solo lectura del 20/11 encontró cero
+archivos en la ruta productiva propuesta, pero debe repetirse antes de aplicar.
+Una caída de R2 debe impedir confirmar la subida; no guardar silenciosamente en
+un disco efímero. Tras la primera subida en R2 no revertir a un backend que
+desconozca esas claves. El esquema y las licencias existentes no cambian.
 
 Para OCR, configurar el destino interno propuesto, protocolo de trabajos y token
 de integración con permisos mínimos, verificando empresa y vencimiento. No usar
@@ -216,3 +228,52 @@ completar permisos, configuración, artefactos y verificaciones correspondientes
 El manifiesto final se genera fuera de Git a partir del commit limpio y conserva
 el digest de reversión y los siete hashes SQL. No contiene credenciales ni una
 autorización implícita de aplicación.
+
+## 7. Storage privado R2 — implementación local del 20/11/2026
+
+Rama `agent/private-license-evidence-r2-20261120`, basada en el merge `1f94a12c`.
+El propietario autorizó adaptar los recibos bancarios a Storage. No se creó un
+bucket real, cambió configuración productiva, publicó código ni ejecutó deploy.
+
+- Driver R2 opt-in, con bucket distinto del de media y transporte SDK existente.
+- Empresa, orden y recibo se validan en el backend. Storage también comprueba
+  empresa y SHA-256; no genera URLs públicas ni claves bajo uploads.
+- Claves persistidas distinguen R2 de archivos locales históricos. No hay
+  reescritura de registros ni traslado automático de archivos.
+- Descargas del cliente y del puente administrativo usan private/no-store.
+- Una caída de R2 no crea evidencia ni modifica licencia o confirma el pago.
+  No se guarda silenciosamente en disco efímero.
+
+Validaciones ejecutadas en el worktree aislado:
+
+| Comando / alcance | Resultado |
+| --- | --- |
+| `npm run api:build` | PASS, Prisma generate y TypeScript |
+| `npm --workspace apps/api test` | 262 suites / 3.051 PASS; 57 suites / 596 pruebas opt-in omitidas en esa ejecución |
+| Storage + SDK S3 contra HTTP en loopback | PASS, buckets ordinario/privado, lectura local, corrupción, denegación entre empresas y DI real de LicenseModule |
+| `npm --workspace apps/api run test:integration -- --runTestsByPath src/license/orders/license-orders.integration-spec.ts` | 19 PASS, PostgreSQL desechable en 127.0.0.1:56701/appyra_license_e2e |
+| TypeScript estricto de las pruebas unitarias modificadas y nuevas | PASS |
+| `git diff --check` | PASS |
+
+La base y los documentos de prueba son ficticios. El servidor HTTP S3 es un
+fixture local: no demuestra permisos ni privacidad en Cloudflare. PostgreSQL
+ejercita el nuevo Storage con un cliente R2 simulado; el transporte SDK se prueba
+por separado contra HTTP local. No se emitieron e-CF reales. Flutter no cambió;
+no se atribuyen a esta fase pruebas visuales ni de impresoras.
+
+Incidencias corregidas de los fixtures: ruta inicial de prueba inexistente;
+PostgreSQL inaccesible desde Windows por una red Docker internal (se usó red
+propia y puerto solo en loopback); dependencia global de realtime ausente en la
+prueba aislada de DI (se añadió un doble explícito sin red). Las pruebas indicadas
+arriba pasaron después de esas correcciones.
+
+Una comprobación estricta adicional del archivo de integración encontró cuatro
+TS18047 preexistentes sobre one.license/two.license, líneas 222/223/226/227 del
+commit base. Se reprodujeron con los archivos originales de Git y no se tocaron
+esas aserciones. Build productivo y 19 pruebas PostgreSQL pasan. El chequeo
+estricto de las pruebas unitarias modificadas y nuevas también pasa.
+
+Pendientes: verificar bucket privado sin dominio público ni r2.dev, permisos de
+la credencial y subida/descarga sintética efectiva en Cloudflare. Después revisar
+commit/PR y autorizar configuración/deploy. Mantener NO-GO productivo hasta cerrar
+esas comprobaciones. No se cambiaron licencias, numeraciones ni permisos DOSA.

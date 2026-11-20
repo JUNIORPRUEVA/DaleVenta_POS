@@ -293,6 +293,23 @@ implied by these source changes.
 
 OWNER VALIDATION REQUIRED for commercial plan limits and current production license policy.
 
+Subscription bank receipts retain their authenticated order/evidence endpoints.
+`LICENSE_EVIDENCE_STORAGE_DRIVER=r2` opts new writes into a dedicated private
+`LICENSE_EVIDENCE_R2_BUCKET`, distinct from the existing media bucket. The S3
+transport reuses the current R2 endpoint/credentials; ordinary media callers
+retain their default bucket. No public URL or uploads key is created for receipts.
+Keys persist `r2:license-evidence/companies/<companyId>/<sha256>.<ext>`; legacy
+`<companyId>/<sha256>.<ext>` keys still read from LICENSE_EVIDENCE_DIR, independently
+of the current write driver. Reads validate company ownership and file integrity;
+CRM admin downloads retain the existing private bridge authorization. Responses
+use private/no-store caching. Failed R2 writes never silently switch to disk.
+The bucket's disabled public access must be verified externally before rollout;
+the application cannot infer Cloudflare bucket privacy from an object key.
+No database migration or historical-key rewrite is required. After the first R2
+receipt is persisted, keep a backend that understands the new keys; an older
+backend cannot read those receipts. Preserve legacy storage and retain the
+private bucket setting even if reverting the new-write driver to local.
+
 ## Inventory and Warehouse Architecture
 
 Inventory is represented through products, warehouse stock, inventory movements, transfers, terminals, and zero-config state. Relevant modules:

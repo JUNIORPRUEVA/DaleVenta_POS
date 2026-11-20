@@ -246,7 +246,7 @@ export class LicenseNotifierService implements OnModuleInit {
     });
     if (!evidence) return null;
     try {
-      const buffer = await this.storage.read(evidence.storageKey);
+      const buffer = await this.storage.read(evidence.storageKey, companyId);
       const uploaded = await this.meta.uploadMedia({
         buffer,
         mime: evidence.mime,

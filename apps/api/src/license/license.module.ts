@@ -21,10 +21,11 @@ import { MetaCloudClient } from './notifications/meta-cloud.client';
 import { LicenseNotifierService } from './notifications/license-notifier.service';
 import { LicenseReminderScheduler } from './notifications/license-reminder.scheduler';
 import { LicenseAccessInterceptor } from './license-access.interceptor';
+import { StorageModule } from '../storage/storage.module';
 
 @Global()
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, StorageModule],
   controllers: [LicenseController, CrmLicenseController, CompanyActivityController],
   providers: [
     LicenseService,
