@@ -42,6 +42,8 @@ Final checks for square buttons:14 tests PASS, Astro check0 errors/0 warnings
 (same existing hint), static build14 routes PASS. Visual inspection in the VS Code
 browser confirms square header/hero/mobile bar/WhatsApp/drawer buttons, mobile
 login actions and desktop home actions. No authentication form was submitted.
+Owner's final exception: restore the floating WhatsApp button to50% radius;
+its pulse inherits the circle. All other action buttons stay square.
 
 Historical authorizations and production state below do not extend this task.
 

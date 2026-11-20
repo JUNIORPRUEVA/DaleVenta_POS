@@ -3092,7 +3092,7 @@ dialog.sheet::backdrop {
   height: 58px;
   display: grid;
   place-items: center;
-  border-radius: var(--button-radius);
+  border-radius: 50%;
   background: #25d366;
   color: #fff;
   box-shadow:

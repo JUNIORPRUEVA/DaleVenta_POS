@@ -89,8 +89,9 @@ up to340px wide, with square outer and action corners, a close button and
 bottom registration/plan actions. Omit the phone number from this drawer.
 
 Owner's public website button style (2026-11-20): square corners, using
-`--button-radius: 0` for marketing, navigation, drawer, plan, download, floating
-WhatsApp and authentication actions. Keep existing colors, focus states and touch
+`--button-radius: 0` for marketing, navigation, drawer, plan, download and
+authentication actions. The floating WhatsApp button and its pulse stay circular
+as an explicit owner-approved exception. Keep existing colors, focus states and touch
 areas. The standalone preparation page uses the same0px corners. Decorative
 chips, cards and status indicators retain their own shapes.
 
