@@ -73,6 +73,27 @@ void main() {
     },
   );
 
+  test(
+    'a cash session from a previous day asks to close and reopen the shift',
+    () {
+      const raw =
+          '{"code":"CASH_SESSION_STALE","errorCode":"CASH_SESSION_STALE",'
+          '"sessionId":"54648624-a0ce-49f3-ae62-b8a3c1febb2a",'
+          '"message":"Este turno es de un día anterior y ya no puede recibir '
+          'operaciones."}';
+      for (final data in [
+        raw,
+        {'code': 'CASH_SESSION_STALE', 'errorCode': 'CASH_SESSION_STALE'},
+      ]) {
+        final message = customerOperationErrorMessage(data, statusCode: 409)!;
+        expect(message, contains('turno de caja'));
+        expect(message, contains('Ciérralo y abre un turno nuevo'));
+        expect(message, contains('facturar'));
+        expect(message, isNot(contains('necesita revisión')));
+      }
+    },
+  );
+
   test('Dio conversion retains diagnostics and the nonretryable conflict', () {
     final request = RequestOptions(path: '/sales', method: 'POST');
     final error = DioException(

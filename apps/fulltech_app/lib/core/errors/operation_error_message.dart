@@ -42,6 +42,13 @@ String? customerOperationErrorMessage(Object? source, {int? statusCode}) {
   if (text.contains('offline_protocol_unsupported')) {
     return 'Esta función necesita una actualización del servicio para sincronizarse. Contacta a soporte y conserva las operaciones pendientes en este equipo.';
   }
+  // Un turno de caja de un día anterior es un estado conocido y accionable:
+  // decirlo así evita el mensaje genérico de 409, que invita a "revisar el
+  // historial" cuando en realidad solo hay que cerrar y abrir el turno.
+  if (text.contains('cash_session_stale')) {
+    return 'El turno de caja abierto es de un día anterior y ya no admite '
+        'ventas. Ciérralo y abre un turno nuevo para poder facturar.';
+  }
   if (text.contains('offline_sync_conflict') ||
       statusCode == 409 ||
       RegExp(r'\b409\b').hasMatch(text)) {
