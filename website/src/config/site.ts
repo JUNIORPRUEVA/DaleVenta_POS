@@ -579,11 +579,11 @@ export const faqs = [
   },
   {
     q: '¿Puedo tener varios usuarios?',
-    a: 'Sí. Puedes crear usuarios y asignarles permisos por rol. La cantidad incluida en cada plan se confirma al contratar.',
+    a: 'Sí. Básico incluye 1 usuario; Negocio, 3; Pro, 4; y Empresa, 7. Puedes asignar permisos por rol a los usuarios de tu negocio.',
   },
   {
     q: '¿Incluye facturación electrónica?',
-    a: 'Sí, es uno de los módulos del sistema. Se configura según las reglas fiscales de tu negocio y el equipo te acompaña en el proceso.',
+    a: 'Está incluida desde el plan Negocio; Básico no incluye facturación electrónica ni impuestos (ITBIS). Activas el módulo desde Configuración y completas la postulación con el asistente guiado. La aprobación depende de la DGII; el certificado digital y el acompañamiento gestionado se contratan por separado.',
   },
   {
     q: '¿Qué soporte ofrecen?',

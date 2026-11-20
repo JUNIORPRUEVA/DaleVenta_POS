@@ -1,5 +1,50 @@
 # Execution State
 
+## Current work — final public website refinements (2026-11-20)
+
+Worktree C:/src/fullpos-detalles-finales-importante; branch
+detalles-finales-importante, created at PR52 HEAD0c16a76a. Owner requests local
+website corrections and a VS Code preview. No push, merge or deployment requested.
+
+Prices and user/product/warehouse limits match the existing backend catalogue
+(seed read as source only). Preserve the agreed commercial e-CF wording without
+publishing numeric e-CF quotas. Clarified FAQ user limits and e-CF eligibility;
+home/pricing now explicitly identify Negocio/Pro/Empresa for the guided assistant.
+Mobile marketing header scrolls with the root document at widths up to900px;
+desktop stays sticky. Larger mobile plan text, badge clearance, keyboard-focusable
+comparison carousels and explicit menu close; same-page links close the popover.
+
+Validation: website14 tests PASS, Astro check0 errors/0 warnings (existing
+returnValue deprecation hint), static build14 routes PASS. Native VS Code browser
+inspection: home, pricing and menu at approximately420px and narrow pricing at
+approximately320px; desktop pricing inspected at approximately1900px. Vertical
+scroll moves mobile header out of view; horizontal scroll reaches Negocio with
+its full recommendation badge visible. Local preview http://127.0.0.1:4325/.
+Browser toolbar hiding on a physical Android Chrome device is not verified;
+the page preserves native document scrolling and cannot force Chrome's toolbar.
+
+Owner follow-up: replace the separate two-line notice with a single24px line
+inside the header: "Facturación electrónica disponible", white background and
+subtle moving1px accent respecting reduced motion. Replace the rounded floating
+menu with a rectangular full-height right drawer; remove its WhatsApp/phone row,
+keep close/navigation/registration actions. Preserve the non-sticky mobile header.
+Follow-up validation:14 website tests PASS; Astro check0 errors/0 warnings with
+the same existing hint; build14 routes PASS; git diff --check PASS. Inspected the
+single-line header and edge-aligned drawer around320/420px in VS Code; explicit
+close works and both bottom actions remain visible. Local preview remains open.
+
+Owner additionally authorizes square website buttons and a commit of all local
+website refinements in this branch. Shared button radius0 covers CTA sizes,
+header/drawer, mobile bar, downloads, floating WhatsApp, carousel controls and
+auth actions (including password/niche/modal controls). Standalone preparing
+page matches. Scope remains website/docs only; no push/deployment authorized.
+Final checks for square buttons:14 tests PASS, Astro check0 errors/0 warnings
+(same existing hint), static build14 routes PASS. Visual inspection in the VS Code
+browser confirms square header/hero/mobile bar/WhatsApp/drawer buttons, mobile
+login actions and desktop home actions. No authentication form was submitted.
+
+Historical authorizations and production state below do not extend this task.
+
 ## Current work — recover pending Plans, IA and cash warning (2026-11-20)
 
 Owner authorizes auditing all related branches and recovering the omitted work

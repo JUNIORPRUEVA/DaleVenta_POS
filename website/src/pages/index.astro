@@ -374,7 +374,7 @@ const proofIcons = [icons.gift, icons.wifi, icons.headphones];
         </p>
       </div>
 
-      <div class="pricing">
+      <div class="pricing" role="region" aria-label="Comparar los cuatro planes" tabindex="0">
         {plans.map((plan) => (
           <article class={`plan${plan.highlight ? ' is-highlight' : ''}`} data-reveal>
             {plan.badge && (
@@ -497,7 +497,7 @@ const proofIcons = [icons.gift, icons.wifi, icons.headphones];
       </p>
 
       <p class="plans-note">
-        La postulación e-CF se hace con el asistente guiado incluido en el plan. La
+        Negocio, Pro y Empresa incluyen el asistente guiado de postulación e-CF. La
         aprobación la decide la DGII, el certificado digital no está incluido y el
         acompañamiento gestionado es un servicio aparte.
       </p>
