@@ -625,6 +625,44 @@ void main() {
     );
   });
 
+  test('422 HTTP real conserva la declaración tras reiniciar y no escribe en PostgreSQL', () async {
+    final requestId = 'live-validation-$run';
+    final stub = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    var received = 0;
+    stub.listen((request) async {
+      received++;
+      await request.drain<void>();
+      request.response.statusCode = 422;
+      request.response.headers.contentType = ContentType.json;
+      request.response.write('{"message":"Synthetic permanent validation error"}');
+      await request.response.close();
+    });
+    final client = Dio(BaseOptions(baseUrl: 'http://127.0.0.1:${stub.port}'));
+    addTearDown(() async { client.close(); await stub.close(force:true); });
+    SaleAttemptDeclarationSyncHandlers(queue, client).register();
+    final declaration = SaleAttemptDeclaration(
+      clientRequestId: requestId, totalDeclared: 50,
+      declaredAtUtc: DateTime.now().toUtc(), paymentMethod:'cash',
+      declaredByUserId:userId, declaredByRole:'ADMIN',
+    );
+    await OfflineStore.instance.putPendingAction(declaration.toPendingAction(
+      companyId:companyId,userId:userId,now:DateTime.now().toUtc(),
+    ));
+    final before=await get('/sales/reconciliation-obligations?status=PENDING');
+    final beforeRows=(before['data']?['items'] as List?) ?? const [];
+    expect(beforeRows.where((row)=>row['clientRequestId']==requestId),isEmpty);
+    await queue.processPending();
+    await OfflineStore.instance.closeForTesting();
+    final saved=(await OfflineStore.instance.listPendingActions(companyId:companyId,userId:userId)).single;
+    expect(saved.status,'failed'); expect(saved.permanent,isTrue);
+    expect(saved.nextAttemptAt,isNull); expect(saved.id,declaration.localId);
+    await queue.processPending(); expect(received,1);
+    final after=await get('/sales/reconciliation-obligations?status=PENDING');
+    final afterRows=(after['data']?['items'] as List?) ?? const [];
+    expect(afterRows.where((row)=>row['clientRequestId']==requestId),isEmpty);
+    expect((await OfflineStore.instance.listPendingActions(companyId:companyId,userId:userId)).single.id,declaration.localId);
+  });
+
   test('429, 500 y timeout reales: la declaración sobrevive y se envía una sola '
       'vez cuando el servidor vuelve', () async {
     final requestId = 'live-failures-$run';

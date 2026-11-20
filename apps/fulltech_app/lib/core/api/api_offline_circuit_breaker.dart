@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 
 import '../debug/trace_log.dart';
 import 'api_error_mapper.dart';
+import 'api_offline_cache_interceptor.dart';
 
 typedef ApiOfflineCachedResponseResolver =
     Future<Response<dynamic>?> Function(RequestOptions options);
@@ -34,11 +35,13 @@ class ApiOfflineCircuitBreaker extends Interceptor {
   ApiOfflineCircuitBreaker({
     required ApiOfflineCircuitState state,
     ApiOfflineCachedResponseResolver? cachedResponseResolver,
+    this.onReachabilityChanged,
   }) : _state = state,
        _cachedResponseResolver = cachedResponseResolver;
 
   final ApiOfflineCircuitState _state;
   final ApiOfflineCachedResponseResolver? _cachedResponseResolver;
+  final void Function(bool reachable)? onReachabilityChanged;
 
   @override
   void onRequest(
@@ -82,15 +85,22 @@ class ApiOfflineCircuitBreaker extends Interceptor {
 
   @override
   void onResponse(Response response, ResponseInterceptorHandler handler) {
-    _state.markOnline();
+    if (response.extra[ApiOfflineCacheInterceptor.cacheHitExtraKey] != true) {
+      _state.markOnline();
+      onReachabilityChanged?.call(true);
+    }
     handler.next(response);
   }
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) {
-    if (err.requestOptions.extra['disableOfflineFastFail'] != true &&
+    if (err.response != null) {
+      _state.markOnline();
+      onReachabilityChanged?.call(true);
+    } else if (err.requestOptions.extra['disableOfflineFastFail'] != true &&
         ApiErrorMapper.shouldRetry(err)) {
       _state.markOffline();
+      onReachabilityChanged?.call(false);
     }
     handler.next(err);
   }

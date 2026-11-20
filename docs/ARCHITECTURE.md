@@ -42,6 +42,27 @@ Flutter app / PWA / Windows
 
 ## Repository Structure
 
+POS recovery identity (2026-11-20): the editor passes its persisted ticket ID
+to the sales repository. The repository derives a stable SHA-256 request ID
+from company, original user, persistent device identity and ticket. The local
+outbox stores the ticket reference before the financial POST. The duplicate
+guard always blocks the same request; equal cart contents can pass for two
+different verified ticket references. Legacy attempts without that evidence
+retain their conservative same-cart guard. Recovery transfers items to a new
+editor ticket after restoring existing tickets, preserves them, and never
+copies the original request/payment/fiscal number. Server amount/tenant/shift,
+licensing and inventory validations remain authoritative.
+
+Recovery case delivery (2026-11-20): the bootstrap runs an owned-scope
+administrative publisher on startup, reconnect and the existing periodic tick.
+It sends only allowlisted summaries of blocked sales/cash operations through
+the existing idempotent review endpoint. Source cashiers cannot read company
+cases or decide them. Polling the same snapshot receives the administrator's
+decision; local comparison-and-update prevents delayed responses from reviving
+closed rows or overwriting newer evidence. Durable per-scope checkpoints respect
+Retry-After and retain permanent validation failures until their snapshot changes.
+Nothing replays a financial operation or reads another user's local queue.
+
 ### Electronic sales, connection and refund recovery
 
 E31/E32 checkout persists its fiscal intent in `Sale.fiscalVoucherType` and the

@@ -11,6 +11,7 @@ import '../storage/resilient_local_database.dart';
 import '../storage/local_migration_backup.dart';
 import 'pending_sync_action.dart';
 import 'sale_attempt_audit.dart';
+import 'pos_sale_identity.dart';
 
 class OfflineStore {
   OfflineStore._({String? databaseFileName})
@@ -679,6 +680,7 @@ class OfflineStore {
     }
 
     await db.transaction((txn) async {
+      await _assertPendingOwner(txn, pendingAction);
       await txn.insert('offline_sales', {
         'local_id': cleanLocalSaleId,
         'company_id': cleanCompanyId,
@@ -847,7 +849,7 @@ class OfflineStore {
         final cutoff = nowUtc
             .subtract(sameCartBlockWindow)
             .millisecondsSinceEpoch;
-        final sameCart = await txn.query('pending_actions', columns: ['id'],
+        final sameCart = await txn.query('pending_actions', columns: ['id', 'payload', 'user_id', 'idempotency_key'],
           where:
               'company_id = ? AND type = ? AND operation_fingerprint = ? '
               'AND status = ? AND created_at >= ?',
@@ -858,8 +860,22 @@ class OfflineStore {
             'requires_action',
             cutoff,
           ],
-          limit: 1);
-        if (sameCart.isNotEmpty) {
+          );
+        String? trustedTicket(Map<String, dynamic> payload, String? key, String? userId) {
+          final ticket = payload['posTicketId'] as String?;
+          final expected = posSaleRequestId(companyId: attempt.companyId, userId: userId,
+            deviceId: payload['deviceFingerprint'] as String?, ticketId: ticket);
+          return expected != null && key == expected ? ticket : null;
+        }
+        final newTicket = trustedTicket(attempt.payload, attempt.idempotencyKey, attempt.userId);
+        final independentTickets = newTicket != null && sameCart.every((row) {
+          try {
+            final oldPayload = Map<String, dynamic>.from(jsonDecode(row['payload'] as String) as Map);
+            final oldTicket = trustedTicket(oldPayload, row['idempotency_key'] as String?, row['user_id'] as String?);
+            return oldTicket != null && (oldTicket != newTicket || row['user_id'] != attempt.userId);
+          } catch (_) { return false; }
+        });
+        if (sameCart.isNotEmpty && !independentTickets) {
           final authorized = await _consumeSameCartOverrideInTxn(
             txn,
             companyId: attempt.companyId!,
@@ -893,7 +909,7 @@ class OfflineStore {
     String? userId,
   }) async {
     final actions = await listPendingActions(
-      limit: 200,
+      limit: null,
       companyId: companyId,
       userId: userId,
       includeUnscoped: false,
@@ -957,7 +973,14 @@ class OfflineStore {
   }) async {
     if (kIsWeb) {
       await appendSaleAttemptAudit(entry);
-      await removePendingAction(pendingActionId);
+      if (entry.decision.isManual) {
+        final rows = await listPendingActions(limit: null);
+        final found = rows.where((a) => a.id == pendingActionId);
+        if (found.isEmpty) return false;
+        await updatePendingAction(found.single.copyWith(status: 'review_resolved', permanent: true));
+      } else {
+        await removePendingAction(pendingActionId);
+      }
       return true;
     }
 
@@ -973,6 +996,13 @@ class OfflineStore {
         entry.toRow(),
         conflictAlgorithm: ConflictAlgorithm.ignore,
       );
+      if (entry.decision.isManual) {
+        removed = await txn.update('pending_actions', {
+          'status': 'review_resolved', 'permanent': 1,
+          'updated_at': DateTime.now().toUtc().millisecondsSinceEpoch,
+        }, where: 'id = ?', whereArgs: [pendingActionId]) > 0;
+        return;
+      }
       final deleted = await txn.delete(
         'pending_actions',
         where: 'id = ?',
@@ -1434,7 +1464,8 @@ class OfflineStore {
     }
     if (kIsWeb) {
       final prefs = await SharedPreferences.getInstance();
-      final items = await listPendingActions();
+      final items = await listPendingActions(limit: null);
+      _assertPendingOwners(items, action);
       final next = [
         for (final item in items)
           if (item.id != action.id) item,
@@ -1453,7 +1484,8 @@ class OfflineStore {
         throw StateError('No pudimos guardar esta operación en el equipo. No la des por completada; conserva la pantalla y pide ayuda a soporte.');
       }
       final prefs = await SharedPreferences.getInstance();
-      final items = await listPendingActions();
+      final items = await listPendingActions(limit: null);
+      _assertPendingOwners(items, action);
       final next = [
         for (final item in items)
           if (item.id != action.id) item,
@@ -1467,6 +1499,7 @@ class OfflineStore {
     }
 
     await db.transaction((tx) async {
+      await _assertPendingOwner(tx, action);
       await tx.insert('pending_actions', {
         'id': action.id,
         'type': action.type,
@@ -1498,12 +1531,33 @@ class OfflineStore {
     });
   }
 
+  void _assertPendingOwners(List<PendingSyncAction> items, PendingSyncAction action) {
+    for (final existing in items) {
+      if (existing.id == action.id && (existing.companyId != action.companyId ||
+          existing.userId != action.userId || existing.type != action.type)) {
+        throw StateError('El identificador pertenece a otra operación local. No se reemplazó ningún registro; solicita revisión.');
+      }
+    }
+  }
+
+  Future<void> _assertPendingOwner(DatabaseExecutor db, PendingSyncAction action) async {
+    final rows = await db.query('pending_actions', columns:['company_id','user_id','type'],
+      where:'id = ?',whereArgs:[action.id],limit:1);
+    if (rows.isEmpty) return;
+    final existing = rows.single;
+    if (existing['company_id'] != action.companyId || existing['user_id'] != action.userId ||
+        existing['type'] != action.type) {
+      throw StateError('El identificador pertenece a otra operación local. No se reemplazó ningún registro; solicita revisión.');
+    }
+  }
+
   Future<List<PendingSyncAction>> listPendingActions({
-    int limit = 50,
+    int? limit = 50,
     String? companyId,
     String? userId,
     bool includeUnscoped = false,
     bool dueOnly = false,
+    bool processableOnly = false,
   }) async {
     bool matchesScope(PendingSyncAction action) {
       final actionCompany = action.companyId?.trim();
@@ -1516,6 +1570,7 @@ class OfflineStore {
           ? true
           : actionUser == userId || (includeUnscoped && actionUser == null);
       if (!companyMatches || !userMatches) return false;
+      if (processableOnly && !action.isAutomaticallyRetryable) return false;
       if (!dueOnly) return true;
       final next = action.nextAttemptAt;
       return next == null || !next.isAfter(DateTime.now().toUtc());
@@ -1527,13 +1582,13 @@ class OfflineStore {
       if (raw == null || raw.trim().isEmpty) return const [];
       final decoded = jsonDecode(raw);
       if (decoded is! List) return const [];
-      return decoded
+      final actions = decoded
           .whereType<Map>()
           .map((row) => PendingSyncAction.fromMap(row.cast<String, dynamic>()))
           .where(matchesScope)
-          .take(limit)
           .toList(growable: false)
-        ..sort((a, b) => a.updatedAt.compareTo(b.updatedAt));
+        ..sort(PendingSyncAction.compareOrder);
+      return limit == null ? actions : actions.take(limit).toList();
     }
 
     final db = await _dbOrNull();
@@ -1543,13 +1598,13 @@ class OfflineStore {
       if (raw == null || raw.trim().isEmpty) return const [];
       final decoded = jsonDecode(raw);
       if (decoded is! List) return const [];
-      return decoded
+      final actions = decoded
           .whereType<Map>()
           .map((row) => PendingSyncAction.fromMap(row.cast<String, dynamic>()))
           .where(matchesScope)
-          .take(limit)
           .toList(growable: false)
-        ..sort((a, b) => a.updatedAt.compareTo(b.updatedAt));
+        ..sort(PendingSyncAction.compareOrder);
+      return limit == null ? actions : actions.take(limit).toList();
     }
 
     final where = <String>[];
@@ -1572,12 +1627,15 @@ class OfflineStore {
       where.add('(next_attempt_at IS NULL OR next_attempt_at <= ?)');
       whereArgs.add(DateTime.now().toUtc().millisecondsSinceEpoch);
     }
+    if (processableOnly) {
+      where.add("COALESCE(permanent, 0) = 0 AND status IN ('pending', 'error')");
+    }
 
     final rows = await db.query(
       'pending_actions',
       where: where.isEmpty ? null : where.join(' AND '),
       whereArgs: whereArgs.isEmpty ? null : whereArgs,
-      orderBy: 'created_at ASC',
+      orderBy: 'created_at ASC, id ASC',
       limit: limit,
     );
     return rows
@@ -1614,7 +1672,7 @@ class OfflineStore {
   Future<void> removePendingAction(String id) async {
     if (kIsWeb) {
       final prefs = await SharedPreferences.getInstance();
-      final next = (await listPendingActions())
+      final next = (await listPendingActions(limit: null))
           .where((item) => item.id != id)
           .map((item) => item.toMap())
           .toList(growable: false);
@@ -1625,7 +1683,7 @@ class OfflineStore {
     final db = await _dbOrNull();
     if (db == null) {
       final prefs = await SharedPreferences.getInstance();
-      final next = (await listPendingActions())
+      final next = (await listPendingActions(limit: null))
           .where((item) => item.id != id)
           .map((item) => item.toMap())
           .toList(growable: false);
@@ -1640,13 +1698,95 @@ class OfflineStore {
     await putPendingAction(action);
   }
 
+  /// A delayed administrative response cannot recreate a resolved/deleted row
+  /// or overwrite evidence written by the financial synchronizer.
+  Future<bool> updatePendingActionIfUnchanged(
+    PendingSyncAction previous,
+    PendingSyncAction next,
+  ) async {
+    if (previous.id != next.id || previous.companyId != next.companyId ||
+        previous.userId != next.userId) { return false; }
+    final db = await _dbOrNull();
+    if (db == null) return false; // Financial recovery requires durable storage.
+    return await db.update('pending_actions', {
+      'status': next.status,
+      'permanent': next.permanent ? 1 : 0,
+      'updated_at': next.updatedAt.millisecondsSinceEpoch,
+      'payload': jsonEncode(next.payload),
+    }, where: 'id = ? AND company_id = ? AND user_id = ? AND status = ? '
+        'AND updated_at = ? AND payload = ?', whereArgs: [
+      previous.id, previous.companyId, previous.userId, previous.status,
+      previous.updatedAt.millisecondsSinceEpoch, jsonEncode(previous.payload),
+    ]) == 1;
+  }
+
+  /// Reviewed rows remain durable evidence, but no longer represent estimated
+  /// pending money in local sale lists or cash summaries.
+  Future<Set<String>> reviewedFinancialOperationIds({
+    required String companyId,
+    String? userId,
+    required String type,
+    bool onlyNotPerformed = false,
+  }) async {
+    final actions = await listPendingActions(companyId: companyId, userId: userId, limit: null);
+    return {
+      for (final action in actions)
+        if (action.type == type && action.status == 'review_resolved' &&
+            (!onlyNotPerformed || action.payload['recoveryReviewStatus'] == 'RESOLVED_NOT_PERFORMED'))
+          (action.idempotencyKey ?? action.payload['clientRequestId'] ?? action.payload['operationId'] ?? action.id).toString(),
+    };
+  }
+
+  /// Administrative withdrawal of a permanently rejected declaration only.
+  /// Keep the entire original operation; never cancel uncertain/in-flight work.
+  Future<void> archiveFailedDeclaration({required String id, required String companyId,
+    required String userId, required String actorRole, required String note}) async {
+    if (actorRole != 'ADMIN' || note.trim().length < 10 || note.length > 500) {
+      throw StateError('Se requiere administrador y un motivo válido.');
+    }
+    PendingSyncAction archive(PendingSyncAction action) {
+      if (action.companyId != companyId || action.userId != userId ||
+          action.type != 'sales.declaration' || action.status != 'failed' || !action.permanent) {
+        throw StateError('La declaración cambió o no es un rechazo definitivo. Se conserva pendiente.');
+      }
+      return action.copyWith(status: 'review_resolved', permanent: true, payload: {
+        ...action.payload, 'administrativeWithdrawal': {
+          'kind': 'REJECTED_DECLARATION_WITHDRAWN', 'actorUserId': userId, 'actorRole': actorRole,
+          'note': note.trim(), 'recordedAt': DateTime.now().toUtc().toIso8601String(),
+        },
+      });
+    }
+    if (kIsWeb) {
+      final rows = await listPendingActions(companyId: companyId, userId: userId, limit: null);
+      final current = rows.singleWhere((a) => a.id == id);
+      await updatePendingAction(archive(current));
+      return;
+    }
+    final db = await _dbOrNull();
+    if (db == null) throw StateError('No se pudo conservar la evidencia. No se retiró la declaración.');
+    await db.transaction((tx) async {
+      final rows = await tx.query('pending_actions', where: 'id = ? AND company_id = ? AND user_id = ?',
+        whereArgs: [id, companyId, userId]);
+      if (rows.length != 1) throw StateError('No se encontró la declaración original en esta cuenta.');
+      final row = rows.single;
+      final action = PendingSyncAction(id: id, type: row['type'] as String, scope: row['scope'] as String,
+        companyId: companyId, userId: userId, payload: Map<String,dynamic>.from(jsonDecode(row['payload'] as String) as Map),
+        status: row['status'] as String, permanent: row['permanent'] == 1, attempts: row['attempts'] as int,
+        createdAt: DateTime.fromMillisecondsSinceEpoch(row['created_at'] as int, isUtc: true),
+        updatedAt: DateTime.fromMillisecondsSinceEpoch(row['updated_at'] as int, isUtc: true));
+      final updated = archive(action);
+      await tx.update('pending_actions', {'status': updated.status, 'payload': jsonEncode(updated.payload)},
+        where: 'id = ? AND company_id = ? AND user_id = ?', whereArgs: [id, companyId, userId]);
+    });
+  }
+
   Future<Map<String, int>> pendingActionStats({
     String? companyId,
     String? userId,
     bool includeUnscoped = false,
   }) async {
     final actions = await listPendingActions(
-      limit: 500,
+      limit: null,
       companyId: companyId,
       userId: userId,
       includeUnscoped: includeUnscoped,
@@ -1655,9 +1795,12 @@ class OfflineStore {
     var syncing = 0;
     var error = 0;
     var conflict = 0;
+    var blocked = 0;
 
     for (final action in actions) {
       switch (action.status) {
+        case 'review_resolved':
+          break;
         case 'syncing':
           syncing++;
           break;
@@ -1665,12 +1808,18 @@ class OfflineStore {
         case 'requires_action':
           conflict++;
           break;
-        case 'error':
         case 'failed':
         case 'auth_blocked':
         case 'obsolete':
         case 'tenant_mismatch':
-          error++;
+          blocked++;
+          break;
+        case 'error':
+          if (action.permanent) {
+            blocked++;
+          } else {
+            error++;
+          }
           break;
         default:
           pending++;
@@ -1687,6 +1836,7 @@ class OfflineStore {
       'syncing': syncing,
       'error': error,
       'conflict': conflict,
+      'blocked': blocked,
     };
   }
 

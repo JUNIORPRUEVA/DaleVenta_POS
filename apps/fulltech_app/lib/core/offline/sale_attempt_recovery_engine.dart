@@ -100,6 +100,10 @@ abstract class RecoveryEngineStore {
   Future<void> writeState({required int failures, DateTime? nextRunAt});
 }
 
+abstract interface class ScopedRecoveryEngineStore {
+  void selectScope(String companyId, String userId);
+}
+
 class InMemoryRecoveryEngineStore implements RecoveryEngineStore {
   int _failures = 0;
   DateTime? _nextRunAt;
@@ -155,7 +159,7 @@ class SaleAttemptRecoveryEngine {
     RecoveryBackoffPolicy policy = const RecoveryBackoffPolicy(),
     DateTime Function()? clock,
     Random? random,
-    Map<String, String?> Function()? scopeResolver,
+    FutureOr<Map<String, String?>> Function()? scopeResolver,
   }) : _reconciler = reconciler,
        _countPending = countPending,
        _store = store,
@@ -170,13 +174,17 @@ class SaleAttemptRecoveryEngine {
   final RecoveryBackoffPolicy _policy;
   final DateTime Function() _clock;
   final Random _random;
-  final Map<String, String?> Function()? _scopeResolver;
+  final FutureOr<Map<String, String?>> Function()? _scopeResolver;
 
   final StreamController<RecoveryEngineState> _states =
       StreamController<RecoveryEngineState>.broadcast();
 
   RecoveryEngineState _state = const RecoveryEngineState();
   bool _running = false;
+  bool _disposed = false;
+  bool _preparing = false;
+  DateTime? _rateLimitedUntil;
+  String? _activeScope;
   Duration? _retryAfter;
 
   Stream<RecoveryEngineState> get states => _states.stream;
@@ -186,6 +194,7 @@ class SaleAttemptRecoveryEngine {
   /// `Retry-After`. La siguiente ejecución lo respeta sin ignorarlo.
   void noteRateLimit(Duration? retryAfter) {
     _retryAfter = retryAfter;
+    if (retryAfter != null) _rateLimitedUntil = _clock().add(retryAfter);
   }
 
   void _emit(RecoveryEngineState next) {
@@ -208,7 +217,8 @@ class SaleAttemptRecoveryEngine {
   /// Decide si toca ejecutar. Un disparador explícito (reconexión, manual)
   /// puede adelantar la espera; el periódico no.
   bool shouldRunNow(RecoveryTrigger trigger) {
-    if (_running) return false;
+    if (_running || _disposed) return false;
+    if (_rateLimitedUntil?.isAfter(_clock()) == true) return false;
     if (trigger == RecoveryTrigger.connectivityRestored ||
         trigger == RecoveryTrigger.manual) {
       return true;
@@ -224,6 +234,24 @@ class SaleAttemptRecoveryEngine {
     String? companyId,
     String? userId,
   }) async {
+    if (_preparing || _disposed) return RecoveryRunOutcome.deferred;
+    _preparing = true;
+    try {
+      return await _runScoped(
+        trigger: trigger,
+        companyId: companyId,
+        userId: userId,
+      );
+    } finally {
+      _preparing = false;
+    }
+  }
+
+  Future<RecoveryRunOutcome> _runScoped({
+    required RecoveryTrigger trigger,
+    String? companyId,
+    String? userId,
+  }) async {
     if (_running) {
       TraceLog.log(
         'recovery',
@@ -232,12 +260,40 @@ class SaleAttemptRecoveryEngine {
       return RecoveryRunOutcome.deferred;
     }
 
+    final scope = await _scopeResolver?.call();
+    final resolvedCompany = companyId ?? scope?['companyId'];
+    final resolvedUser = userId ?? scope?['userId'];
+    if (scope != null &&
+        (resolvedCompany != scope['companyId'] ||
+            resolvedUser != scope['userId'])) {
+      return RecoveryRunOutcome.deferred;
+    }
+    if (_scopeResolver != null &&
+        ((resolvedCompany ?? '').isEmpty || (resolvedUser ?? '').isEmpty)) {
+      return RecoveryRunOutcome.deferred;
+    }
+    final scopeKey = '$resolvedCompany/$resolvedUser';
+    if (_activeScope != scopeKey) {
+      _activeScope = scopeKey;
+      final store = _store;
+      if (store is ScopedRecoveryEngineStore) {
+        (store as ScopedRecoveryEngineStore).selectScope(
+          resolvedCompany!,
+          resolvedUser!,
+        );
+        _state = const RecoveryEngineState();
+        await restore();
+        _rateLimitedUntil = _state.nextRunAt;
+      }
+    }
+
     // Rate limit explícito del servidor: se respeta aunque el disparador sea
     // manual o de reconexión.
     final retryAfter = _retryAfter;
     if (retryAfter != null && retryAfter > Duration.zero) {
       _retryAfter = null;
       final until = _clock().add(retryAfter);
+      _rateLimitedUntil = until;
       await _store.writeState(
         failures: _state.consecutiveFailures,
         nextRunAt: until,
@@ -251,10 +307,6 @@ class SaleAttemptRecoveryEngine {
       TraceLog.log('recovery', 'pasada.pospuesta trigger=${trigger.name}');
       return RecoveryRunOutcome.deferred;
     }
-
-    final scope = _scopeResolver?.call();
-    final resolvedCompany = companyId ?? scope?['companyId'];
-    final resolvedUser = userId ?? scope?['userId'];
 
     _running = true;
     _emit(_state.copyWith(running: true));
@@ -360,6 +412,7 @@ class SaleAttemptRecoveryEngine {
   }
 
   Future<void> dispose() async {
+    _disposed = true;
     await _states.close();
   }
 }

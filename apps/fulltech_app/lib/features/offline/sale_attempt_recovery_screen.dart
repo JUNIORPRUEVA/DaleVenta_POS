@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/admin_authorization.dart';
 import '../../core/auth/app_permissions.dart';
 import '../../core/auth/auth_repository.dart';
+import '../../core/auth/auth_provider.dart';
+import '../../core/api/server_connection.dart';
+import '../../core/errors/user_safe_error_text.dart';
+import '../../core/errors/api_exception.dart';
 import '../../core/offline/offline_store.dart';
+import '../../core/offline/sync_queue_service.dart';
 import '../../core/offline/pending_sync_action.dart';
 import '../../core/offline/sale_attempt_audit.dart';
 import '../../core/offline/sale_attempt_declaration.dart';
@@ -14,9 +18,19 @@ import '../../core/offline/sale_attempt_reconciliation_providers.dart';
 import '../../core/offline/sale_attempt_recovery_engine.dart';
 import '../../core/offline/sale_attempt_recovery_providers.dart';
 import '../../core/theme/app_colors.dart';
-import 'declaration_export.dart';
+import '../../modules/cotizaciones/cotizaciones_screen.dart';
+import '../../core/offline/recovery_sale_draft.dart';
+import '../../core/routing/routes.dart';
+import 'package:go_router/go_router.dart';
 import 'reconciliation_obligations_panel.dart';
 import 'recovery_status_card.dart';
+import 'recovery_reviews_panel.dart';
+import 'recovery_presentation.dart';
+import '../../core/offline/recovery_review_repository.dart';
+
+const _recoveryButtonStyle = ButtonStyle(
+  shape: WidgetStatePropertyAll(RoundedRectangleBorder()),
+);
 
 /// Centro de recuperación de cobros sin confirmar.
 ///
@@ -41,13 +55,31 @@ class SaleAttemptRecoveryScreen extends ConsumerStatefulWidget {
 class _SaleAttemptRecoveryScreenState
     extends ConsumerState<SaleAttemptRecoveryScreen> {
   bool _loading = true;
+  bool _isAdmin = false;
+  bool _synchronizing = false;
+  final Map<String, SaleAttemptReconciliationResult> _checks = {};
+  int _loadVersion = 0;
   String? _error;
   String? _companyId;
   int _pendingDeclarations = 0;
   List<PendingSyncAction> _queuedDeclarations = const [];
   List<PendingSyncAction> _attempts = const [];
+  List<PendingSyncAction> _financialActions = const [];
   final Map<String, List<SaleAttemptAuditEntry>> _history = {};
   final Set<String> _busy = <String>{};
+
+  String _queueLabel(PendingSyncAction action) {
+    if (action.status == 'review_resolved') {
+      return 'Revisión finalizada';
+    }
+    if (action.status == 'syncing') return 'Enviando';
+    if (action.status == 'auth_blocked') return 'Inicia sesión';
+    if (action.status == 'requires_action' || action.status == 'conflict') {
+      return 'Por revisar';
+    }
+    if (!action.isAutomaticallyRetryable) return 'Revisión pendiente';
+    return action.status == 'error' ? 'Reintento pendiente' : 'Pendiente';
+  }
 
   @override
   void initState() {
@@ -56,12 +88,28 @@ class _SaleAttemptRecoveryScreenState
   }
 
   Future<void> _load() async {
+    final version = ++_loadVersion;
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
       final user = await ref.read(tokenStorageProvider).getUserSnapshot();
+      if (!mounted || version != _loadVersion) return;
+      if (user?.role != 'ADMIN') {
+        setState(() {
+          _isAdmin = false;
+          _checks.clear();
+          _loading = false;
+          _attempts = const [];
+          _financialActions = const [];
+          _queuedDeclarations = const [];
+          _history.clear();
+          _companyId = null;
+        });
+        return;
+      }
+      setState(() => _isAdmin = true);
       final companyId = user?.companyId?.trim();
       final userId = user?.id.trim();
       if ((companyId ?? '').isEmpty || (userId ?? '').isEmpty) {
@@ -72,6 +120,7 @@ class _SaleAttemptRecoveryScreenState
         });
         return;
       }
+      setState(() => _isAdmin = true);
       final attempts = await OfflineStore.instance.listUnresolvedSaleAttempts(
         companyId: companyId,
         userId: userId,
@@ -80,10 +129,10 @@ class _SaleAttemptRecoveryScreenState
       final queued = await OfflineStore.instance.listPendingActions(
         companyId: companyId,
         userId: userId,
-        limit: 500,
+        limit: null,
       );
       final declarations = queued
-          .where((action) => action.type == SaleAttemptDeclaration.actionType)
+          .where((action) => action.type == SaleAttemptDeclaration.actionType && action.status != 'review_resolved')
           .toList(growable: false);
       final history = <String, List<SaleAttemptAuditEntry>>{};
       for (final action in attempts) {
@@ -94,12 +143,31 @@ class _SaleAttemptRecoveryScreenState
           limit: 20,
         );
       }
-      if (!mounted) return;
+      final currentUser = await ref
+          .read(tokenStorageProvider)
+          .getUserSnapshot();
+      if (!mounted ||
+          version != _loadVersion ||
+          currentUser?.companyId != companyId ||
+          currentUser?.id != userId) {
+        return;
+      }
+      await ref.read(syncQueueServiceProvider.notifier).refreshStats();
+      if (!mounted || version != _loadVersion) return;
       setState(() {
         _companyId = companyId;
         _attempts = attempts;
         _pendingDeclarations = declarations.length;
         _queuedDeclarations = declarations;
+        _financialActions = queued
+            .where(
+              (action) =>
+                  action.type != SaleAttemptReconciler.attemptType &&
+                  action.type != SaleAttemptDeclaration.actionType &&
+                  (action.type.startsWith('cash.') ||
+                      action.type.startsWith('sales.')),
+            )
+            .toList();
         _history
           ..clear()
           ..addAll(history);
@@ -120,20 +188,41 @@ class _SaleAttemptRecoveryScreenState
     }
   }
 
+  Future<void> _synchronize() async {
+    if (_synchronizing) return;
+    setState(() => _synchronizing = true);
+    try {
+      await ref.read(syncQueueServiceProvider.notifier).processPending();
+      final user = await ref.read(tokenStorageProvider).getUserSnapshot();
+      if (user?.role == 'ADMIN') {
+        await ref.read(recoveryEngineProvider).runOnce(
+          trigger: RecoveryTrigger.manual, companyId: user?.companyId, userId: user?.id);
+      }
+      ref.invalidate(recoveryReviewsProvider);
+      await _load();
+    } catch (error) {
+      if (mounted) {
+        await _showInfo(title: 'Pendientes guardados',
+        body: userSafeErrorMessage(error, fallback: 'Se volverá a intentar al recuperar la conexión.'));
+      }
+    } finally {
+      if (mounted) setState(() => _synchronizing = false);
+    }
+  }
+
   Future<void> _verify(PendingSyncAction action) async {
     if (_busy.contains(action.id)) return;
     setState(() => _busy.add(action.id));
     try {
       final reconciler = ref.read(saleAttemptReconcilerProvider);
-      final result = await reconciler.verify(action);
+      final result = await reconciler.verifyThoroughly(action);
+      if (mounted && result != null) setState(() => _checks[action.id] = result);
       if (!mounted) return;
       if (result == null) {
         await _showInfo(
           title: 'No pudimos verificar todavía',
           body:
-              'No hubo respuesta del servidor. El cobro sigue guardado sin cambios: '
-              'no se ha repetido ni descartado. Puedes seguir vendiendo y volver a '
-              'verificar más tarde.',
+              'El servidor no respondió. El cobro sigue guardado. No lo repitas.',
         );
         return;
       }
@@ -143,41 +232,47 @@ class _SaleAttemptRecoveryScreenState
         title: 'Resultado de la verificación',
         body: _explainStatus(result),
       );
+    } catch (error) {
+      if (mounted) {
+        await _showInfo(
+          title: 'No se pudo comprobar',
+          body: userSafeErrorMessage(
+            error,
+            fallback: 'El cobro sigue guardado. Vuelve a consultar más tarde.',
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _busy.remove(action.id));
     }
   }
 
   String _explainStatus(SaleAttemptReconciliationResult result) {
-    switch (result.status) {
-      case SaleAttemptReconciliationStatus.confirmed:
-        final sale = result.saleId == null
-            ? 'La venta está registrada en el sistema.'
-            : 'La venta ${result.saleId} está registrada en el sistema.';
-        if (result.voided) {
-          return '$sale Después fue anulada o devuelta, así que no hay un cobro '
-              'pendiente. Esto NO significa que el cobro haya fallado.';
-        }
-        return '$sale Esto confirma el registro de la operación, no el dinero '
-            'recibido. Si el pago fue por transferencia, compruébalo en el banco.';
-      case SaleAttemptReconciliationStatus.definitivelyRejected:
-        return 'El servidor informa un rechazo definitivo. Revisa el detalle con '
-            'el encargado antes de cobrar de nuevo.';
-      case SaleAttemptReconciliationStatus.notFound:
-        return 'El servidor no tiene registro de este intento. Eso NO demuestra '
-            'que el cobro no se haya hecho: puede ser un pago externo o una '
-            'respuesta perdida. El intento se conserva intacto.';
-      case SaleAttemptReconciliationStatus.unknown:
-        return 'La información es incompleta o contradictoria. El intento se '
-            'conserva intacto para que el encargado decida con evidencia.';
-      case SaleAttemptReconciliationStatus.notChecked:
-        // Distinción importante: aquí el servidor NO respondió nada porque no
-        // se le preguntó (declaración manual). No es lo mismo que UNKNOWN.
-        return 'Este intento no se ha consultado al servidor. La declaración del '
-            'encargado queda registrada como evidencia y, si declaró que recibió '
-            'el dinero, queda una obligación de conciliación administrativa '
-            'pendiente; el cobro sigue sin conciliar en el sistema.';
+    switch (result.guidance) {
+      case 'LOOKUP_HTTP_401':
+        return 'Inicia sesión con la cuenta original para comprobar el cobro.';
+      case 'LOOKUP_HTTP_403':
+        return 'El servidor no autorizó la consulta. Revisa la sesión y la empresa.';
+      case 'LOOKUP_HTTP_429':
+      case 'WAIT_RETRY_AFTER':
+        return 'Espera antes de consultar de nuevo. El cobro sigue guardado.';
+      case 'LOOKUP_HTTP_422':
+        return 'Los datos requieren revisión. No repitas el cobro.';
     }
+    return switch (result.status) {
+      SaleAttemptReconciliationStatus.confirmed =>
+        result.voided
+            ? 'La venta fue registrada y después anulada o devuelta.'
+            : 'Venta registrada. Si fue una transferencia, confirma el ingreso en el banco.',
+      SaleAttemptReconciliationStatus.definitivelyRejected =>
+        'Operación rechazada. Revisa los datos antes de preparar otro cobro.',
+      SaleAttemptReconciliationStatus.notFound =>
+        'No se encontró la venta. Esto no confirma que el pago haya fallado. No repitas el cobro.',
+      SaleAttemptReconciliationStatus.unknown =>
+        'El resultado no es concluyente. El cobro sigue guardado para revisión.',
+      SaleAttemptReconciliationStatus.notChecked =>
+        'Declaración guardada. El cobro aún no está conciliado.',
+    };
   }
 
   Future<void> _resolveManually(
@@ -201,6 +296,27 @@ class _SaleAttemptRecoveryScreenState
     if (!mounted) return;
     setState(() => _busy.add(action.id));
     try {
+      if (user?.role != 'ADMIN' || user?.id != action.userId || user?.companyId != action.companyId) return;
+      if (decision == SaleAttemptDecision.manualNotPerformed) {
+        final proof = await ref.read(saleAttemptReconcilerProvider).verifyThoroughly(action);
+        if (proof?.status != SaleAttemptReconciliationStatus.notFound &&
+            proof?.status != SaleAttemptReconciliationStatus.definitivelyRejected) {
+          _checks.remove(action.id);
+          await _load();
+          if (mounted) {
+            await _showInfo(title: 'Pendiente conservado',
+            body: proof?.status == SaleAttemptReconciliationStatus.confirmed
+                ? 'La venta ya está registrada. No se eliminó ningún cobro.'
+                : 'No se pudo comprobar el resultado. No se retiró el pendiente.');
+          }
+          return;
+        }
+        // Close the company case before archiving locally; otherwise an
+        // automatically published copy would reappear as an open incident.
+        final repository = ref.read(recoveryReviewRepositoryProvider);
+        await repository.resolveNotPerformed(action, note);
+        ref.invalidate(recoveryReviewsProvider);
+      }
       final resolved = await ref
           .read(saleAttemptReconcilerProvider)
           .resolveManually(
@@ -217,28 +333,15 @@ class _SaleAttemptRecoveryScreenState
       final String title;
       final String body;
       if (resolved) {
-        title = 'Incidencia cerrada';
+        title = moneyReceived ? 'Declaración guardada' : 'Revisión finalizada';
         body = moneyReceived
-            ? 'Se guardó tu declaración con tu usuario y la hora, y quedó '
-                  'registrada una OBLIGACIÓN DE CONCILIACIÓN para revisión '
-                  'administrativa. No se creó ninguna venta, pago, deuda ni '
-                  'movimiento de caja o inventario. Si el envío al servidor no '
-                  'puede completarse ahora, se reintentará automáticamente con '
-                  'la misma declaración, sin duplicarla.'
-            : 'Se guardó tu declaración con tu usuario y la hora, y el aviso se '
-                  'retiró de este equipo. En el servidor no se modificó ninguna '
-                  'venta, pago, deuda ni inventario.';
+            ? 'Queda pendiente de conciliación. No se creó una venta ni se confirmó el pago.'
+            : 'Decisión guardada. Las ventas y los pagos del servidor no cambian.';
       } else {
-        title = moneyReceived
-            ? 'No se pudo registrar la declaración'
-            : 'Decisión registrada';
+        title = 'Revisión pendiente';
         body = moneyReceived
-            ? 'No quedó registrada la obligación de conciliación, así que el '
-                  'intento se conserva intacto y no se cerró nada. Vuelve a '
-                  'intentarlo o pide ayuda a soporte antes de cobrar de nuevo '
-                  'este contenido.'
-            : 'La decisión quedó registrada pero el intento se conserva para '
-                  'revisión.';
+            ? 'No se pudo guardar la declaración. El cobro sigue pendiente; no lo repitas.'
+            : 'Decisión guardada. El cobro aún necesita revisión.';
       }
       await _showInfo(title: title, body: body);
     } catch (error) {
@@ -263,117 +366,59 @@ class _SaleAttemptRecoveryScreenState
       builder: (dialogContext) => AlertDialog(
         title: Text(
           isNotPerformed
-              ? 'Declarar que la venta no se realizó'
+              ? 'Eliminar pendiente'
               : 'Declarar que sí se recibió el dinero',
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              isNotPerformed
-                  ? 'Esta declaración cierra la incidencia en este equipo, pero NO '
-                        'borra ventas, pagos, deudas ni inventario del servidor. '
-                        'Describe qué comprobaste (datáfono, banco, caja).'
-                  : 'Esta declaración registra que el dinero entró. No crea una '
-                        'venta retroactiva ni marca el pago como recibido: la '
-                        'conciliación se hace después por el flujo oficial. '
-                        'Describe la evidencia que tienes.',
-              style: const TextStyle(
-                fontSize: 13,
-                color: AppColors.textSecondary,
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                isNotPerformed
+                    ? 'Describe la evidencia. Esta decisión no anula ventas ni pagos.'
+                    : 'Describe cómo recibiste el dinero. Quedará pendiente de conciliación; no crea una venta.',
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              maxLines: 3,
-              maxLength: 300,
-              decoration: const InputDecoration(
-                labelText: 'Detalle de la revisión',
-                border: OutlineInputBorder(),
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                maxLines: 3,
+                maxLength: 300,
+                decoration: const InputDecoration(
+                  labelText: 'Detalle de la revisión',
+                  helperText: 'Mínimo 10 caracteres',
+                  border: OutlineInputBorder(),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
         actions: [
           TextButton(
+            style: _recoveryButtonStyle,
             onPressed: () => Navigator.of(dialogContext).pop(),
             child: const Text('Cancelar'),
           ),
-          FilledButton(
-            onPressed: () {
-              final text = controller.text.trim();
-              if (text.length < 10) return;
-              Navigator.of(dialogContext).pop(text);
-            },
-            child: const Text('Registrar declaración'),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
-    return result;
-  }
-
-  Future<void> _showReviewRequest(PendingSyncAction action) async {
-    final requestId = SaleAttemptReconciler.requestIdOf(action);
-    final history = _history[action.id] ?? const <SaleAttemptAuditEntry>[];
-    final lines = <String>[
-      'INCIDENCIA DE COBRO — FULLPOS',
-      'Reporte generado: ${DateTime.now().toUtc().toIso8601String()}',
-      'Empresa: ${action.companyId ?? '-'}',
-      'Usuario: ${action.userId ?? '-'}',
-      'Identificador de la operación: $requestId',
-      'Registrado: ${action.createdAt.toUtc().toIso8601String()}',
-      'Importe esperado: ${_amountText(action)}',
-      'Medio de pago: ${_paymentText(action)}',
-      'Estado local: ${action.status}',
-      'Último intento: ${action.lastAttemptAt?.toUtc().toIso8601String() ?? '-'}',
-      'Detalle guardado: ${action.error ?? '-'}',
-      'Historial de verificaciones: ${history.length}',
-      for (final entry in history)
-        '  - ${entry.checkedAt.toUtc().toIso8601String()} '
-            '${entry.decision.code}'
-            '${entry.serverStatus == null ? '' : ' estado=${entry.serverStatus}'}'
-            '${entry.guidance == null ? '' : ' motivo=${entry.guidance}'}'
-            '${entry.actorRole == null ? '' : ' por=${entry.actorRole}'}',
-      'Contenido del intento (para reconstruir, nunca reenviar):',
-      ..._itemLines(action),
-      '',
-      'Nota: este reporte no contiene contraseñas ni tokens. El cobro NO se ha '
-          'repetido ni descartado.',
-    ];
-    final report = lines.join('\n');
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Reporte para soporte'),
-        content: SizedBox(
-          width: 520,
-          child: SingleChildScrollView(
-            child: SelectableText(
-              report,
-              style: const TextStyle(fontSize: 12, height: 1.45),
+          ValueListenableBuilder<TextEditingValue>(
+            valueListenable: controller,
+            builder: (_, value, _) => FilledButton(
+              style: _recoveryButtonStyle,
+              onPressed: value.text.trim().length < 10
+                  ? null
+                  : () => Navigator.of(dialogContext).pop(value.text.trim()),
+              child: const Text('Guardar declaración'),
             ),
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () async {
-              await Clipboard.setData(ClipboardData(text: report));
-              if (!dialogContext.mounted) return;
-              Navigator.of(dialogContext).pop();
-            },
-            child: const Text('Copiar reporte'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Cerrar'),
-          ),
         ],
       ),
     );
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    controller.dispose();
+    return result;
   }
 
   Future<void> _showNewSaleGuidance(PendingSyncAction action) async {
@@ -381,7 +426,7 @@ class _SaleAttemptRecoveryScreenState
     final authorize = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Preparar la venta de nuevo'),
+        title: const Text('Hacer una venta nueva'),
         content: SizedBox(
           width: 480,
           child: SingleChildScrollView(
@@ -390,15 +435,12 @@ class _SaleAttemptRecoveryScreenState
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Puedes registrar una venta nueva con normalidad: este incidente '
-                  'no bloquea el punto de venta. Antes de cobrar, confirma con el '
-                  'cliente que no se le cobró dos veces.',
+                  'Antes de autorizar otra venta, confirma con el cliente que no hubo un cobro previo.',
                   style: TextStyle(fontSize: 13),
                 ),
                 const SizedBox(height: 10),
                 const Text(
-                  'Estos eran los artículos del intento. Reconstrúyelos en una '
-                  'venta NUEVA; el sistema no reenviará este intento.',
+                  'Artículos del intento original:',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
@@ -420,10 +462,7 @@ class _SaleAttemptRecoveryScreenState
                 if (fingerprint.isNotEmpty) ...[
                   const SizedBox(height: 12),
                   const Text(
-                    'Si el carrito es exactamente el mismo y el intento anterior '
-                    'sigue sin resolver, el sistema pedirá autorización del '
-                    'encargado antes de dejarte cobrar. Esa autorización dura 10 '
-                    'minutos y sirve para una sola venta.',
+                    'Al continuar, autorizas una venta nueva. El intento anterior no se reenviará.',
                     style: TextStyle(fontSize: 12, color: AppColors.textMuted),
                   ),
                 ],
@@ -433,11 +472,12 @@ class _SaleAttemptRecoveryScreenState
         ),
         actions: [
           TextButton(
+            style: _recoveryButtonStyle,
             onPressed: () => Navigator.of(dialogContext).pop(false),
             child: const Text('Cerrar'),
           ),
-          if (fingerprint.isNotEmpty)
-            FilledButton(
+          FilledButton(
+              style: _recoveryButtonStyle,
               onPressed: () => Navigator.of(dialogContext).pop(true),
               child: const Text('Autorizar venta nueva'),
             ),
@@ -469,13 +509,38 @@ class _SaleAttemptRecoveryScreenState
     if (!mounted) return;
     setState(() => _busy.add(action.id));
     try {
-      await OfflineStore.instance.grantSameCartOverride(
+      if (user?.role != 'ADMIN' || user?.companyId != action.companyId || user?.id != action.userId) {
+        throw ApiException('La sesión cambió. Abre la operación con su cuenta original.');
+      }
+      final rawItems = action.payload['items'];
+      if (rawItems is! List || rawItems.isEmpty || rawItems.any((item) {
+        if (item is! Map) return true;
+        final quantity = num.tryParse('${item['qty']}');
+        final price = num.tryParse('${item['priceSoldUnit']}');
+        return quantity == null || !quantity.isFinite || quantity <= 0 || price == null || !price.isFinite || price < 0;
+      })) {
+        throw ApiException('Faltan artículos o hay cantidades inválidas. Conserva la incidencia y revisa los datos originales.');
+      }
+      final fresh = await ref.read(saleAttemptReconcilerProvider).verifyThoroughly(action);
+      if (fresh?.status != SaleAttemptReconciliationStatus.notFound && fresh?.status != SaleAttemptReconciliationStatus.definitivelyRejected) {
+        _checks.remove(action.id);
+        await _load();
+        throw ApiException(fresh?.status == SaleAttemptReconciliationStatus.confirmed
+            ? 'La venta ya está registrada. No se preparó otro cobro.'
+            : 'No se pudo comprobar el cobro. Se conserva pendiente.');
+      }
+      if (!recoverySaleItemsAreValid(action)) {
+        throw ApiException('Faltan artículos o hay cantidades inválidas. No se preparó otro cobro; conserva el pendiente.');
+      }
+      if (fingerprint.isNotEmpty) {
+        await OfflineStore.instance.grantSameCartOverride(
         companyId: action.companyId ?? '',
         operationFingerprint: fingerprint,
         actorUserId: user?.id,
         actorRole: user?.role,
         note: 'Autorización de venta nueva independiente',
       );
+      }
       await ref
           .read(saleAttemptReconcilerProvider)
           .resolveManually(
@@ -488,72 +553,24 @@ class _SaleAttemptRecoveryScreenState
       if (!mounted) return;
       await _load();
       if (!mounted) return;
-      await _showInfo(
-        title: 'Venta nueva autorizada',
-        body:
-            'Puedes cobrar el mismo contenido una vez, con un identificador '
-            'nuevo. La autorización caduca en 10 minutos y no reenvía el intento '
-            'anterior, que sigue registrado y sin resolver.',
-      );
+      ref.read(recoverySaleDraftProvider.notifier).state = action;
+      final router = GoRouter.maybeOf(context);
+      if (router != null) {
+        Navigator.of(context).pop();
+        router.go(Routes.cotizaciones);
+      } else {
+        await Navigator.of(context).push<void>(MaterialPageRoute(
+          builder: (_) => CotizacionesScreen(initialRecoveryAction: action),
+        ));
+      }
     } catch (error) {
       if (!mounted) return;
       await _showInfo(
         title: 'No se pudo autorizar',
-        body: 'No se registró ningún permiso. El intento sigue intacto.',
+        body: userSafeErrorMessage(error, fallback: 'El intento sigue conservado. No se inició otro cobro.'),
       );
     } finally {
       if (mounted) setState(() => _busy.remove(action.id));
-    }
-  }
-
-  /// Exporta la auditoría de declaraciones «dinero recibido» para poder
-  /// importarlas al servidor como obligaciones de conciliación.
-  ///
-  /// Solo copia texto al portapapeles: no envía nada, no escribe nada y deja el
-  /// importe en `null` para que lo complete una persona con evidencia.
-  Future<void> _copyDeclarationImportTemplate() async {
-    final companyId = _companyId;
-    if (companyId == null || companyId.isEmpty) {
-      await _showInfo(
-        title: 'Sin empresa activa',
-        body: 'Vuelve a iniciar sesión para poder preparar la importación.',
-      );
-      return;
-    }
-    try {
-      final audit = await OfflineStore.instance.listSaleAttemptAudit(
-        companyId: companyId,
-        limit: 500,
-      );
-      final template = buildDeclarationImportTemplate(
-        companyId: companyId,
-        audit: audit,
-      );
-      await Clipboard.setData(ClipboardData(text: template));
-      if (!mounted) return;
-      final count = audit
-          .where(
-            (entry) =>
-                entry.decision == SaleAttemptDecision.manualMoneyReceived,
-          )
-          .map((entry) => entry.clientRequestId)
-          .toSet()
-          .length;
-      await _showInfo(
-        title: 'Plantilla copiada',
-        body: count == 0
-            ? 'No hay declaraciones históricas de «dinero recibido» en este '
-                  'equipo; la plantilla se copió vacía.'
-            : 'Se copiaron $count declaraciones. Completa el importe de cada una '
-                  'con evidencia antes de importarlas: el sistema nunca inventa '
-                  'un monto. La importación no crea ventas ni movimientos de caja.',
-      );
-    } catch (error) {
-      if (!mounted) return;
-      await _showInfo(
-        title: 'No se pudo preparar la plantilla',
-        body: 'No se modificó nada. Inténtalo de nuevo o pide apoyo a soporte.',
-      );
     }
   }
 
@@ -562,9 +579,12 @@ class _SaleAttemptRecoveryScreenState
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(title),
-        content: Text(body, style: const TextStyle(fontSize: 13, height: 1.45)),
+        content: SingleChildScrollView(
+          child: Text(body, style: const TextStyle(fontSize: 13, height: 1.45)),
+        ),
         actions: [
           FilledButton(
+            style: _recoveryButtonStyle,
             onPressed: () => Navigator.of(dialogContext).pop(),
             child: const Text('Entendido'),
           ),
@@ -633,176 +653,448 @@ class _SaleAttemptRecoveryScreenState
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        foregroundColor: AppColors.textPrimary,
-        elevation: 0,
-        title: const Text(
-          'Centro de recuperación',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-        ),
-        actions: [
-          IconButton(
-            tooltip: 'Actualizar',
-            onPressed: _loading ? null : _load,
-            icon: const Icon(Icons.refresh_rounded),
-          ),
-          PopupMenuButton<String>(
-            tooltip: 'Más acciones',
-            onSelected: (value) {
-              if (value == 'export') _copyDeclarationImportTemplate();
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem(
-                value: 'export',
-                child: Text('Copiar plantilla de importación'),
-              ),
-            ],
-          ),
-        ],
+    ref.listen(
+      authStateProvider.select(
+        (state) => (state.user?.companyId, state.user?.id, state.user?.role),
       ),
-      body: RefreshIndicator(
-        onRefresh: _load,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(14, 14, 14, 28),
-          children: [
-            Consumer(
-              builder: (context, ref, _) {
-                final engine = ref.watch(recoveryEngineStateProvider);
-                return RecoveryStatusCard(
-                  state: engine.maybeWhen(
-                    data: (value) => value,
-                    orElse: () => const RecoveryEngineState(),
+      (previous, next) {
+        if (previous == next) return;
+        setState(() {
+          _isAdmin = false;
+          _attempts = const [];
+          _queuedDeclarations = const [];
+          _financialActions = const [];
+          _history.clear();
+          _companyId = null;
+        });
+        _load();
+      },
+    );
+    if (!_isAdmin) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(title: const Text('Centro de recuperación')),
+        body: Center(
+          child: _loading
+              ? const CircularProgressIndicator()
+              : const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.admin_panel_settings_outlined, size: 32),
+                      SizedBox(height: 12),
+                      Text('Acceso de administrador', style: TextStyle(fontWeight: FontWeight.w700)),
+                      SizedBox(height: 8),
+                      Text('Inicia sesión como administrador para revisar operaciones.', textAlign: TextAlign.center),
+                    ],
                   ),
-                  openIncidents: _attempts.length,
-                  pendingDeclarations: _pendingDeclarations,
-                );
-              },
-            ),
-            const SizedBox(height: 12),
-            const _Notice(
-              icon: Icons.storefront_rounded,
-              text:
-                  'Puedes seguir vendiendo con normalidad. Un cobro sin confirmar '
-                  'no bloquea el punto de venta; solo se bloquea repetir ese mismo '
-                  'cobro o ese mismo carrito.',
-            ),
-            const SizedBox(height: 12),
-            if ((_companyId ?? '').isNotEmpty)
-              ReconciliationObligationsPanel(
-                companyId: _companyId!,
-                pendingDeclarations: _queuedDeclarations,
-              ),
-            if (_loading)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 40),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else if (_error != null)
-              _ErrorCard(message: _error!, onRetry: _load)
-            else if (_attempts.isEmpty)
-              const _EmptyCard()
-            else
-              for (final action in _attempts)
-                _IncidentCard(
-                  action: action,
-                  history: _history[action.id] ?? const [],
-                  busy: _busy.contains(action.id),
-                  amountText: _amountText(action),
-                  paymentText: _paymentText(action),
-                  itemLines: _itemLines(action),
-                  onVerify: () => _verify(action),
-                  onNotPerformed: () => _resolveManually(
-                    action,
-                    SaleAttemptDecision.manualNotPerformed,
-                  ),
-                  onMoneyReceived: () => _resolveManually(
-                    action,
-                    SaleAttemptDecision.manualMoneyReceived,
-                  ),
-                  onNewSale: () => _showNewSaleGuidance(action),
-                  onReview: () => _showReviewRequest(action),
                 ),
-          ],
+        ),
+      );
+    }
+    final queue = ref.watch(syncQueueServiceProvider);
+    final server = ref.watch(serverConnectionProvider);
+    final linked = ref.watch(recoveryReviewsProvider).asData?.value
+        .where((row) => row['sourceUserId'] == ref.read(authStateProvider).user?.id)
+        .map((row) => row['sourceActionId']).toSet() ?? <Object?>{};
+    final hasOpenReviews = ref.watch(recoveryReviewsProvider).asData?.value
+        .any((row) => row['needsIntervention'] == true) ?? false;
+    final active = _financialActions
+        .where((a) => a.status != 'review_resolved' && !linked.contains(a.id))
+        .toList();
+    final resolved = _financialActions
+        .where((a) => a.status == 'review_resolved' && !linked.contains(a.id))
+        .toList();
+    final obligations = (_companyId ?? '').isEmpty ? null
+        : ref.watch(reconciliationObligationsProvider(_companyId!));
+    final cases = ref.watch(recoveryReviewsProvider);
+    final allClear = !_loading && _error == null && _attempts.isEmpty &&
+        active.isEmpty && _pendingDeclarations == 0 && !hasOpenReviews &&
+        queue.pendingCount + queue.errorCount + queue.blockedCount + queue.conflictCount + queue.syncingCount == 0 &&
+        cases.hasValue && obligations?.hasValue == true &&
+        obligations!.value!.isEmpty;
+    final theme = Theme.of(context);
+    return Theme(
+      data: theme.copyWith(
+        visualDensity: VisualDensity.compact,
+        listTileTheme: const ListTileThemeData(dense: true, minTileHeight: 40),
+        filledButtonTheme: FilledButtonThemeData(
+          style: FilledButton.styleFrom(shape: const RoundedRectangleBorder()),
+        ),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: OutlinedButton.styleFrom(
+            shape: const RoundedRectangleBorder(),
+          ),
+        ),
+        textButtonTheme: TextButtonThemeData(
+          style: TextButton.styleFrom(shape: const RoundedRectangleBorder()),
         ),
       ),
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(title: const Text('Centro de recuperación')),
+        body: RefreshIndicator(
+          onRefresh: _load,
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 920),
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 20, 16, 28),
+                children: [
+                  Container(
+                    key: const ValueKey('recovery-content-card'),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (!allClear) ...[
+                        Row(
+                          children: [
+                            const Expanded(
+                              child: Text(
+                                'Pendientes',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: 'Sincronizar',
+                              onPressed: _loading || _synchronizing ? null : _synchronize,
+                              icon: _synchronizing
+                                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                                  : const Icon(Icons.sync_rounded, size: 20),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            _RecoveryMetric(
+                              label: switch (server) {
+                                ServerConnection.reachable =>
+                                  'Servidor accesible',
+                                ServerConnection.unreachable => 'Sin conexión',
+                                ServerConnection.unknown =>
+                                  'Servidor sin comprobar',
+                              },
+                              icon: server == ServerConnection.reachable
+                                  ? Icons.cloud_done_outlined
+                                  : Icons.cloud_outlined,
+                            ),
+                            if (queue.pendingCount > 0)
+                              _RecoveryMetric(
+                                label: '${queue.pendingCount} pendientes',
+                              ),
+                            if (queue.errorCount > 0)
+                              _RecoveryMetric(
+                                label: '${queue.errorCount} reintentables',
+                              ),
+                            if (queue.blockedCount > 0)
+                              _RecoveryMetric(
+                                label: '${queue.blockedCount} bloqueadas',
+                              ),
+                            if (queue.conflictCount > 0)
+                              _RecoveryMetric(
+                                label: '${queue.conflictCount} por revisar',
+                              ),
+                            if (queue.pendingCount +
+                                    queue.errorCount +
+                                    queue.blockedCount +
+                                    queue.conflictCount ==
+                                0)
+                              const _RecoveryMetric(
+                                label: 'Sin pendientes locales',
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        if (_attempts.isEmpty && active.any((a) => a.isAutomaticallyRetryable))
+                          const Text('Se envían automáticamente al volver la conexión.', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                        if (_attempts.isNotEmpty ||
+                            _pendingDeclarations > 0) ...[
+                          const SizedBox(height: 16),
+                          Consumer(
+                            builder: (context, ref, _) {
+                              final engine = ref.watch(
+                                recoveryEngineStateProvider,
+                              );
+                              final state = engine.maybeWhen(
+                                data: (value) => value,
+                                orElse: () => const RecoveryEngineState(),
+                              );
+                              if (!state.running &&
+                                  !state.waitingForConnection &&
+                                  state.consecutiveFailures == 0) {
+                                return const SizedBox.shrink();
+                              }
+                              return RecoveryStatusCard(
+                                state: state,
+                                openIncidents: _attempts.length,
+                                pendingDeclarations: _pendingDeclarations,
+                              );
+                            },
+                          ),
+                        ],
+                        ],
+                        if (allClear) const _EmptyCard(),
+                        if (!allClear) RecoveryReviewsPanel(
+                          localSaleAttemptIds: _attempts.map((a) => a.id).toSet(),
+                        ),
+                        if (!allClear && (_companyId ?? '').isNotEmpty)
+                          ReconciliationObligationsPanel(
+                            companyId: _companyId!,
+                            pendingDeclarations: _queuedDeclarations,
+                            onLocalChanged: _load,
+                          ),
+                        if (_loading)
+                          const Padding(
+                            padding: EdgeInsets.all(24),
+                            child: Center(child: CircularProgressIndicator()),
+                          )
+                        else if (_error != null)
+                          _ErrorCard(message: _error!, onRetry: _load)
+                        else ...[
+                          if (_attempts.isNotEmpty) ...[
+                            const SizedBox(height: 20),
+                            const Text(
+                              'Cobros por confirmar',
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                            const SizedBox(height: 8),
+                            for (final action in _attempts)
+                              _IncidentCard(
+                                key: ValueKey('sale-incident:${action.id}'),
+                                action: action,
+                                canResolve: _checks[action.id]?.status == SaleAttemptReconciliationStatus.notFound ||
+                                    _checks[action.id]?.status == SaleAttemptReconciliationStatus.definitivelyRejected,
+                                busy: _busy.contains(action.id),
+                                amountText: _amountText(action),
+                                paymentText: _paymentText(action),
+                                onVerify: () => _verify(action),
+                                onNotPerformed: () => _resolveManually(
+                                  action,
+                                  SaleAttemptDecision.manualNotPerformed,
+                                ),
+                                onNewSale: () => _showNewSaleGuidance(action),
+                              ),
+                          ],
+                          if (active.isNotEmpty) ...[
+                            const SizedBox(height: 20),
+                            const Text(
+                              'Operaciones',
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                            const SizedBox(height: 8),
+                            for (final action in active) _financialTile(action),
+                          ],
+                        ],
+                        if (!allClear && resolved.isNotEmpty)
+                          ExpansionTile(
+                            tilePadding: EdgeInsets.zero,
+                            title: Text(
+                              'Revisiones finalizadas (${resolved.length})',
+                            ),
+                            children: [
+                              for (final action in resolved)
+                                _financialTile(action),
+                            ],
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _checkFinancialAction(PendingSyncAction action) async {
+    if (_busy.contains(action.id)) return;
+    setState(() => _busy.add(action.id));
+    try {
+      await ref.read(recoveryReviewRepositoryProvider).check(action);
+      ref.invalidate(recoveryReviewsProvider);
+      await _load();
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Comprobación terminada. Consulta el estado.')));
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              userSafeErrorMessage(
+                error,
+                fallback:
+                    'No se pudo comprobar. La operación sigue guardada.',
+              ),
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy.remove(action.id));
+    }
+  }
+
+  Future<void> _markFinancialNotPerformed(PendingSyncAction action) async {
+    if (_busy.contains(action.id)) return;
+    final note = await _askNote(SaleAttemptDecision.manualNotPerformed);
+    if (note == null || !mounted) return;
+    setState(() => _busy.add(action.id));
+    try {
+      final repository = ref.read(recoveryReviewRepositoryProvider);
+      final row = await repository.prepare(action);
+      await repository.decide(row, 'NOT_PERFORMED', note);
+      ref.invalidate(recoveryReviewsProvider);
+      await _load();
+      if (mounted) {
+        await _showInfo(title: 'Marcada como no realizada', body: 'El historial se conserva. No se anularon ventas ni pagos.');
+      }
+    } catch (error) {
+      if (mounted) {
+        await _showInfo(title: 'La operación sigue pendiente', body: userSafeErrorMessage(error,
+          fallback: 'No se pudo guardar la decisión. La evidencia sigue conservada.'));
+      }
+    } finally {
+      if (mounted) setState(() => _busy.remove(action.id));
+    }
+  }
+
+  Widget _financialTile(PendingSyncAction action) {
+    final canCheck =
+        RecoveryReviewRepository.types.contains(action.type) &&
+        !action.isAutomaticallyRetryable &&
+        action.status != 'syncing' &&
+        action.status != 'review_resolved';
+    final rawAmount =
+        action.payload['amount'] ??
+        action.payload['expectedTotalSold'] ??
+        action.payload['openingAmount'] ??
+        action.payload['closingAmount'];
+    final amount = num.tryParse('$rawAmount');
+    return ExpansionTile(
+      key: PageStorageKey('financial-${action.id}'),
+      shape: const Border(),
+      collapsedShape: const Border(),
+      expandedAlignment: Alignment.centerLeft,
+      dense: true,
+      visualDensity: VisualDensity.compact,
+      minTileHeight: 40,
+      tilePadding: EdgeInsets.zero,
+      leading: Icon(
+        action.status == 'review_resolved'
+            ? Icons.task_alt
+            : Icons.receipt_long_outlined,
+        color: AppColors.textSecondary,
+      ),
+      title: Text(
+        '${recoveryOperationLabel(action.type)}${amount != null && amount.isFinite ? ' · RD\$ ${amount.toStringAsFixed(2)}' : ''}',
+        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+      ),
+      subtitle: Text(
+        action.payload['recoveryReviewId'] != null &&
+                action.status != 'review_resolved'
+            ? 'Por comprobar'
+            : '${_queueLabel(action)} · ${recoveryMoment(action.createdAt)}',
+        style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+      ),
+      childrenPadding: const EdgeInsets.only(left: 36, bottom: 16),
+      expandedCrossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          recoveryActionMessage(action),
+          style: const TextStyle(color: AppColors.textSecondary),
+        ),
+        const SizedBox(height: 8),
+        SelectableText(
+          key: PageStorageKey('financial-reference-${action.id}'),
+          'Referencia: ${action.idempotencyKey ?? action.id}',
+          style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+        ),
+        if (action.nextAttemptAt != null)
+          Text(
+            'Próximo intento: ${recoveryMoment(action.nextAttemptAt!)}',
+            style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+          ),
+        if (canCheck) ...[
+          const SizedBox(height: 12),
+          Wrap(spacing: 8, runSpacing: 8, children: [OutlinedButton.icon(
+            onPressed: _busy.contains(action.id)
+                ? null
+                : () => _checkFinancialAction(action),
+            icon: const Icon(Icons.fact_check_outlined, size: 18),
+            label: Text(
+              _busy.contains(action.id) ? 'Comprobando…' : 'Comprobar',
+            ),
+          ), TextButton(
+            onPressed: _busy.contains(action.id) ? null : () => _markFinancialNotPerformed(action),
+            child: const Text('Marcar como no realizada'),
+          )]),
+        ],
+      ],
     );
   }
 }
 
-class _Notice extends StatelessWidget {
-  const _Notice({required this.icon, required this.text});
-
-  final IconData icon;
-  final String text;
-
+class _RecoveryMetric extends StatelessWidget {
+  const _RecoveryMetric({required this.label, this.icon});
+  final String label;
+  final IconData? icon;
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.primarySoft,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.secondaryBorder),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 18, color: AppColors.primary),
-          const SizedBox(width: 9),
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(
-                fontSize: 12.5,
-                height: 1.4,
-                color: AppColors.textPrimary,
-                fontWeight: FontWeight.w600,
-              ),
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+    decoration: BoxDecoration(
+      color: AppColors.background,
+      borderRadius: BorderRadius.circular(6),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (icon != null) ...[
+          Icon(icon, size: 16, color: AppColors.textSecondary),
+          const SizedBox(width: 6),
+        ],
+        Flexible(
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.textSecondary,
             ),
           ),
-        ],
-      ),
-    );
-  }
+        ),
+      ],
+    ),
+  );
 }
 
 class _EmptyCard extends StatelessWidget {
   const _EmptyCard();
-
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 34, horizontal: 16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: const Column(
-        children: [
-          Icon(Icons.verified_rounded, size: 34, color: AppColors.success),
-          SizedBox(height: 10),
-          Text(
-            'No hay cobros sin confirmar',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w800,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          SizedBox(height: 4),
-          Text(
-            'Todo lo registrado en este equipo está conciliado.',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => const Padding(
+    padding: EdgeInsets.symmetric(vertical: 24),
+    child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+      Icon(Icons.check_circle, color: AppColors.success, size: 24),
+      SizedBox(width: 10),
+      Text('Todo en orden', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+    ]),
+  );
 }
 
 class _ErrorCard extends StatelessWidget {
@@ -839,333 +1131,40 @@ class _ErrorCard extends StatelessWidget {
   }
 }
 
-class _IncidentCard extends StatefulWidget {
+class _IncidentCard extends StatelessWidget {
   const _IncidentCard({
-    required this.action,
-    required this.history,
-    required this.busy,
-    required this.amountText,
-    required this.paymentText,
-    required this.itemLines,
-    required this.onVerify,
-    required this.onNotPerformed,
-    required this.onMoneyReceived,
-    required this.onNewSale,
-    required this.onReview,
+    super.key,
+    required this.action, required this.canResolve, required this.busy,
+    required this.amountText, required this.paymentText, required this.onVerify,
+    required this.onNotPerformed, required this.onNewSale,
   });
-
   final PendingSyncAction action;
-  final List<SaleAttemptAuditEntry> history;
+  final bool canResolve;
   final bool busy;
   final String amountText;
   final String paymentText;
-  final List<String> itemLines;
   final Future<void> Function() onVerify;
   final Future<void> Function() onNotPerformed;
-  final Future<void> Function() onMoneyReceived;
   final Future<void> Function() onNewSale;
-  final Future<void> Function() onReview;
-
   @override
-  State<_IncidentCard> createState() => _IncidentCardState();
-}
-
-class _IncidentCardState extends State<_IncidentCard> {
-  bool _details = false;
-  bool _historyOpen = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final action = widget.action;
-    final requestId = SaleAttemptReconciler.requestIdOf(action);
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.warningBorder),
-        boxShadow: const [
-          BoxShadow(
-            color: AppColors.shadow,
-            blurRadius: 10,
-            offset: Offset(0, 3),
-          ),
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 10),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text('RD\$ $amountText · $paymentText', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+      const SizedBox(height: 4),
+      Text(canResolve ? 'No se encontró el registro. Confirma qué ocurrió antes de resolver.' : 'Se comprueba automáticamente. Puedes verificar otra vez.',
+        style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+      const SizedBox(height: 8),
+      Wrap(spacing: 8, runSpacing: 6, children: [
+        if (!canResolve)
+          FilledButton.icon(onPressed: busy ? null : onVerify,
+            icon: const Icon(Icons.search, size: 16),
+            label: Text(busy ? 'Verificando…' : 'Verificar ahora'))
+        else ...[
+          OutlinedButton(onPressed: busy ? null : onNotPerformed, child: const Text('Eliminar pendiente')),
+          FilledButton(onPressed: busy ? null : onNewSale, child: const Text('Hacer el cobro de nuevo')),
         ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(7),
-                decoration: const BoxDecoration(
-                  color: AppColors.warningSoft,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.help_outline_rounded,
-                  size: 18,
-                  color: AppColors.warning,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Cobro sin confirmar',
-                      style: TextStyle(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${_formatDate(action.createdAt)} · '
-                      'RD\$ ${widget.amountText} · ${widget.paymentText}',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              TextButton(
-                onPressed: () => setState(() => _details = !_details),
-                child: Text(_details ? 'Ocultar' : 'Detalles'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'No sabemos si este cobro se registró. No se ha repetido ni '
-            'descartado: sigue guardado tal como quedó.',
-            style: TextStyle(
-              fontSize: 12.5,
-              height: 1.4,
-              color: AppColors.textSecondary,
-            ),
-          ),
-          if (widget.history.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(
-              'Última verificación: ${_formatDate(widget.history.first.checkedAt)} · '
-              '${_decisionLabel(widget.history.first.decision)}',
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary,
-              ),
-            ),
-          ],
-          if (_details) ...[
-            const SizedBox(height: 10),
-            _DetailRow(label: 'Identificador', value: requestId),
-            _DetailRow(
-              label: 'Último intento',
-              value: action.lastAttemptAt == null
-                  ? 'Nunca'
-                  : _formatDate(action.lastAttemptAt!),
-            ),
-            _DetailRow(label: 'Empresa', value: action.companyId ?? '-'),
-            _DetailRow(label: 'Usuario', value: action.userId ?? '-'),
-            _DetailRow(label: 'Artículos', value: widget.itemLines.join(' · ')),
-            for (final entry in widget.history.take(5))
-              _DetailRow(
-                label: _decisionLabel(entry.decision),
-                value:
-                    '${_formatDate(entry.checkedAt)}'
-                    '${entry.actorRole == null ? '' : ' · ${entry.actorRole}'}'
-                    '${entry.note == null ? '' : ' · ${entry.note}'}',
-              ),
-          ],
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              FilledButton.icon(
-                onPressed: widget.busy ? null : () => widget.onVerify(),
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                ),
-                icon: widget.busy
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Icon(Icons.search_rounded, size: 16),
-                label: const Text(
-                  'Verificar ahora',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-                ),
-              ),
-              OutlinedButton.icon(
-                onPressed: widget.busy ? null : () => widget.onNewSale(),
-                icon: const Icon(Icons.add_shopping_cart_rounded, size: 16),
-                label: const Text(
-                  'Preparar venta nueva',
-                  style: TextStyle(fontSize: 12),
-                ),
-              ),
-              OutlinedButton.icon(
-                onPressed: widget.busy ? null : () => widget.onReview(),
-                icon: const Icon(Icons.description_outlined, size: 16),
-                label: const Text(
-                  'Solicitar revisión',
-                  style: TextStyle(fontSize: 12),
-                ),
-              ),
-              TextButton.icon(
-                onPressed: () => setState(() => _historyOpen = !_historyOpen),
-                icon: const Icon(Icons.history_rounded, size: 16),
-                label: Text(
-                  'Historial (${widget.history.length})',
-                  style: const TextStyle(fontSize: 12),
-                ),
-              ),
-            ],
-          ),
-          if (_historyOpen) ...[
-            const SizedBox(height: 6),
-            if (widget.history.isEmpty)
-              const Text(
-                'Todavía no hay verificaciones registradas en este equipo.',
-                style: TextStyle(fontSize: 12, color: AppColors.textMuted),
-              )
-            else
-              for (final entry in widget.history)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(
-                    '• ${_formatDate(entry.checkedAt)} · '
-                    '${_decisionLabel(entry.decision)}'
-                    '${entry.saleId == null ? '' : ' · venta ${entry.saleId}'}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ),
-          ],
-          const Divider(height: 22),
-          const Text(
-            'Resolver con autorización del encargado',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              Expanded(
-                child: TextButton(
-                  onPressed: widget.busy ? null : () => widget.onNotPerformed(),
-                  style: TextButton.styleFrom(
-                    foregroundColor: AppColors.textSecondary,
-                    alignment: Alignment.centerLeft,
-                  ),
-                  child: const Text(
-                    'No se realizó esta venta',
-                    style: TextStyle(fontSize: 12),
-                  ),
-                ),
-              ),
-              Expanded(
-                child: TextButton(
-                  onPressed: widget.busy
-                      ? null
-                      : () => widget.onMoneyReceived(),
-                  style: TextButton.styleFrom(
-                    foregroundColor: AppColors.primary,
-                    alignment: Alignment.centerLeft,
-                  ),
-                  child: const Text(
-                    'Sí recibimos el dinero',
-                    style: TextStyle(fontSize: 12),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const Text(
-            'Cerrar la incidencia no borra ventas, pagos, deudas ni inventario, y '
-            'no repite el cobro.',
-            style: TextStyle(fontSize: 11, color: AppColors.textMuted),
-          ),
-        ],
-      ),
-    );
-  }
-
-  static String _formatDate(DateTime value) {
-    final local = value.toLocal();
-    String two(int n) => n.toString().padLeft(2, '0');
-    return '${two(local.day)}/${two(local.month)}/${local.year} '
-        '${two(local.hour)}:${two(local.minute)}';
-  }
-
-  static String _decisionLabel(SaleAttemptDecision decision) {
-    return switch (decision) {
-      SaleAttemptDecision.autoConfirmed => 'Registrada en el servidor',
-      SaleAttemptDecision.autoRegisteredThenVoided =>
-        'Registrada y luego anulada',
-      SaleAttemptDecision.keptInconclusive => 'Sin conclusión: conservada',
-      SaleAttemptDecision.manualNotPerformed => 'Declarada como no realizada',
-      SaleAttemptDecision.manualMoneyReceived => 'Dinero recibido declarado',
-      SaleAttemptDecision.manualEscalated => 'Revisión solicitada',
-      SaleAttemptDecision.manualAuthorizedNewSale => 'Venta nueva autorizada',
-    };
-  }
-}
-
-class _DetailRow extends StatelessWidget {
-  const _DetailRow({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 108,
-            child: Text(
-              label,
-              style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
-            ),
-          ),
-          Expanded(
-            child: SelectableText(
-              value,
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.textPrimary,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+      ]),
+    ]),
+  );
 }

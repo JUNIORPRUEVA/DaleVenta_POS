@@ -9,6 +9,7 @@ import { normalizeJwtSecret } from "./jwt.util";
 import { StorageModule } from "../storage/storage.module";
 import { PasswordResetEmailService } from "./password-reset-email.service";
 import { RedisModule } from "../common/redis/redis.module";
+import { OfflineCashPermitService } from './offline-cash-permit.service';
 
 @Module({
   imports: [
@@ -26,8 +27,8 @@ import { RedisModule } from "../common/redis/redis.module";
       }),
     }),
   ],
-  providers: [AuthService, JwtStrategy, PasswordResetEmailService],
+  providers: [AuthService, JwtStrategy, PasswordResetEmailService, OfflineCashPermitService],
   controllers: [AuthController],
-  exports: [AuthService],
+  exports: [AuthService, OfflineCashPermitService],
 })
 export class AuthModule {}

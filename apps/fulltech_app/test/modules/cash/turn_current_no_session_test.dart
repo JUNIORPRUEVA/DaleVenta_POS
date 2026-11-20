@@ -16,6 +16,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -147,6 +148,7 @@ void main() {
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
+    FlutterSecureStorage.setMockInitialValues({});
     AppErrorReporter.instance.resetForTesting();
     databaseCounter += 1;
     store = OfflineStore.forTesting('turn_current_$databaseCounter.db');
@@ -248,7 +250,7 @@ void main() {
   Future<void> pumpUntilFound(
     WidgetTester tester,
     Finder finder, {
-    int tries = 60,
+    int tries = 250,
   }) async {
     for (var i = 0; i < tries; i++) {
       if (finder.evaluate().isNotEmpty) return;
@@ -515,6 +517,7 @@ void main() {
 
     await tester.tap(submit);
     await settleAsync(tester);
+    await pumpUntilFound(tester, find.textContaining('No hay terminales activos'));
     await tester.pump(const Duration(milliseconds: 400));
 
     // El mensaje real del backend se muestra dentro del diálogo.
@@ -553,10 +556,11 @@ void main() {
       }
       if (options.path == '/cash/sessions/open') {
         opened = true;
-        return _jsonResponse(const {
+        return _jsonResponse({
           'userId': _userId,
           'cashId': _legacyCashboxId,
-          'shiftId': _legacyShiftId,
+          'shiftId': (options.data as Map)['clientSessionId'],
+          'openingAmount': (options.data as Map)['openingAmount'],
           'openedAt': '2026-09-17T02:31:17.443Z',
           'status': 'OPEN',
           'userName': 'Edward vasquez',
@@ -580,6 +584,12 @@ void main() {
     await settleAsync(tester);
     await tester.pump(const Duration(milliseconds: 400));
     await settleAsync(tester);
+
+    // Opening reads the owner and persists its cache through real SQLite I/O.
+    // Wait for the controller result rather than assuming host disk latency.
+    for (var attempt = 0; attempt < 25 && find.text('Abierto').evaluate().isEmpty; attempt++) {
+      await settleAsync(tester);
+    }
 
     expect(find.text('Abierto'), findsOneWidget);
     expect(find.text('Cerrado'), findsNothing);

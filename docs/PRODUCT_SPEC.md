@@ -88,6 +88,17 @@ Confirmed capabilities:
 
 ## Multi-Company Behavior
 
+Recovery UI refinement (2026-11-20): the Center is ADMIN-only. Uncertain
+charges are checked automatically, with a bounded manual read-only check when
+needed. A missing record permits an audited human withdrawal or preparation
+of an independent editable ticket; neither action automatically charges money.
+Manual withdrawal archives original local evidence. Rejected cash operations
+cannot be marked not performed if a related server record exists. Declared
+money can be matched to an exact original sale or withdrawn administratively
+with a reason; existing financial records are never erased by these actions.
+New POS tickets have stable operation identities, so independent identical
+tickets can continue while the original uncertain ticket remains protected.
+
 The data model uses `Company` as the tenant root. Many backend services require a `companyId` from the authenticated user via `requireTenant`. Services and tests show tenant-specific querying and protection, especially products, clients, sales, tax, users, warehouses, and cotizaciones.
 
 Important invariant: tenant/company data must not mix across authenticated contexts.

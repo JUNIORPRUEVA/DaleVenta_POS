@@ -181,7 +181,8 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byType(SyncStatusMenuButton));
       await tester.pumpAndSettle();
-      expect(find.text('Todo sincronizado'), findsOneWidget);
+      expect(find.text('Sin pendientes locales'), findsNWidgets(2));
+      expect(find.text('Todo sincronizado'), findsNothing);
       expect(tester.takeException(), isNull);
     },
   );

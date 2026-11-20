@@ -61,7 +61,7 @@ void main() {
 
     expect(
       message,
-      'Necesitas iniciar sesión nuevamente para continuar sincronizando.',
+      'Necesitas iniciar sesión de nuevo para continuar.',
     );
     expect(message, isNot(contains('DioException')));
     expect(message, isNot(contains('401')));
@@ -70,15 +70,15 @@ void main() {
   test('friendly sync message maps business conflict codes', () {
     expect(
       friendlySyncStatusMessage('ORIGIN_SESSION_CLOSED'),
-      contains('turno de esta operación ya está cerrado'),
+      contains('turno original está cerrado'),
     );
     expect(
       friendlySyncStatusMessage('INSUFFICIENT_WAREHOUSE_STOCK'),
-      contains('No hay existencias suficientes'),
+      contains('Existencias insuficientes'),
     );
     expect(
       friendlySyncStatusMessage('LEGACY_MISSING_SESSION'),
-      contains('no la registres en otro turno'),
+      contains('no repitas la operación'),
     );
   });
 

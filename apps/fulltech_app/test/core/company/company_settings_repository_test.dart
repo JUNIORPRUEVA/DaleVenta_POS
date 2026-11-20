@@ -329,8 +329,10 @@ void main() {
       var patchCount = 0;
       final syncQueue = SyncQueueService(
         OfflineStore.instance,
-        scopeResolver: () async =>
-            const OfflineSyncScope(companyId: 'company-a'),
+        scopeResolver: () async => const OfflineSyncScope(
+          companyId: 'company-a',
+          userId: 'settings-fixture-user',
+        ),
       );
       final dio = Dio()
         ..httpClientAdapter = _FakeHttpClientAdapter((options) async {
@@ -427,8 +429,10 @@ void main() {
         });
       final syncQueue = SyncQueueService(
         OfflineStore.instance,
-        scopeResolver: () async =>
-            const OfflineSyncScope(companyId: 'company-a'),
+        scopeResolver: () async => const OfflineSyncScope(
+          companyId: 'company-a',
+          userId: 'settings-fixture-user',
+        ),
       );
       final repository = CompanySettingsRepository(
         dio,
@@ -520,8 +524,10 @@ void main() {
         });
       final syncQueue = SyncQueueService(
         OfflineStore.instance,
-        scopeResolver: () async =>
-            const OfflineSyncScope(companyId: 'company-a'),
+        scopeResolver: () async => const OfflineSyncScope(
+          companyId: 'company-a',
+          userId: 'settings-fixture-user',
+        ),
       );
       final repository = CompanySettingsRepository(
         dio,

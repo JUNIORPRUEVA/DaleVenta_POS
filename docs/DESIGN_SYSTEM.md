@@ -97,6 +97,13 @@ chips, cards and status indicators retain their own shapes.
 
 ## Tables, Lists, Menus
 
+Owner-approved recovery refinement (2026-11-20): keep the Recovery Center in a
+920px bounded card, with compact 12–13px rows, square actions and a single
+top sync control. The empty state contains only a success icon and «Todo en
+orden». Uncertain charges first offer verification; a valid absent-record
+result replaces it with the two resolution actions. Omit import/export menus
+and diagnostic histories from this customer flow; retain their stored evidence.
+
 - `DataTableTheme` uses muted heading row and medium body weight.
 - `ListTileTheme` uses rounded 16px shape and role primary icons.
 - Popup menus are white, transparent tint, rounded 14px.

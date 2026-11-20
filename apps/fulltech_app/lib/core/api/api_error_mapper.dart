@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'retry_after.dart';
 
 import '../config/product_config.dart';
 import '../errors/api_exception.dart';
@@ -44,6 +45,7 @@ class ApiErrorMapper {
         method: method,
         uri: uri,
         retryable: status == 408 || status == 429 || status >= 500,
+        retryAfter: parseRetryAfter(error.response?.headers.value('retry-after')),
       );
     }
 
@@ -301,7 +303,7 @@ class ApiErrorMapper {
   }
 
   static ApiErrorType _httpType(int status) {
-    if (status == 400) return ApiErrorType.badRequest;
+    if (status == 400 || status == 422) return ApiErrorType.badRequest;
     if (status == 401) return ApiErrorType.unauthorized;
     if (status == 403) return ApiErrorType.forbidden;
     if (status == 404) return ApiErrorType.notFound;

@@ -4216,6 +4216,7 @@ model CashSession {
   terminalCodeSnapshot String?   @map("terminal_code_snapshot")
   userName             String?
   openedAt             DateTime  @default(now())
+  offlineOpeningEvidenceHash String? @map("offline_opening_evidence_hash")
   initialAmount        Decimal   @default(0) @db.Decimal(12, 2)
   closingAmount        Decimal?  @db.Decimal(12, 2)
   expectedAmount       Decimal?  @db.Decimal(12, 2)
@@ -4257,6 +4258,7 @@ model CashMovement {
   affectsProfit Boolean  @default(true)
   userId        String?  @db.Uuid
   createdAt     DateTime @default(now())
+  occurredAt    DateTime? @map("occurred_at")
   updatedAt     DateTime @updatedAt
 
   session CashSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
@@ -6089,6 +6091,43 @@ model GuardianWorkerHeartbeat {
 /// No es una venta ni un pago: es la constancia de que un encargado afirmó haber
 /// recibido el dinero y de que la contabilidad debe revisarlo. Nunca se crea,
 /// modifica ni anula un registro financiero a partir de aquí.
+/// Administrative evidence only. No sales, cash or inventory posting occurs here.
+model RecoveryReviewCase {
+  id String @id @default(uuid()) @db.Uuid
+  companyId String @map("company_id") @db.Uuid
+  sourceUserId String @map("source_user_id") @db.Uuid
+  sourceActionId String @map("source_action_id") @db.VarChar(300)
+  actionType String @map("action_type") @db.VarChar(40)
+  operationId String @map("operation_id") @db.VarChar(200)
+  originalSessionId String? @map("original_session_id") @db.VarChar(128)
+  expectedAmount Decimal? @map("expected_amount") @db.Decimal(12, 2)
+  snapshotHash String @map("snapshot_hash") @db.VarChar(64)
+  payloadSummary Json @map("payload_summary")
+  status String @default("OPEN") @db.VarChar(40)
+  version Int @default(1)
+  registeredEntityId String? @map("registered_entity_id") @db.VarChar(128)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@unique([companyId, sourceUserId, actionType, operationId], map:"recovery_review_case_operation_key")
+  @@index([companyId, status, createdAt])
+  @@map("recovery_review_cases")
+}
+
+model RecoveryReviewEvent {
+  id String @id @default(uuid()) @db.Uuid
+  companyId String @map("company_id") @db.Uuid
+  caseId String @map("case_id") @db.Uuid
+  actorUserId String @map("actor_user_id") @db.Uuid
+  actorRole String @map("actor_role") @db.VarChar(40)
+  kind String @db.VarChar(40)
+  note String?
+  evidenceReference String? @map("evidence_reference") @db.VarChar(500)
+  caseVersion Int @map("case_version")
+  createdAt DateTime @default(now()) @map("created_at")
+  @@index([companyId, caseId, createdAt])
+  @@map("recovery_review_events")
+}
+
 model SaleReconciliationObligation {
   id          String @id @default(uuid()) @db.Uuid
   companyId   String @map("company_id") @db.Uuid

@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../storage/serialized_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/uat_identity.dart';
@@ -26,7 +26,7 @@ class TokenStorage {
   static String get _refreshTokenKey => UatIdentity.storageKey('refreshToken');
   static String get _userSnapshotKey =>
       UatIdentity.storageKey('authUserSnapshot');
-  final _secureStorage = const FlutterSecureStorage();
+  final _secureStorage = const SerializedSecureStorage();
   String? _memoryAccessToken;
   String? _memoryRefreshToken;
   UserModel? _memoryUserSnapshot;

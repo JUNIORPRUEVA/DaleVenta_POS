@@ -1,9 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:daleventa_pos/core/auth/token_storage.dart';
+import 'package:daleventa_pos/core/models/user_model.dart';
 
 import 'package:daleventa_pos/core/models/product_model.dart';
 import 'package:daleventa_pos/core/offline/offline_store.dart';
@@ -13,10 +18,29 @@ import 'package:daleventa_pos/modules/ventas/data/ventas_repository.dart';
 import 'package:daleventa_pos/modules/ventas/sales_models.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   late List<RequestOptions> captured;
+  late Directory databaseRoot;
+  late String previousDatabasePath;
 
-  setUp(() {
+  setUp(() async {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+    await OfflineStore.instance.closeForTesting();
+    previousDatabasePath = await getDatabasesPath();
+    databaseRoot = await Directory.systemTemp.createTemp('fullpos-fiscal-payload-');
+    await databaseFactory.setDatabasesPath(databaseRoot.path);
+    SharedPreferences.setMockInitialValues({});
+    await TokenStorage().saveUserSnapshot(UserModel.fromJson({
+      'id': 'user-1', 'companyId': 'company-1',
+      'email': 'fixture@fullpos.test', 'nombreCompleto': 'Fixture',
+    }));
     captured = <RequestOptions>[];
+  });
+  tearDown(() async {
+    await OfflineStore.instance.closeForTesting();
+    await databaseFactory.setDatabasesPath(previousDatabasePath);
+    await databaseRoot.delete(recursive: true);
   });
 
   ResponseBody jsonResponse(dynamic body, [int status = 200]) {
@@ -73,7 +97,13 @@ void main() {
         if (options.path.startsWith('/clients')) {
           return jsonResponse(clientJson());
         }
-        return jsonResponse(saleJson());
+        final response = saleJson();
+        if (options.path == '/sales' && options.data is Map) {
+          final request = options.data as Map;
+          response['clientRequestId'] = request['clientRequestId'];
+          response['totalSold'] = request['expectedTotalSold'];
+        }
+        return jsonResponse(response);
       });
     return VentasRepository(
       dio,

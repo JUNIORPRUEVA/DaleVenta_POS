@@ -81,8 +81,8 @@ class RecoveryStatusCard extends StatelessWidget {
               _Chip(
                 icon: Icons.schedule_rounded,
                 text: state.lastRunAt == null
-                    ? 'Aún sin verificar'
-                    : 'Última verificación: ${_formatMoment(state.lastRunAt!)}',
+                    ? 'Sin comprobar'
+                    : 'Revisado: ${_formatMoment(state.lastRunAt!)}',
               ),
               if (state.waitingForConnection)
                 _Chip(
@@ -120,40 +120,32 @@ class RecoveryStatusCard extends StatelessWidget {
       return (
         icon: Icons.sync_rounded,
         color: AppColors.primary,
-        title: 'Recuperación automática en curso',
-        subtitle:
-            'Estamos consultando al servidor si alguno de los cobros por '
-            'confirmar ya quedó registrado. No se reenvía ningún cobro.',
+        title: 'Comprobando cobros',
+        subtitle: 'Consultamos el registro sin repetir el cobro.',
       );
     }
     if (state.waitingForConnection) {
       return (
         icon: Icons.cloud_off_rounded,
         color: AppColors.warning,
-        title: 'Sin conexión con el servidor',
-        subtitle:
-            'No pudimos verificar los cobros pendientes. Se reintentará solo; '
-            'nada se ha dado por cobrado ni por perdido.',
+        title: 'Verificación aplazada',
+        subtitle: 'Volveremos a comprobarlos automáticamente.',
       );
     }
     if (openIncidents == 0 && state.lastOutcome == RecoveryRunOutcome.idle) {
       return (
         icon: Icons.verified_rounded,
         color: AppColors.success,
-        title: 'Todo conciliado',
-        subtitle:
-            'No hay cobros por confirmar en este equipo. La verificación '
-            'automática seguirá activa sin hacer consultas innecesarias.',
+        title: 'Sin cobros inciertos locales',
+        subtitle: 'No hay cobros inciertos guardados en este equipo.',
       );
     }
     if (openIncidents == 0) {
       return (
         icon: Icons.verified_rounded,
         color: AppColors.success,
-        title: 'Verificación exitosa',
-        subtitle:
-            'Los cobros inciertos quedaron conciliados con el servidor y el '
-            'aviso se retiró de este equipo.',
+        title: 'Sin cobros inciertos locales',
+        subtitle: 'Revisa por separado las operaciones pendientes.',
       );
     }
     if (state.lastOutcome == RecoveryRunOutcome.partiallyUnreachable ||
@@ -162,18 +154,14 @@ class RecoveryStatusCard extends StatelessWidget {
         icon: Icons.cloud_off_rounded,
         color: AppColors.warning,
         title: 'Sin conexión con el servidor',
-        subtitle:
-            'Quedan cobros por confirmar y el servidor no respondió. Se '
-            'reintentará automáticamente; no hace falta que hagas nada.',
+        subtitle: 'Los cobros siguen guardados. Se comprobarán al reconectar.',
       );
     }
     return (
       icon: Icons.report_problem_rounded,
       color: AppColors.warning,
       title: 'Requiere intervención',
-      subtitle:
-          'Estos cobros no se pueden resolver con evidencia concluyente. '
-          'Revisa cada caso y decide con la evidencia que tengas.',
+      subtitle: 'El encargado debe comprobar la evidencia antes de decidir.',
     );
   }
 

@@ -1,4 +1,12 @@
 class PendingSyncAction {
+  bool get isAutomaticallyRetryable =>
+      !permanent && (status == 'pending' || status == 'error');
+
+  static int compareOrder(PendingSyncAction a, PendingSyncAction b) {
+    final order = a.createdAt.compareTo(b.createdAt);
+    return order == 0 ? a.id.compareTo(b.id) : order;
+  }
+
   final String id;
   final String type;
   final String scope;
@@ -122,6 +130,7 @@ class PendingSyncAction {
   }
 
   PendingSyncAction copyWith({
+    Map<String, dynamic>? payload,
     String? companyId,
     String? userId,
     String? terminalId,
@@ -150,7 +159,7 @@ class PendingSyncAction {
       entityId: entityId ?? this.entityId,
       idempotencyKey: idempotencyKey ?? this.idempotencyKey,
       operationFingerprint: operationFingerprint ?? this.operationFingerprint,
-      payload: payload,
+      payload: payload ?? this.payload,
       status: status ?? this.status,
       attempts: attempts ?? this.attempts,
       error: clearError ? null : (error ?? this.error),

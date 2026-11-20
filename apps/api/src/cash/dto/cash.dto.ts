@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsIn, IsNumber, IsOptional, IsString, IsUUID, MaxLength, Min, MinLength } from 'class-validator';
+import { IsIn, IsISO8601, IsNumber, IsOptional, IsString, IsUUID, MaxLength, Min, MinLength } from 'class-validator';
 
 export class OpenCashSessionDto {
   @Type(() => Number)
@@ -33,6 +33,16 @@ export class OpenCashSessionDto {
   @IsOptional()
   @IsUUID()
   clientSessionId?: string;
+
+  @IsOptional()
+  @IsISO8601({ strict: true })
+  @MaxLength(40)
+  openedAt?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(4096)
+  offlineOpenPermit?: string;
 }
 
 export class CloseCashSessionDto {
@@ -107,6 +117,7 @@ export class CreateCashMovementDto {
   @IsOptional()
   @IsString()
   @MaxLength(40)
+  @IsISO8601({ strict: true })
   occurredAt?: string;
 }
 

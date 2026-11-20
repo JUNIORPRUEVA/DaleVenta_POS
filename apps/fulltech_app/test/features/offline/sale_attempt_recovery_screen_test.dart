@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:daleventa_pos/core/auth/auth_repository.dart';
 import 'package:daleventa_pos/core/auth/token_storage.dart';
@@ -10,7 +11,11 @@ import 'package:daleventa_pos/core/offline/sale_attempt_reconciliation.dart';
 import 'package:daleventa_pos/core/offline/sale_attempt_reconciliation_providers.dart';
 import 'package:daleventa_pos/features/offline/reconciliation_obligations_panel.dart';
 import 'package:daleventa_pos/features/offline/sale_attempt_recovery_screen.dart';
+import 'package:daleventa_pos/features/offline/recovery_reviews_panel.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
+import 'package:daleventa_pos/core/theme/app_theme.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -33,12 +38,12 @@ const _company = 'company-a';
 const _userId = 'user-a';
 const _requestId = 'req-e2e-1';
 
-UserModel _user() => UserModel(
+UserModel _user({String role = 'ADMIN'}) => UserModel(
   id: _userId,
   email: 'owner@fullpos.local',
   nombreCompleto: 'Encargado UAT',
   telefono: '8090000000',
-  role: 'ADMIN',
+  role: role,
   companyId: _company,
 );
 
@@ -48,9 +53,19 @@ void main() {
   late Directory root;
   late String previousPath;
 
-  setUpAll(() {
+  setUpAll(() async {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
+    final fonts = FontLoader('Manrope');
+    for (final weight in ['Regular', 'Medium', 'SemiBold', 'Bold']) {
+      fonts.addFont(
+        rootBundle.load('assets/fonts/manrope/Manrope-$weight.ttf'),
+      );
+    }
+    await fonts.load();
+    await (FontLoader(
+      'MaterialIcons',
+    )..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'))).load();
   });
 
   setUp(() async {
@@ -91,7 +106,12 @@ void main() {
           'expectedTotalSold': 1305.0,
           'paymentMethod': 'cash',
           'items': [
-            {'productId': 'p-1', 'productName': 'Funda UAT', 'qty': 1, 'priceSoldUnit': 1305.0},
+            {
+              'productId': 'p-1',
+              'productName': 'Funda UAT',
+              'qty': 1,
+              'priceSoldUnit': 1305.0,
+            },
           ],
         },
         status: 'requires_action',
@@ -135,11 +155,8 @@ void main() {
 
     return SaleAttemptReconciler(
       lookup: (id, expected) async => response(id),
-      listAttempts: ({companyId, userId}) =>
-          OfflineStore.instance.listUnresolvedSaleAttempts(
-            companyId: companyId,
-            userId: userId,
-          ),
+      listAttempts: ({companyId, userId}) => OfflineStore.instance
+          .listUnresolvedSaleAttempts(companyId: companyId, userId: userId),
       recordEvidence:
           ({
             required action,
@@ -192,17 +209,23 @@ void main() {
     );
   }
 
-  Widget app(SaleAttemptReconciler reconciler) {
+  Widget app(SaleAttemptReconciler reconciler, {String role = 'ADMIN'}) {
     return ProviderScope(
       overrides: [
-        tokenStorageProvider.overrideWithValue(_FakeTokenStorage(_user())),
+        recoveryReviewsProvider.overrideWith(
+          (ref) async => <Map<String, dynamic>>[],
+        ),
+        tokenStorageProvider.overrideWithValue(_FakeTokenStorage(_user(role: role))),
         saleAttemptReconcilerProvider.overrideWithValue(reconciler),
         // Sin servidor en pruebas: la lista de obligaciones no debe abrir red.
         reconciliationObligationsProvider.overrideWith(
           (ref, companyId) async => const <ReconciliationObligation>[],
         ),
       ],
-      child: const MaterialApp(home: SaleAttemptRecoveryScreen()),
+      child: MaterialApp(
+        theme: AppTheme.light,
+        home: const SaleAttemptRecoveryScreen(),
+      ),
     );
   }
 
@@ -221,6 +244,12 @@ void main() {
   }
 
   Future<void> tapAndSettle(WidgetTester tester, String label) async {
+    if (find.textContaining(label).evaluate().isEmpty &&
+        find.text('Más opciones').evaluate().isNotEmpty) {
+      await tester.ensureVisible(find.text('Más opciones').first);
+      await tester.tap(find.text('Más opciones').first);
+      await tester.pumpAndSettle();
+    }
     // La pantalla creció (tarjeta de estado del motor): el botón puede quedar
     // fuera del viewport de prueba. Se desplaza hasta él antes de pulsar, igual
     // que haría la persona que usa la aplicación.
@@ -236,13 +265,32 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
   }
 
-  testWidgets('verificar desde la UI cierra la incidencia y deja auditoría',
-      (tester) async {
+  testWidgets('cashier sees only the access notice and cannot inspect incidents', (tester) async {
+    await tester.runAsync(seedAttempt);
+    var checks = 0;
+    final reconciler = buildReconciler(response: (_) { checks++; return null; });
+    await tester.runAsync(() async {
+      await tester.pumpWidget(app(reconciler, role: 'CAJERO'));
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+    });
+    await tester.pump();
+    expect(find.text('Acceso de administrador'), findsOneWidget);
+    expect(find.text('Verificar ahora'), findsNothing);
+    expect(find.text('Operaciones guardadas'), findsNothing);
+    expect(checks, 0);
+    final original = await tester.runAsync(() => OfflineStore.instance.listUnresolvedSaleAttempts(companyId: _company, userId: _userId));
+    expect(original, hasLength(1));
+  });
+
+  testWidgets('verificar desde la UI cierra la incidencia y deja auditoría', (
+    tester,
+  ) async {
     await tester.runAsync(seedAttempt);
 
     final reconciler = buildReconciler(
       response: (id) => {
         'status': 'CONFIRMED',
+        'matchesExpected': true,
         'clientRequestId': id,
         'retryAllowed': false,
         'assertsPaymentReceived': false,
@@ -256,29 +304,28 @@ void main() {
     await mount(tester, reconciler);
 
     // La incidencia se muestra sin revelar secretos.
-    expect(find.text('Cobro sin confirmar'), findsOneWidget);
+    expect(find.text('Cobros por confirmar'), findsOneWidget);
     expect(find.textContaining('1305.00'), findsWidgets);
-
-    // Los detalles internos están detrás de «Detalles».
-    expect(find.text('Identificador'), findsNothing);
-    await tapAndSettle(tester, 'Detalles');
-    expect(find.text('Identificador'), findsOneWidget);
-    expect(find.text(_requestId), findsWidgets);
 
     // Verificar ahora → consulta de solo lectura → resuelve.
     await tapAndSettle(tester, 'Verificar ahora');
-    for (var attempt = 0;
-        attempt < 100 && find.text('Resultado de la verificación').evaluate().isEmpty;
-        attempt++) {
-      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    for (
+      var attempt = 0;
+      attempt < 100 &&
+          find.text('Resultado de la verificación').evaluate().isEmpty;
+      attempt++
+    ) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
       await tester.pump();
     }
     expect(find.text('Resultado de la verificación'), findsOneWidget);
-    expect(find.textContaining('sale-real-1'), findsOneWidget);
+    expect(find.textContaining('Venta registrada.'), findsOneWidget);
     await tapAndSettle(tester, 'Entendido');
 
     // El aviso desaparece de la pantalla...
-    expect(find.text('No hay cobros sin confirmar'), findsOneWidget);
+    expect(find.text('Todo en orden'), findsOneWidget);
 
     // ...y en disco: intento retirado + evidencia conservada.
     final pendientes = await tester.runAsync(
@@ -296,8 +343,9 @@ void main() {
     expect(audit.single.saleId, 'sale-real-1');
   });
 
-  testWidgets('un resultado ambiguo conserva la incidencia en pantalla',
-      (tester) async {
+  testWidgets('un resultado ambiguo conserva la incidencia en pantalla', (
+    tester,
+  ) async {
     await tester.runAsync(seedAttempt);
 
     final reconciler = buildReconciler(
@@ -316,11 +364,17 @@ void main() {
     await mount(tester, reconciler);
     await tapAndSettle(tester, 'Verificar ahora');
     expect(find.text('Resultado de la verificación'), findsOneWidget);
-    expect(find.textContaining('NO demuestra'), findsOneWidget);
+    expect(
+      find.textContaining('Esto no confirma que el pago haya fallado'),
+      findsOneWidget,
+    );
     await tapAndSettle(tester, 'Entendido');
 
+    expect(find.text('Verificar ahora'), findsNothing);
+    expect(find.text('Eliminar pendiente'), findsOneWidget);
+    expect(find.text('Hacer el cobro de nuevo'), findsOneWidget);
     // Sigue visible: no se descarta un cobro sin evidencia.
-    expect(find.text('Cobro sin confirmar'), findsOneWidget);
+    expect(find.text('Cobros por confirmar'), findsOneWidget);
     final pendientes = await tester.runAsync(
       () => OfflineStore.instance.listUnresolvedSaleAttempts(
         companyId: _company,
@@ -334,8 +388,9 @@ void main() {
     expect(audit!.single.decision, SaleAttemptDecision.keptInconclusive);
   });
 
-  testWidgets('el historial sobrevive al reinicio de la aplicación',
-      (tester) async {
+  testWidgets('el historial sobrevive al reinicio de la aplicación', (
+    tester,
+  ) async {
     await tester.runAsync(seedAttempt);
 
     final reconciler = buildReconciler(
@@ -359,35 +414,58 @@ void main() {
     SaleAttemptReconciler.resetInFlightForTests();
     await mount(tester, reconciler);
 
-    expect(find.text('Cobro sin confirmar'), findsOneWidget);
-    expect(find.textContaining('Última verificación'), findsOneWidget);
+    expect(find.text('Cobros por confirmar'), findsOneWidget);
 
-    await tapAndSettle(tester, 'Historial');
-    expect(find.textContaining('Sin conclusión: conservada'), findsWidgets);
+    final saved = await tester.runAsync(() => OfflineStore.instance.listSaleAttemptAudit(companyId: _company));
+    expect(saved, isNotEmpty);
+    expect(saved!.first.decision, SaleAttemptDecision.keptInconclusive);
+    expect(find.text('Más opciones'), findsNothing);
   });
 
-  testWidgets('el reporte para soporte no expone credenciales', (tester) async {
-    await tester.runAsync(seedAttempt);
+  for (final width in [320.0, 390.0, 1280.0]) {
+    testWidgets('recovery stays compact and readable at width $width', (
+      tester,
+    ) async {
+      tester.view.physicalSize = Size(width, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.runAsync(seedAttempt);
+      final reconciler = buildReconciler(response: (_) => null);
+      await mount(tester, reconciler);
+      final card = find.byKey(const ValueKey('recovery-content-card'));
+      expect(tester.getSize(card).width, lessThanOrEqualTo(888));
+      expect(find.text('Verificar ahora'), findsOneWidget);
+      expect(find.text('Más opciones'), findsNothing);
+      expect(find.text('Eliminar pendiente'), findsNothing);
+      expect(find.text('Hacer el cobro de nuevo'), findsNothing);
+      expect(find.text(_requestId), findsNothing);
+      expect(tester.takeException(), isNull);
+      await tester.runAsync(() async {
+        final view = WidgetsBinding.instance.renderViews.first;
+        // ignore: invalid_use_of_protected_member
+        final picture = await (view.layer! as OffsetLayer).toImage(
+          view.paintBounds,
+        );
+        final bytes = await picture.toByteData(format: ui.ImageByteFormat.png);
+        final directory = Directory('../../.uat/evidence/recovery-ui');
+        await directory.create(recursive: true);
+        await File(
+          '${directory.path}/recovery-${width.toInt()}.png',
+        ).writeAsBytes(bytes!.buffer.asUint8List());
+        picture.dispose();
+      });
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
 
-    final reconciler = buildReconciler(
-      response: (id) => {
-        'status': 'UNKNOWN',
-        'clientRequestId': id,
-        'retryAllowed': false,
-        'assertsPaymentReceived': false,
-        'sale': null,
-        'movement': null,
-      },
-    );
-
-    await mount(tester, reconciler);
-
-    await tapAndSettle(tester, 'Solicitar revisión');
-    expect(find.text('Reporte para soporte'), findsOneWidget);
-    expect(find.textContaining(_requestId), findsWidgets);
-    // Sin credenciales: nada que parezca un JWT ni una clave.
-    expect(find.textContaining('eyJ'), findsNothing);
-    expect(find.textContaining('Bearer'), findsNothing);
-    await tapAndSettle(tester, 'Cerrar');
+  testWidgets('empty state has only a check and Todo en orden', (tester) async {
+    await mount(tester, buildReconciler(response: (_) => null));
+    await tester.pumpAndSettle();
+    expect(find.text('Todo en orden'), findsOneWidget);
+    expect(find.byIcon(Icons.check_circle), findsOneWidget);
+    expect(find.text('Pendientes'), findsNothing);
+    expect(find.byType(PopupMenuButton<String>), findsNothing);
+    expect(find.byTooltip('Sincronizar'), findsNothing);
+    expect(find.textContaining('No repitas'), findsNothing);
   });
 }

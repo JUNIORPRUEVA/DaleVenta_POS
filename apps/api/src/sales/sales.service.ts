@@ -46,6 +46,7 @@ import {
 import { CreateSalePdfShareLinkDto } from "./dto/create-sale-pdf-share-link.dto";
 import { deriveCashTenderChange } from "./cash-change.util";
 import { MONEY_EPSILON } from "../common/utils/sale-credit-payment.util";
+import { parseServerInstant } from "../common/utils/business-time.util";
 import {
   classifyFinancialContract,
   financialLegacyCompatEnabled,
@@ -3893,10 +3894,14 @@ export class SalesService {
   private resolveSaleOccurredAt(value?: string | null) {
     const text = value?.trim();
     if (!text) return new Date();
-    const parsed = new Date(text);
-    if (Number.isNaN(parsed.getTime())) return new Date();
+    const parsed = parseServerInstant(text);
     const now = Date.now();
-    if (parsed.getTime() > now + 5 * 60 * 1000) return new Date();
+    if (parsed.getTime() > now + 5 * 60 * 1000) {
+      throw new BadRequestException({
+        code: "SALE_OPERATION_IN_FUTURE",
+        message: "La fecha de la operación está adelantada. Revisa el reloj del equipo y conserva la operación para revisión.",
+      });
+    }
     return parsed;
   }
 

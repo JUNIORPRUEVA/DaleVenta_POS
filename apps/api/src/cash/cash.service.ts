@@ -9,6 +9,7 @@ import {
 } from "@nestjs/common";
 import { Prisma, Role } from "@prisma/client";
 import crypto from "node:crypto";
+import { OfflineCashPermitService } from '../auth/offline-cash-permit.service';
 import { PrismaService } from "../prisma/prisma.service";
 import { CatalogRealtimeRelayService } from "../products/catalog-realtime-relay.service";
 import {
@@ -43,9 +44,11 @@ import {
 import {
   currentBusinessDay,
   businessDateRange,
+  parseServerInstant,
 } from "../common/utils/business-time.util";
 import {
   evaluateShiftOperationWindow,
+  resolveClockSkewMs,
   shiftWindowRejected,
 } from "./cash-operation-window";
 
@@ -64,6 +67,8 @@ export class CashService {
     private readonly terminalResolution?: TerminalResolutionService,
     @Optional()
     private readonly telemetry?: UsageTelemetryService,
+    @Optional()
+    private readonly cashPermits?: OfflineCashPermitService,
   ) {}
 
   private terminalResolutionService() {
@@ -164,7 +169,17 @@ export class CashService {
   async startSession(user: RequestUser, dto: OpenCashSessionDto) {
     const companyId = requireTenant(user);
     const userName = await this.currentUserName(user.id);
-    const businessDate = this.businessDate();
+    const isOfflineOpening = dto.openedAt !== undefined || dto.offlineOpenPermit !== undefined;
+    if (isOfflineOpening && (!dto.openedAt || !dto.offlineOpenPermit || !dto.clientSessionId ||
+        !dto.deviceFingerprint || !this.cashPermits)) {
+      throw new BadRequestException({ code: 'CASH_OFFLINE_OPEN_EVIDENCE_REQUIRED',
+        message: 'Esta apertura necesita su fecha y autorización originales. Conserva la incidencia para revisión.' });
+    }
+    const evidence = isOfflineOpening ? this.cashPermits!.verify({
+      receipt: dto.offlineOpenPermit!, companyId, userId:user.id,
+      deviceFingerprint:dto.deviceFingerprint!, openedAt:dto.openedAt!,
+    }) : null;
+    const businessDate = this.businessDate(evidence?.openedAt);
     const openingAmount = new Prisma.Decimal(dto.openingAmount);
 
     // Invariante multi-dispositivo: solo puede existir UN turno abierto por
@@ -176,6 +191,14 @@ export class CashService {
     const session = await this.retryOnWriteConflict(() =>
       this.prisma.$transaction(
         async (tx) => {
+          if (evidence) {
+            const authorization = await tx.authSession.findFirst({where:{
+              id:evidence.authorizationSessionId,companyId,userId:user.id,
+              OR:[{revokedAt:null},{revokedAt:{gt:evidence.openedAt}}],
+            },select:{id:true}});
+            if (!authorization) throw new ForbiddenException({code:'CASH_OFFLINE_OPEN_AUTHORIZATION_REVOKED',
+              message:'La autorización no era válida al abrir este turno. La apertura requiere revisión administrativa.'});
+          }
           const terminalContext =
             dto.terminalId || dto.deviceFingerprint
               ? await this.terminalResolutionService().resolveForSale(tx, {
@@ -194,6 +217,12 @@ export class CashService {
             orderBy: { openedAt: "desc" },
           });
           if (existing) {
+            if (evidence && (existing.id !== dto.clientSessionId ||
+                !existing.initialAmount.equals(openingAmount) ||
+                (existing.offlineOpeningEvidenceHash && existing.offlineOpeningEvidenceHash !== evidence.evidenceHash))) {
+              throw new ConflictException({code:'CASH_OFFLINE_OPEN_CONFLICT',
+                message:'La apertura pendiente no coincide con el turno registrado. Revisa su identidad e importe; no se aplicó a otro turno.'});
+            }
             // Nunca se reutiliza en silencio un turno de otro día comercial:
             // eso permitía que ventas de días posteriores cayeran en el cierre
             // anterior. El cliente recibe la identidad del turno a cerrar.
@@ -240,9 +269,20 @@ export class CashService {
             }
           }
 
+          if (evidence) {
+            const overlap = await tx.cashSession.findFirst({where:{
+              companyId, openedByUserId:user.id, closedAt:{gt:evidence.openedAt},
+            },select:{id:true}});
+            if (overlap) throw new ConflictException({code:'CASH_OFFLINE_OPEN_OVERLAP',
+              message:'La fecha de apertura se cruza con un turno ya registrado. La incidencia requiere revisión.'});
+          }
           let cashbox = await tx.cashboxDaily.findFirst({
             where: { companyId, businessDate },
           });
+          if (evidence && cashbox?.status === 'CLOSED') {
+            throw new ConflictException({code:'CASH_OFFLINE_CASHBOX_CLOSED',
+              message:'La caja diaria original ya está cerrada. La apertura se conserva para revisión y no reabre ese cierre.'});
+          }
           if (!cashbox) {
             cashbox = await tx.cashboxDaily.create({
               data: {
@@ -276,6 +316,7 @@ export class CashService {
                 terminalNameSnapshot: terminalContext?.terminal.name ?? null,
                 terminalCodeSnapshot: terminalContext?.terminal.code ?? null,
                 userName,
+                ...(evidence ? {openedAt:evidence.openedAt, offlineOpeningEvidenceHash:evidence.evidenceHash} : {}),
                 initialAmount: openingAmount,
                 cashboxDailyId: cashbox.id,
                 businessDate,
@@ -387,7 +428,10 @@ export class CashService {
       const existing = await this.prisma.cashMovement.findFirst({
         where: { companyId, operationId },
       });
-      if (existing) return existing;
+      if (existing) {
+        this.assertMovementReplayMatches(existing, user.id, dto);
+        return existing;
+      }
     }
     if (
       movementPath === "LEGACY_COMPAT_PATH" &&
@@ -402,11 +446,12 @@ export class CashService {
     // originó (dto.sessionId). Nunca a "el turno abierto actual". Si el turno
     // original ya no está abierto, se rechaza de forma controlada en lugar de
     // contaminar un turno posterior.
+    const occurredAt = this.parseOccurredAt(dto.occurredAt);
     const session = await this.requireOpenSession(
       user.id,
       companyId,
       movementPath === "SAFE_NEW_PATH" ? dto.sessionId : undefined,
-      this.parseOccurredAt(dto.occurredAt),
+      occurredAt,
     );
     if (movementPath === "LEGACY_COMPAT_PATH") {
       this.logger.warn(
@@ -450,6 +495,7 @@ export class CashService {
           reason: dto.reason,
           movementType,
           affectsProfit,
+          occurredAt,
           userId: user.id,
         },
       });
@@ -462,7 +508,10 @@ export class CashService {
         const existing = await this.prisma.cashMovement.findFirst({
           where: { companyId, operationId },
         });
-        if (existing) return existing;
+        if (existing) {
+          this.assertMovementReplayMatches(existing, user.id, dto);
+          return existing;
+        }
       }
       throw error;
     }
@@ -965,9 +1014,28 @@ export class CashService {
   private parseOccurredAt(value?: string | null): Date {
     const text = `${value ?? ""}`.trim();
     if (!text) return new Date();
-    const parsed = new Date(text);
-    if (Number.isNaN(parsed.getTime())) return new Date();
+    const parsed = parseServerInstant(text);
+    if (parsed.getTime() > Date.now() + resolveClockSkewMs()) {
+      throw new BadRequestException({
+        code: "CASH_OPERATION_IN_FUTURE",
+        message: "La fecha del movimiento está adelantada. Revisa el reloj del equipo; el movimiento se conserva para revisión.",
+      });
+    }
     return parsed;
+  }
+
+  private assertMovementReplayMatches(
+    existing: { sessionId: string; userId: string | null; type: string; amount: Prisma.Decimal },
+    userId: string,
+    dto: CreateCashMovementDto,
+  ) {
+    if (existing.userId !== userId || existing.sessionId !== dto.sessionId ||
+        existing.type !== dto.type || !existing.amount.equals(dto.amount)) {
+      throw new ConflictException({
+        code: "CASH_MOVEMENT_IDENTITY_MISMATCH",
+        message: "El identificador ya pertenece a un movimiento diferente. Conserva la operación para revisión; no la repitas con otro identificador.",
+      });
+    }
   }
 
   /**
@@ -1804,11 +1872,13 @@ export class CashService {
     terminalId?: string | null;
     terminalNameSnapshot?: string | null;
     terminalCodeSnapshot?: string | null;
+    initialAmount?: Prisma.Decimal;
   }) {
     return {
       userId: session.openedByUserId,
       cashId: session.cashboxDailyId,
       shiftId: session.id,
+      openingAmount: session.initialAmount == null ? null : this.toNumber(session.initialAmount),
       openedAt: session.openedAt,
       status: session.status,
       userName: session.userName ?? "Usuario",

@@ -8,6 +8,7 @@ import '../theme/app_colors.dart';
 import '../widgets/refined_topbar_controls.dart';
 
 import '../api/api_routes.dart';
+import '../api/server_connection.dart';
 import '../auth/auth_repository.dart';
 import '../auth/token_storage.dart';
 import '../errors/user_safe_error_text.dart';
@@ -30,7 +31,7 @@ SyncHeaderStatus resolveSyncHeaderStatus(SyncQueueState state) {
   if (state.errorCount > 0) {
     return SyncHeaderStatus.error;
   }
-  if (state.conflictCount > 0) {
+  if (state.conflictCount > 0 || state.blockedCount > 0) {
     return SyncHeaderStatus.attention;
   }
   if ((state.lastError ?? '').trim().isNotEmpty) {
@@ -50,6 +51,7 @@ class SyncStatusMenuButton extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(syncQueueServiceProvider);
+    final connection = ref.watch(serverConnectionProvider);
     final status = resolveSyncHeaderStatus(state);
     final colors = _SyncStatusColors.forStatus(status);
     final label = _statusLabel(status);
@@ -79,6 +81,7 @@ class SyncStatusMenuButton extends ConsumerWidget {
           enabled: false,
           padding: EdgeInsets.zero,
           child: _SyncStatusPopover(
+            connection: connection,
             state: state,
             status: status,
             colors: colors,
@@ -284,19 +287,27 @@ class _SyncGlyphState extends State<_SyncGlyph>
 }
 
 class _SyncStatusPopover extends StatelessWidget {
-  const _SyncStatusPopover({
+  _SyncStatusPopover({
     required this.state,
     required this.status,
     required this.colors,
     required this.width,
     required this.onSyncNow,
-  });
+    required this.connection,
+  }) : _attentionItems = state.conflictCount > 0
+           ? _loadAttentionItems()
+           : Future.value(const <_SyncAttentionItem>[]);
+
+  // Layout/scroll rebuilds must not restart the SQLite query and discard its
+  // completed result, especially in the constrained mobile popover.
+  final Future<List<_SyncAttentionItem>> _attentionItems;
 
   final SyncQueueState state;
   final SyncHeaderStatus status;
   final _SyncStatusColors colors;
   final double width;
   final VoidCallback? onSyncNow;
+  final ServerConnection connection;
 
   @override
   Widget build(BuildContext context) {
@@ -308,9 +319,9 @@ class _SyncStatusPopover extends StatelessWidget {
         ? 'Sincronizando...'
         : hasRetryableWork
         ? 'Sincronizar ahora'
-        : state.conflictCount > 0 || lastError.isNotEmpty
+        : state.conflictCount > 0 || state.blockedCount > 0 || lastError.isNotEmpty
         ? 'Revisión pendiente'
-        : 'Todo sincronizado';
+        : 'Sin pendientes locales';
 
     return SizedBox(
       width: width,
@@ -367,12 +378,18 @@ class _SyncStatusPopover extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-            _SyncMetricRow(label: 'Por enviar', value: '$retryableWork'),
+            _SyncMetricRow(label: 'Servidor', value: switch (connection) {
+              ServerConnection.reachable => 'Accesible',
+              ServerConnection.unreachable => 'Sin conexión',
+              ServerConnection.unknown => 'Sin comprobar',
+            }),
+            _SyncMetricRow(label: 'Pendientes', value: '${state.pendingCount}'),
             _SyncMetricRow(
               label: 'Sincronizando',
               value: '${state.syncingCount}',
             ),
             _SyncMetricRow(label: 'Reintentando', value: '${state.errorCount}'),
+            _SyncMetricRow(label: 'Bloqueadas', value: '${state.blockedCount}'),
             _SyncMetricRow(
               label: 'Requiere atención',
               value: '${state.conflictCount}',
@@ -409,10 +426,16 @@ class _SyncStatusPopover extends StatelessWidget {
             if (state.conflictCount > 0) ...[
               const SizedBox(height: 8),
               FutureBuilder<List<_SyncAttentionItem>>(
-                future: _loadAttentionItems(),
+                future: _attentionItems,
                 builder: (context, snapshot) {
                   final conflicts = snapshot.data ?? const [];
-                  if (conflicts.isEmpty) return const SizedBox.shrink();
+                  if (snapshot.hasError) {
+                    return const Text('No pudimos comprobar los detalles. Abre el Centro de recuperación para revisar las operaciones guardadas.');
+                  }
+                  if (snapshot.connectionState != ConnectionState.done) {
+                    return const Text('Consultando operaciones guardadas...');
+                  }
+                  if (conflicts.isEmpty) return const Text('Los detalles locales no están disponibles. Abre el Centro de recuperación para revisar esta incidencia.');
                   return Column(
                     children: [
                       for (final conflict in conflicts.take(3))
@@ -494,7 +517,7 @@ class _SyncStatusPopover extends StatelessWidget {
     final actions = await OfflineStore.instance.listPendingActions(
       companyId: companyId!,
       userId: (userId ?? '').isEmpty ? null : userId,
-      limit: 5,
+      limit: null,
     );
     final items = actions
         .where(
@@ -516,12 +539,14 @@ class _SyncStatusPopover extends StatelessWidget {
           .map(_SyncAttentionItem.fromOfflineSale)
           .whereType<_SyncAttentionItem>(),
     );
+    final current = await TokenStorage().getUserSnapshot();
+    if (current?.companyId?.trim() != companyId || current?.id.trim() != userId) return const [];
     return items.take(5).toList(growable: false);
   }
 
   static String _title(SyncHeaderStatus status) {
     return switch (status) {
-      SyncHeaderStatus.synced => 'Datos sincronizados',
+      SyncHeaderStatus.synced => 'Sin pendientes locales',
       SyncHeaderStatus.syncing => 'Sincronización en curso',
       SyncHeaderStatus.pending => 'Cambios pendientes',
       SyncHeaderStatus.attention => 'Sincronización por revisar',
@@ -531,7 +556,7 @@ class _SyncStatusPopover extends StatelessWidget {
 
   static String _subtitle(SyncHeaderStatus status) {
     return switch (status) {
-      SyncHeaderStatus.synced => 'No hay cambios pendientes de enviar',
+      SyncHeaderStatus.synced => 'La cola local está vacía',
       SyncHeaderStatus.syncing => 'Procesando cambios guardados',
       SyncHeaderStatus.pending => 'Hay cambios guardados por enviar',
       SyncHeaderStatus.attention => 'Consulta las operaciones por revisar',

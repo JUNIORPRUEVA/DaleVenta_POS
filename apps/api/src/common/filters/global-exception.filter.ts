@@ -33,7 +33,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       requestId?: string;
       user?: { id?: string; companyId?: string | null };
     }>();
-    const res = ctx.getResponse<{ status: (code: number) => any; json: (body: any) => any }>();
+    const res = ctx.getResponse<{ status: (code: number) => any; json: (body: any) => any; setHeader?: (name: string, value: string) => void }>();
 
     const method = req?.method ?? 'UNKNOWN';
     const url = req?.originalUrl ?? req?.url ?? 'UNKNOWN';
@@ -77,6 +77,12 @@ export class GlobalExceptionFilter implements ExceptionFilter {
                 : null;
 
     const rawResponse = isHttp ? exception.getResponse() : null;
+    if (status === HttpStatus.TOO_MANY_REQUESTS && isObject(rawResponse)) {
+      const seconds = rawResponse.retryAfterSeconds;
+      if (typeof seconds === 'number' && Number.isFinite(seconds) && seconds >= 0) {
+        res.setHeader?.('Retry-After', String(Math.ceil(seconds)));
+      }
+    }
     const message = isHttp
       ? safeString(rawResponse)
       : exception instanceof Error

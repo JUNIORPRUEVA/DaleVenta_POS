@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:dio/dio.dart';
 import '../../../features/ecf/data/ecf_connection_guard.dart';
@@ -10,6 +9,7 @@ import '../../../core/api/api_routes.dart';
 import '../../../core/api/api_error_mapper.dart';
 import '../../../core/auth/auth_repository.dart';
 import '../../../core/auth/token_storage.dart';
+import '../../../core/auth/operation_scope.dart';
 import '../../../core/cache/local_json_cache.dart';
 import '../../../core/company/company_settings_model.dart';
 import '../../../core/company/company_settings_repository.dart';
@@ -24,6 +24,7 @@ import '../../../core/offline/offline_store.dart';
 import '../../../core/offline/sale_attempt_audit.dart';
 import '../../../core/offline/pending_sync_action.dart';
 import '../../../core/offline/sync_queue_service.dart';
+import '../../../core/offline/pos_sale_identity.dart';
 import '../../../core/usage/client_telemetry_headers.dart';
 import '../../../features/warehouses/data/warehouse_repository.dart';
 import '../../cash/cash_repository.dart';
@@ -37,6 +38,7 @@ final ventasRepositoryProvider = Provider<VentasRepository>((ref) {
     ref.read(warehouseRepositoryProvider),
     cashRepository: ref.read(cashRepositoryProvider),
     companySettingsRepository: ref.read(companySettingsRepositoryProvider),
+    tokenStorage: ref.read(tokenStorageProvider),
   );
   repository.registerSyncHandlers();
   return repository;
@@ -69,7 +71,7 @@ class VentasRepository {
   final bool _durableSaleAttempts;
   final LocalJsonCache _cache = LocalJsonCache();
   final OfflineStore _offlineStore = OfflineStore.instance;
-  final TokenStorage _tokenStorage = TokenStorage();
+  final TokenStorage _tokenStorage;
   static const String _createSaleSyncType = 'sales.create';
   static const String _returnSaleSyncType = 'sales.return';
   static const String _creditPaymentSyncType = 'credit.payment';
@@ -84,16 +86,19 @@ class VentasRepository {
     Future<String?> Function()? originCashSessionIdResolver,
     CompanySettingsRepository? companySettingsRepository,
     OfflineEmergencyPolicy? offlineEmergencyPolicy,
+    TokenStorage? tokenStorage,
     @visibleForTesting bool? durableSaleAttemptsForTesting,
-  }) : _cashRepository = cashRepository ?? CashRepository(_dio, _syncQueue),
+  }) : _cashRepository =
+           cashRepository ??
+           CashRepository(_dio, _syncQueue, tokenStorage: tokenStorage),
+       _tokenStorage = tokenStorage ?? TokenStorage(),
        _originCashSessionIdResolver = originCashSessionIdResolver,
        _companySettingsRepository =
            companySettingsRepository ??
            CompanySettingsRepository(_dio, _syncQueue),
        _offlineEmergencyPolicy =
            offlineEmergencyPolicy ?? OfflineEmergencyPolicy(),
-       _durableSaleAttempts = durableSaleAttemptsForTesting ??
-           (!kIsWeb && Platform.isWindows && kReleaseMode);
+       _durableSaleAttempts = durableSaleAttemptsForTesting ?? !kIsWeb;
 
   void registerSyncHandlers() {
     if (_handlersRegistered) return;
@@ -171,7 +176,10 @@ class VentasRepository {
         operationCashSessionId: payload['operationCashSessionId']?.toString(),
         operationOccurredAt: payload['operationOccurredAt']?.toString(),
         reason: payload['reason']?.toString(),
-        items: (payload['items'] as List?)?.whereType<Map>().map((e) => e.cast<String, dynamic>()).toList(),
+        items: (payload['items'] as List?)
+            ?.whereType<Map>()
+            .map((e) => e.cast<String, dynamic>())
+            .toList(),
       );
     });
     _syncQueue.registerHandler(_creditPaymentSyncType, (payload) async {
@@ -204,10 +212,18 @@ class VentasRepository {
     if (operationMessage != null) return operationMessage;
     if (data is Map) {
       final message = data['message'];
-      if (message is String && message.trim().isNotEmpty && !looksTechnical(message)) return message;
+      if (message is String &&
+          message.trim().isNotEmpty &&
+          !looksTechnical(message)) {
+        return message;
+      }
       if (message is List && message.isNotEmpty) {
         final first = message.first;
-        if (first is String && first.trim().isNotEmpty && !looksTechnical(first)) return first;
+        if (first is String &&
+            first.trim().isNotEmpty &&
+            !looksTechnical(first)) {
+          return first;
+        }
       }
     }
     return fallback;
@@ -835,7 +851,9 @@ class VentasRepository {
         items: items,
       );
     } on DioException catch (e) {
-      if (electronic && ecfCommunicationInterrupted(e)) throw EcfConnectionException(uncertain: true);
+      if (electronic && ecfCommunicationInterrupted(e)) {
+        throw EcfConnectionException(uncertain: true);
+      }
       if (_shouldQueueNetworkFailure(e)) {
         await _enqueuePendingSalesAction(
           id: '$_returnSaleSyncType:$requestId',
@@ -846,7 +864,10 @@ class VentasRepository {
           payload: payload,
           occurredAt: operationOccurredAt,
         );
-        return SaleReturnResult(sale: _minimalPendingSale('local_$requestId'), pendingSync: true);
+        return SaleReturnResult(
+          sale: _minimalPendingSale('local_$requestId'),
+          pendingSync: true,
+        );
       }
       throw ApiErrorMapper.fromDio(
         e,
@@ -886,7 +907,9 @@ class VentasRepository {
         (res.data as Map)['ecfCreditNote'],
       ),
       fiscalPending: (res.data as Map)['ecfCreditPending'] is Map,
-      fiscalPendingMessage: ((res.data as Map)['ecfCreditPending'] as Map?)?['message'] as String?,
+      fiscalPendingMessage:
+          ((res.data as Map)['ecfCreditPending'] as Map?)?['message']
+              as String?,
     );
   }
 
@@ -895,12 +918,22 @@ class VentasRepository {
     return 'return_req_${DateTime.now().microsecondsSinceEpoch}_$normalized';
   }
 
-  Future<SaleReturnResult> retryRefundFiscal(String saleId, String refundId) async {
-    final response = await postEcf(_dio, '/sales/$saleId/refunds/$refundId/fiscal');
+  Future<SaleReturnResult> retryRefundFiscal(
+    String saleId,
+    String refundId,
+  ) async {
+    final response = await postEcf(
+      _dio,
+      '/sales/$saleId/refunds/$refundId/fiscal',
+    );
     final data = (response.data as Map).cast<String, dynamic>();
-    return SaleReturnResult(sale: SaleModel.fromJson(data),
-      creditNote: EcfReturnCreditNote.fromJson(data['ecfCreditNote']), fiscalPending: data['ecfCreditPending'] is Map,
-      fiscalPendingMessage: (data['ecfCreditPending'] as Map?)?['message'] as String?);
+    return SaleReturnResult(
+      sale: SaleModel.fromJson(data),
+      creditNote: EcfReturnCreditNote.fromJson(data['ecfCreditNote']),
+      fiscalPending: data['ecfCreditPending'] is Map,
+      fiscalPendingMessage:
+          (data['ecfCreditPending'] as Map?)?['message'] as String?,
+    );
   }
 
   Future<String> createInvoicePdfShareLink({
@@ -960,6 +993,24 @@ class VentasRepository {
     }
   }
 
+  Future<T> _withCurrentOwner<T>(Future<T> Function() body) async {
+    if (OperationScope.current != null) return body();
+    final user = await _tokenStorage.getUserSnapshot();
+    if (user == null || (user.companyId ?? '').isEmpty) return body();
+    return OperationScope(user.companyId!, user.id).run(body);
+  }
+
+  Future<void> _assertCurrentOwner() async {
+    final owner = OperationScope.current;
+    if (owner == null) return;
+    final current = await _tokenStorage.getUserSnapshot();
+    if (current?.companyId != owner.companyId || current?.id != owner.userId) {
+      throw ApiException(
+        'La sesión cambió durante la operación. Consulta el historial o el Centro de recuperación de la cuenta original antes de repetirla.',
+      );
+    }
+  }
+
   Future<SaleModel?> createSale({
     String? sourceQuotationId,
     String? customerId,
@@ -990,19 +1041,28 @@ class VentasRepository {
     double? optimisticDiscountAmount,
     bool? optimisticFiscalTaxEnabled,
     String? clientRequestId,
+    String? clientTicketId,
     required List<SaleDraftItem> items,
-  }) async {
+  }) => _withCurrentOwner(() async {
     if (items.isEmpty) {
       throw ApiException('Agrega al menos un item');
     }
     final normalizedCustomerId = (customerId ?? '').trim();
     final normalizedSourceQuotationId = (sourceQuotationId ?? '').trim();
     final normalizedPriceListId = (priceListId ?? '').trim();
-    final requestId = (clientRequestId ?? '').trim().isNotEmpty
-        ? clientRequestId!.trim()
-        : 'sale_req_${DateTime.now().microsecondsSinceEpoch}';
     final occurredAt = DateTime.now().toUtc();
     final syncIdentity = await _resolveSaleSyncIdentity();
+    final owner = await _tokenStorage.getUserSnapshot();
+    final ticketRequestId = posSaleRequestId(companyId: owner?.companyId, userId: owner?.id,
+      deviceId: syncIdentity.deviceFingerprint, ticketId: clientTicketId);
+    if ((clientTicketId ?? '').trim().isNotEmpty && ticketRequestId == null) {
+      throw ApiException('No se pudo identificar el ticket. Conserva el carrito y revisa la sesión.');
+    }
+    if (ticketRequestId != null && (clientRequestId ?? '').trim().isNotEmpty && clientRequestId != ticketRequestId) {
+      throw ApiException('La identidad del cobro no coincide con el ticket.');
+    }
+    final requestId = ticketRequestId ?? ((clientRequestId ?? '').trim().isNotEmpty
+        ? clientRequestId!.trim() : 'sale_req_${DateTime.now().microsecondsSinceEpoch}');
     final originCashSessionId = await _resolveOriginCashSessionId();
     if (originCashSessionId.isEmpty) {
       throw ApiException('Debes abrir caja antes de facturar.');
@@ -1020,6 +1080,7 @@ class VentasRepository {
     final payload = {
       'clientRequestId': requestId,
       'originCashSessionId': originCashSessionId,
+      if (ticketRequestId != null) 'posTicketId': clientTicketId!.trim(),
       'saleOccurredAt': occurredAt.toIso8601String(),
       if ((syncIdentity.deviceFingerprint ?? '').isNotEmpty)
         'deviceFingerprint': syncIdentity.deviceFingerprint,
@@ -1057,17 +1118,24 @@ class VentasRepository {
       'items': capturedItems.map((item) => item.toPayload()).toList(),
     };
 
-    if (const ['E31', 'E32'].contains(fiscalVoucherType?.trim().toUpperCase())) {
+    if (const [
+      'E31',
+      'E32',
+    ].contains(fiscalVoucherType?.trim().toUpperCase())) {
       await ensureEcfConnection(_dio);
     }
 
     String? remoteAttemptId;
     String? remoteAttemptCompanyId;
     String? remoteAttemptUserId;
+    await _assertCurrentOwner();
     if (_durableSaleAttempts) {
       final actor = await _tokenStorage.getUserSnapshot();
-      if ((actor?.companyId ?? '').trim().isEmpty || (actor?.id ?? '').trim().isEmpty) {
-        throw ApiException('No se pudo verificar la identidad del cobro. Revisa la sesión antes de continuar.');
+      if ((actor?.companyId ?? '').trim().isEmpty ||
+          (actor?.id ?? '').trim().isEmpty) {
+        throw ApiException(
+          'No se pudo verificar la identidad del cobro. Revisa la sesión antes de continuar.',
+        );
       }
       remoteAttemptId = 'sales.attempt:$requestId';
       remoteAttemptCompanyId = actor!.companyId;
@@ -1080,8 +1148,9 @@ class VentasRepository {
         paymentMethod: (paymentMethod ?? 'cash').trim().toLowerCase(),
         customerId: normalizedCustomerId,
         priceListId: normalizedPriceListId,
-        total: (expectedTotalSold ?? _sumItems(capturedItems))
-            .toStringAsFixed(2),
+        total: (expectedTotalSold ?? _sumItems(capturedItems)).toStringAsFixed(
+          2,
+        ),
         items: [
           for (final item in capturedItems)
             (
@@ -1092,14 +1161,24 @@ class VentasRepository {
         ],
       );
       try {
-        await _offlineStore.reserveRemoteSaleAttempt(PendingSyncAction(
-          id: remoteAttemptId, type: 'sales.attempt', scope: 'sales',
-          companyId: actor.companyId, userId: actor.id,
-          terminalId: syncIdentity.terminalId, entityId: requestId,
-          idempotencyKey: requestId, payload: payload, status: 'requires_action',
-          operationFingerprint: operationFingerprint,
-          attempts: 0, createdAt: occurredAt, updatedAt: occurredAt,
-        ));
+        await _offlineStore.reserveRemoteSaleAttempt(
+          PendingSyncAction(
+            id: remoteAttemptId,
+            type: 'sales.attempt',
+            scope: 'sales',
+            companyId: actor.companyId,
+            userId: actor.id,
+            terminalId: syncIdentity.terminalId,
+            entityId: requestId,
+            idempotencyKey: requestId,
+            payload: payload,
+            status: 'requires_action',
+            operationFingerprint: operationFingerprint,
+            attempts: 0,
+            createdAt: occurredAt,
+            updatedAt: occurredAt,
+          ),
+        );
         await _syncQueue.refreshStats();
       } on StateError catch (error) {
         throw ApiException(error.message.toString());
@@ -1137,20 +1216,32 @@ class VentasRepository {
       if (remoteSale != null && remoteAttemptId != null) {
         await _offlineStore.removePendingAction(remoteAttemptId);
       }
+      await _assertCurrentOwner();
       return remoteSale;
     } on DioException catch (e) {
-      if (const ['E31', 'E32'].contains(fiscalVoucherType?.trim().toUpperCase()) && ecfCommunicationInterrupted(e)) {
+      await _assertCurrentOwner();
+      if (const [
+            'E31',
+            'E32',
+          ].contains(fiscalVoucherType?.trim().toUpperCase()) &&
+          ecfCommunicationInterrupted(e)) {
         throw EcfConnectionException(uncertain: true);
       }
       if (!_shouldQueueNetworkFailure(e)) {
         // Only definitive validation/auth rejections release the attempt.
         // 409 and 5xx can require reconciliation with an existing remote sale.
-        if (remoteAttemptId != null && const [400, 401, 403, 404, 422].contains(e.response?.statusCode)) {
+        if (remoteAttemptId != null &&
+            const [400, 401, 403, 404, 422].contains(e.response?.statusCode)) {
           await _offlineStore.removePendingAction(remoteAttemptId);
         }
-        throw ApiErrorMapper.fromDio(e, fallbackMessage: 'No se pudo guardar la venta', dio: _dio);
+        throw ApiErrorMapper.fromDio(
+          e,
+          fallbackMessage: 'No se pudo guardar la venta',
+          dio: _dio,
+        );
       }
-      if ((fiscalVoucherType ?? '').trim().isNotEmpty && fiscalVoucherType?.trim().toUpperCase() != 'NORMAL') {
+      if ((fiscalVoucherType ?? '').trim().isNotEmpty &&
+          fiscalVoucherType?.trim().toUpperCase() != 'NORMAL') {
         throw ApiException(
           remoteAttemptId != null
               ? 'No pudimos confirmar si la factura fiscal se emitió. Revisa el historial con el encargado antes de volver a emitirla.'
@@ -1162,8 +1253,11 @@ class VentasRepository {
       final companyId = user?.companyId?.trim();
       final userId = user?.id.trim();
       if (remoteAttemptId != null &&
-          (remoteAttemptCompanyId != companyId || remoteAttemptUserId != userId)) {
-        throw ApiException('La sesión cambió durante el cobro. Conservamos el intento original para revisión.');
+          (remoteAttemptCompanyId != companyId ||
+              remoteAttemptUserId != userId)) {
+        throw ApiException(
+          'La sesión cambió durante el cobro. Conservamos el intento original para revisión.',
+        );
       }
       if ((companyId ?? '').isEmpty || (userId ?? '').isEmpty) {
         throw ApiException(
@@ -1179,9 +1273,11 @@ class VentasRepository {
       );
       if (!offlineDecision.allowed) {
         throw ApiException(
-          remoteAttemptId == null ? offlineDecision.message :
-              '${offlineDecision.message} Conservamos el intento de cobro; verifica su resultado antes de iniciar otro.',
-          e.response?.statusCode);
+          remoteAttemptId == null
+              ? offlineDecision.message
+              : '${offlineDecision.message} Conservamos el intento de cobro; verifica su resultado antes de iniciar otro.',
+          e.response?.statusCode,
+        );
       }
       _assertEmergencyOfflinePayment(
         paymentMethod: paymentMethod,
@@ -1267,7 +1363,7 @@ class VentasRepository {
         totalSold: expectedTotalSold,
       );
     }
-  }
+  });
 
   Future<SaleModel?> _createSaleRemote({
     String? customerId,
@@ -1336,7 +1432,7 @@ class VentasRepository {
           'globalDiscountAmount': globalDiscountAmount,
         if ((fiscalVoucherType ?? '').trim().isNotEmpty)
           'fiscalVoucherType': fiscalVoucherType!.trim().toUpperCase(),
-      if (sequenceDueDate != null) 'sequenceDueDate': sequenceDueDate,
+        if (sequenceDueDate != null) 'sequenceDueDate': sequenceDueDate,
         if ((fiscalCustomerTaxId ?? '').trim().isNotEmpty)
           'fiscalCustomerTaxId': fiscalCustomerTaxId!.trim(),
         if ((fiscalCustomerName ?? '').trim().isNotEmpty)
@@ -1345,9 +1441,26 @@ class VentasRepository {
       },
     );
     if (res.data is Map) {
-      return SaleModel.fromJson((res.data as Map).cast<String, dynamic>());
+      final data = (res.data as Map).cast<String, dynamic>();
+      final recorded = _nullableDouble(data['totalSold']);
+      final expected = expectedTotalSold ?? _sumItems(items);
+      if ((clientRequestId ?? '').trim().isEmpty ||
+          data['clientRequestId']?.toString() != clientRequestId ||
+          data['id'] is! String ||
+          (data['id'] as String).trim().isEmpty ||
+          !expected.isFinite ||
+          recorded == null ||
+          !recorded.isFinite ||
+          (recorded - expected).abs() > 0.005) {
+        throw const ObsoleteSyncOperationException(
+          'La respuesta de la venta no coincide con la operación original. Conserva la incidencia y solicita revisión.',
+        );
+      }
+      return SaleModel.fromJson(data);
     }
-    return null;
+    throw const ObsoleteSyncOperationException(
+      'El servidor no devolvió una confirmación válida. Conserva la incidencia para revisión.',
+    );
   }
 
   Future<String> _resolveOriginCashSessionId() async {
@@ -1900,7 +2013,13 @@ class VentasRepository {
         limit: 500,
       );
       final mapped = <SaleModel>[];
+      final reviewed = await _offlineStore.reviewedFinancialOperationIds(
+        companyId: companyId,
+        type: 'sales.create',
+        onlyNotPerformed: true,
+      );
       for (final row in rows) {
+        if (reviewed.contains(row['clientRequestId']?.toString())) continue;
         final sale = _offlineSaleToModel(
           row,
           currentUserName: user?.nombreCompleto,

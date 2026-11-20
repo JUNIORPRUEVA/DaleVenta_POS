@@ -151,7 +151,14 @@ void main() {
       ..httpClientAdapter = _FakeHttpClientAdapter((options) async {
         if (options.path == '/cash/movements') {
           captured = Map<String, dynamic>.from(options.data as Map);
-          return _jsonResponse(const {'id': 'movement-1'}, 201);
+          return _jsonResponse({
+            'id': 'movement-1',
+            'operationId': captured!['operationId'],
+            'sessionId': captured!['sessionId'],
+            'type': captured!['type'],
+            'amount': captured!['amount'],
+            'occurredAt': captured!['occurredAt'],
+          }, 201);
         }
         return _jsonResponse(const {}, 200);
       });

@@ -368,6 +368,12 @@ void main() {
         router.routeInformationProvider.value.uri.path,
         Routes.cotizaciones,
       );
+      // Dispose the real POS loaders, then let their bounded secure-storage
+      // work finish before Flutter checks the fixture's pending timers.
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(seconds: 7));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
     },
     variant: TargetPlatformVariant.only(TargetPlatform.windows),
   );

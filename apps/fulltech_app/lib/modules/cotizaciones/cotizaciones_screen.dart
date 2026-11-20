@@ -5,6 +5,8 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../../core/offline/pending_sync_action.dart';
+import '../../core/offline/recovery_sale_draft.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
@@ -292,11 +294,13 @@ class CotizacionesScreen extends ConsumerStatefulWidget {
     super.key,
     this.initialClient,
     this.initialQuotation,
+    this.initialRecoveryAction,
     this.returnSavedQuotation = false,
   });
 
   final ClienteModel? initialClient;
   final CotizacionModel? initialQuotation;
+  final PendingSyncAction? initialRecoveryAction;
   final bool returnSavedQuotation;
 
   @override
@@ -701,6 +705,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     _subscribeRealtime();
     _applyInitialClient();
     _applyInitialQuotation();
+    ref.listenManual(recoverySaleDraftProvider, (previous, next) {
+      if (next != null) WidgetsBinding.instance.addPostFrameCallback((_) => _applyPendingRecoveryDraft());
+    });
     unawaited(_loadPinnedProducts());
     unawaited(
       _seedProductsFromLocalSources(
@@ -944,6 +951,62 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     final quotation = widget.initialQuotation;
     if (quotation == null) return;
     _applyQuotationToEditor(quotation);
+  }
+
+  bool _initialRecoveryDraftApplied = false;
+
+  void _applyPendingRecoveryDraft() {
+    if (!mounted || _restoringEditorDraft) return;
+    final action = ref.read(recoverySaleDraftProvider) ??
+        (_initialRecoveryDraftApplied ? null : widget.initialRecoveryAction);
+    final user = ref.read(authStateProvider).user;
+    if (action == null || user?.role != 'ADMIN' || action.companyId != user?.companyId || action.userId != user?.id) return;
+    if (!recoverySaleItemsAreValid(action)) return;
+    if (_showWholesalePricingPending()) return;
+    setState(() {
+      _writeActiveDesktopDraft();
+      final ticket = _DesktopTicketDraft.empty(id: _newId(), title: _nextDesktopTicketTitle(),
+        companyId: user?.companyId, createdByUserId: user?.id, createdByUserName: user?.nombreCompleto);
+      _desktopTickets = [ticket, ..._desktopTickets];
+      _activeDesktopTicketId = ticket.id;
+      _replaceEditorStateFromDraft(ticket);
+      _applyRecoveryAction(action);
+      _writeActiveDesktopDraft();
+    });
+    _initialRecoveryDraftApplied = true;
+    ref.read(recoverySaleDraftProvider.notifier).state = null;
+    _schedulePersistEditorDraft(immediate: true);
+  }
+
+  void _applyRecoveryAction(PendingSyncAction action) {
+    final user = ref.read(authStateProvider).user;
+    if (user?.role != 'ADMIN' || action.companyId != user?.companyId || action.userId != user?.id) return;
+    final raw = action.payload['items'];
+    if (raw is! List) return;
+    final restored = <CotizacionItem>[];
+    for (final value in raw) {
+      if (value is! Map) continue;
+      final qty = num.tryParse('${value['qty']}')?.toDouble();
+      final price = num.tryParse('${value['priceSoldUnit']}')?.toDouble();
+      if (qty == null || !qty.isFinite || qty <= 0 || price == null || !price.isFinite || price < 0) continue;
+      restored.add(CotizacionItem(
+        productId: '${value['productId'] ?? ''}',
+        nombre: '${value['productName'] ?? value['name'] ?? 'Artículo recuperado'}',
+        imageUrl: value['imageUrl'] as String?, qty: qty, unitPrice: price,
+        costUnit: num.tryParse('${value['costUnitSnapshot']}')?.toDouble(),
+        unitCodeSnapshot: '${value['unitCodeSnapshot'] ?? 'UNIT'}',
+        unitNameSnapshot: '${value['unitNameSnapshot'] ?? 'Unidad'}',
+        unitSymbolSnapshot: '${value['unitSymbolSnapshot'] ?? 'u'}',
+        unitPrecisionSnapshot: int.tryParse('${value['unitPrecisionSnapshot']}') ?? 0,
+      ));
+    }
+    _items..clear()..addAll(restored);
+    _selectedClientId = action.payload['customerId'] as String?;
+    _note = '${action.payload['note'] ?? ''}';
+    _generalDiscountAmount = num.tryParse('${action.payload['globalDiscountAmount']}')?.toDouble() ?? 0;
+    // This is an editable NEW ticket: no original sale/request/session ID,
+    // payment, fiscal number or confirmation is copied or submitted.
+    _rememberWholesalePricingContext();
   }
 
   void _applyQuotationToEditor(CotizacionModel quotation) {
@@ -1742,6 +1805,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     } finally {
       if (mounted && _lifecycleGeneration == requestGeneration) {
         _restoringEditorDraft = false;
+        _applyPendingRecoveryDraft();
       }
     }
   }
@@ -1770,6 +1834,12 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       companyId: requestCompanyId,
       generation: requestGeneration,
     );
+    if (!_isCurrentTenantGeneration(
+      companyId: requestCompanyId,
+      generation: requestGeneration,
+    )) {
+      return;
+    }
 
     if (!silent &&
         _productSearch.snapshot.items.isEmpty &&
@@ -1899,6 +1969,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
   Future<void> _bootstrapCatalog() async {
     await _loadProducts();
+    if (!mounted) return;
     await _loadServerCategories();
   }
 
@@ -7828,6 +7899,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     return ref
         .read(ventasRepositoryProvider)
         .createSale(
+          clientTicketId: _activeDesktopTicketId,
           sourceQuotationId: (_editingId ?? '').trim().isEmpty
               ? null
               : _editingId,

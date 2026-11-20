@@ -1,5 +1,622 @@
 # Execution State
 
+## Entrega automática de incidencias entre usuarios — 2026-11-20
+
+Copia actual: `C:/Users/pc/.codex/worktrees/fullpos-recovery-courier-20261120`,
+rama `agent/recovery-courier-20261120`. Alias de compilación Windows `C:/fprc`.
+Se aisló por una escritura simultánea en la copia anterior. No editar aquella.
+
+Se conectó la publicación administrativa automática, limitada al propietario,
+con checkpoints persistentes, respeto de Retry-After y recepción de la decisión
+del administrador. No hay replay financiero ni nuevos permisos. Se añadió
+comparación y actualización SQLite para no sobrescribir evidencias más recientes.
+63 pruebas focalizadas PASS, análisis sin incidencias y recorrido nativo PASS
+en Windows y Android emulado con API/PostgreSQL locales. Comparación financiera
+sin cambios: 12 ventas y 32 movimientos sintéticos. Sin producción ni despliegue.
+Detalles y límites: `docs/CENTRO_RECUPERACION_CIERRE_ENTRE_USUARIOS.md`.
+El contenido inferior conserva el historial de las fases anteriores.
+
+## Simplificación de diez estados y continuidad por ticket — 2026-11-20
+
+Fase actual: `C:/src/fullpos-recovery-simple-ui-20261120`, rama
+`agent/recovery-simple-ui-20261120`. Se creó una copia nueva después de detectar
+otra edición en el worktree anterior. No editar ni integrar automáticamente
+aquella copia. Base `840caadf`, con la recuperación previa conservada.
+
+Vista previa actual: `http://127.0.0.1:4488`, entrada Flutter
+`test/preview/recovery_design_preview.dart`. Datos ficticios en memoria y HTTP
+bloqueado. Se conserva la previsualización anterior y el servidor ajeno IPv4:4004.
+
+Implementado: estado vacío de una línea; lista compacta; solo sincronizar arriba;
+sin importación ni Más opciones; verificación reforzada y luego dos soluciones;
+archivo manual sin perder contenido; ticket nuevo editable sin cobrar; resolución
+directa auditada de dinero declarado; acceso ADMIN. La identidad estable de
+ticket permite dos ventas nuevas iguales y conserva la protección del mismo
+ticket incierto. Legacy sin identidad mantiene su guardia conservadora.
+
+Validación: Flutter 539 PASS/3 omitidas opt-in; repetición focalizada 28 PASS;
+backend 38 PASS; HTTP real 8 escenarios PASS; Windows nativo 1 escenario integral
+PASS. Análisis sin incidencias; TypeScript compilado. PostgreSQL conserva las
+mismas 2 ventas y 3 movimientos. Perfil Windows separado: 47 incidencias previas
+conservadas más una sintética de prueba, que sigue pendiente. No se ejecutó Cobrar.
+
+Informes vigentes:
+`docs/CENTRO_RECUPERACION_SIMPLIFICACION_AUDITORIA.md` y
+`docs/IA_CENTRO_RECUPERACION_GUIA_CLIENTE.md`.
+GO de revisión local; NO-GO de publicación general por los pendientes descritos.
+Sin producción, commit ni despliegue. Los informes inferiores son historial.
+
+## Ajuste solicitado: soluciones directas y acceso ADMIN — 2026-11-20
+
+Prevalece sobre las descripciones de interfaz anteriores. Worktree
+`C:/src/fullpos-recovery-ui-20261120`. Se retiró «Solicitar revisión» del
+flujo visible; «Comprobar» conserva internamente el expediente y consulta el
+registro. Caja ofrece marcar no realizada con motivo; el cobro incierto muestra
+los botones de venta nueva y no realizada. Evidencia conservada, sin replay
+financiero. Pantalla y consultas de expedientes reservadas a ADMIN.
+
+Galería Flutter: `http://127.0.0.1:4487`, diez escenarios ficticios y anchos
+adaptable/390/1280. Widgets reales, preferencias en memoria y HTTP bloqueado.
+No es aceptación de datos offline Web ni un servidor de producción.
+
+Validación: 55 PASS focalizadas y 30 PASS en la última repetición de pantalla y
+repositorio; conjuntos solapados. Continuidad/SQLite: 44 PASS. Backend: 19 PASS.
+Flutter analyze sin incidencias y typecheck de tsconfig.build PASS. El intento
+de automatización Chrome se detuvo en carga, no se contabiliza como aprobado.
+
+Informe y límites:
+`docs/RECOVERY_ADMIN_UX_REVIEW_2026-11-20.md`. Continúan pendientes la identidad
+persistida del ticket para dos ventas iguales, la entrega automática de casos
+de otros usuarios y la aceptación HTTP del último guard ADMIN. No se declara
+continuidad total ni GO de publicación. Sin producción, commit ni despliegue.
+
+## Centro de recuperación: diseño y mensajes — 2026-11-20
+
+Esta fase se trabaja en `C:/src/fullpos-recovery-ui-20261120`, rama
+`recovery-ui-20261120`, base `840caadf`, conservando los cambios de recuperación
+de la fase anterior. Se creó esta copia después de detectar otra edición en
+el worktree anterior. El informe inferior describe esa fase anterior y sus
+pruebas; no equivale a una nueva ejecución de toda aquella batería.
+
+### Cambios de esta fase
+
+- Pantalla con tarjeta central de ancho máximo 920, contadores relevantes y
+  estado del servidor independiente. Se ocultan secciones vacías y avisos
+  redundantes; no se afirma sincronización global por tener cero pendientes.
+- Ventas: una acción principal, «Verificar ahora», y un menú «Más opciones».
+  Referencias, historial y decisiones administrativas quedan bajo demanda.
+  «Reporte para soporte» identifica correctamente la acción que copia el
+  reporte; no promete enviar una solicitud al servidor.
+- Operaciones de caja, revisiones y conciliaciones usan filas desplegables,
+  nombres comprensibles e importes visibles. Las revisiones solicitadas se
+  muestran antes de la lista de incidencias y las finalizadas en archivo.
+- Mensajes comunes del backend abreviados: autenticación, permisos,
+  validación, conflicto, límite de solicitudes y servicio no disponible.
+  Los errores de existencias conservan producto y cantidades. Se mantienen
+  diagnósticos originales y clasificación HTTP; no se cambian decisiones
+  de reintento por razones de presentación.
+- Botones cuadrados, decisiones con motivo mínimo de diez caracteres y
+  acciones deshabilitadas mientras se procesan. Se evita el doble envío de
+  comprobaciones o solicitudes. Cancelar una decisión no escribe datos.
+- Se corrigió una colisión de PageStorage entre ExpansionTile y su
+  SelectableText que producía un error bool/double al desplegar detalles.
+
+Archivos principales: `sale_attempt_recovery_screen.dart`,
+`recovery_reviews_panel.dart`, `reconciliation_obligations_panel.dart`,
+`recovery_status_card.dart`, nuevo `recovery_presentation.dart` y el traductor
+compartido `core/errors/operation_error_message.dart`. No se modificaron
+servicios backend ni reglas financieras durante esta fase de diseño.
+
+### Verificaciones de esta fase
+
+- Regresión focalizada de recuperación, cola, errores y caja: **334 PASS,
+  3 omitidas opt-in**. `.uat/recovery-ui-regression-final.log`.
+- Después del último ajuste de alineación: **26 PASS** en
+  `test/features/offline` y `test/core/errors`.
+  `.uat/recovery-ui-final-polish-tests.log`. Son una repetición parcial de la
+  batería anterior; no se suman como casos independientes.
+- `flutter analyze --no-pub`: **sin incidencias**.
+  `.uat/recovery-ui-analyze-final.log`.
+- Pruebas de presentación a 320, 390 y 1280 px con fuentes e iconos reales.
+  PNG locales: `.uat/evidence/recovery-ui/recovery-320.png`,
+  `recovery-390.png`, `recovery-1280.png`.
+- Aplicación Windows real iniciada mediante `flutter run -d windows`,
+  perfil UAT separado, API local 4005 mediante puente IPv6:4004 y PostgreSQL
+  aislado 56560. Solicitar revisión desde una operación rechazada creó un
+  caso real enlazado; la fila original permanece y ya no ofrece solicitarlo
+  otra vez. Contadores: 45 bloqueadas y una por revisar.
+  «Comprobar registro» también consultó la API real y conservó el caso
+  pendiente, sin confirmarlo. Se inspeccionó el diálogo administrativo con
+  guardado deshabilitado al faltar el motivo. El envío de una decisión válida
+  y su cancelación se validaron en pruebas de widget; no se envió una decisión
+  administrativa desde la sesión visual de esta fase.
+- Comparación SQLite/PostgreSQL antes/después **PASS**:
+  **2 ventas, 3 movimientos y 46 incidencias originales conservados**;
+  mismos identificadores, importes, fechas y payloads originales. Un caso
+  de revisión añadido; ningún registro financiero creado o modificado.
+  Evidencia: `.uat/recovery-ui-native/before.json`, `after.json`;
+  verificador reproducible `scripts/uat/verify-recovery-ui.cjs`.
+
+**Alcance y límites:** GO para revisión local de esta interfaz. No es una
+autorización de publicación ni una certificación de todas las pantallas o
+todos los mensajes posibles del backend. Esta fase no volvió a ejecutar
+aceptación nativa Android/iPhone ni toda la batería Flutter. Se conserva
+el criterio de publicación de la fase anterior. Sin cambios en producción,
+operaciones financieras reales, commit, despliegue ni publicación.
+
+## Informe de cierre local — 2026-11-20 (prevalece sobre el historial inferior)
+
+**Ámbito:** copia aislada `C:/src/fullpos-recovery-closing-isolated-20261120`,
+rama `recovery-closing-isolated-20261120`, base auditada `840caadf`.
+La otra sesión conserva su worktree. Esta rama todavía no está integrada ni
+publicada. No se modificó producción ni se realizaron operaciones financieras
+reales. El laboratorio usa API `127.0.0.1:4005`, PostgreSQL dedicado
+`127.0.0.1:56560/fullpos_recovery_closing` y perfiles UAT separados.
+La previsualización ajena en IPv4:4004 sigue intacta; Windows utiliza un puente
+loopback IPv6 y Android `adb reverse`. No se relajó el bloqueo de destinos UAT.
+
+### Cambios funcionales y cobertura de los diez requisitos
+
+| Requisito | Implementación y verificación |
+| --- | --- |
+| 1. Empresa y usuario correctos | Contexto fijado por operación, recuperación automática con propietario explícito, cola y repositorios ligados al almacén de autenticación compartido. Cambiar de empresa durante preparación cancela el envío; cambiar después de un resultado incierto conserva la incidencia para la cuenta original. Cinco regresiones de cambio de propietario PASS. |
+| 2. `occurredAt` original | Se guarda antes del POST y se reenvía sin sustituirlo por la fecha de sincronización. Columna propia, formato estricto y ventana financiera en backend. API real y comparación PostgreSQL verifican igualdad del instante y ausencia de duplicados. |
+| 3. Cola y dependencias | Las acciones permanentes se excluyen antes de aplicar el límite de envío; se conservan dependencias por turno/producto y el orden necesario para cierre. Prueba nativa: 45 bloqueadas permiten una operación nueva válida. |
+| 4. Confirmación estricta | Venta/caja requieren identidad original, identificador devuelto no vacío e importe finito coincidente. Datos ausentes, incompatibles o inciertos permanecen para revisión. Apertura añade `openingAmount` al contrato de respuesta. |
+| 5. HTTP 422 | Tanto el error Dio original como el error ya traducido se consideran validación permanente; no hay reintento automático infinito. |
+| 6. HTTP 401/403/409/429 | Recuperación normal de autenticación; bloqueo por usuario cuando no puede recuperarse; permiso permanente; conflicto conservado; `Retry-After` en segundos o fecha persistido. Se prueban clasificación local y respuestas reales del laboratorio. |
+| 7. Contadores | Pendientes, reintentables, bloqueadas e intervención se cuentan sin truncar el conjunto. Una revisión resuelta sale de los contadores activos y conserva la fila original. |
+| 8. Servidor y cola | Conexión desconocida/accesible/inaccesible separada de la cola. Ausencia de pendientes locales no afirma sincronización global. Apertura local permanece `fromCache` hasta confirmación exacta. Se eliminó la promesa incondicional de poder vender del aviso de recuperación. |
+| 9. Turnos y cierres | Límite real del laboratorio: 24 horas; valor por defecto del código: 24, techo de configuración existente: 72. No se leyó ni cambió configuración de producción. Se validan turno de 26 h, turno nocturno, caja diaria cerrada y cierre del turno original. |
+| 10. Rechazos sin duplicar | Diario SQLite previo al primer POST nativo de venta, apertura, movimiento y cierre. Una respuesta perdida después del commit no pierde la referencia. Revisión administrativa auditada comprueba el registro existente; no recrea dinero. |
+
+### Hallazgos adicionales corregidos en esta continuación
+
+- La apertura offline necesita prueba firmada de empresa/usuario/dispositivo y
+  sesión de autorización. Conserva la apertura original; no reabre caja diaria
+  cerrada ni permite usar una autorización revocada antes de la apertura.
+  Las aperturas antiguas sin prueba quedan para intervención explícita.
+- El emulador tenía aproximadamente 400 ms de atraso: una apertura inmediata
+  podía resultar anterior al inicio exacto del permiso. La fecha se calcula
+  una sola vez con la observación sellada del servidor y el tiempo transcurrido
+  del dispositivo. Se persiste ese instante; no se amplía la ventana firmada ni
+  se cambia la validación del servidor. Regresiones con desfase positivo y
+  negativo y retroceso de reloj PASS.
+- Se serializó el acceso al plugin de almacenamiento seguro para evitar
+  escrituras simultáneas sobre su mapa cifrado. El cifrado y el plugin se
+  conservan. Reinicios reales verifican 30 claves sintéticas por plataforma.
+- Una revisión humana de cierre NO_REALIZADO comprueba que no exista cierre
+  financiero, conserva el turno OPEN y registra el evento. Si otro proceso lo
+  cerró, la comprobación concurrente impide resolverlo como no realizado.
+- Las decisiones administrativas actualizan las estimaciones/cachés del mismo
+  propietario y los contadores. Una decisión humana no es una confirmación
+  financiera; la incidencia original sigue disponible y no se reenvía.
+- El replay de caja exige un importe original presente, finito y no negativo.
+  Un campo ausente o inválido no se convierte en cero. Doce regresiones cubren
+  apertura/movimiento/cierre con importe ausente, NaN, infinito y negativo.
+  La revisión de apertura/cierre exige además que el identificador registrado
+  sea exactamente el turno original: cuatro regresiones de aceptación/rechazo.
+- El test de login con router real expuso una lectura de controlador dispuesto
+  tras esperar el catálogo local. Se añadieron dos comprobaciones del ciclo de
+  vida en cotizaciones (siete líneas), sin cambiar ventas, cálculos ni catálogo.
+
+### Pruebas y evidencia realmente observadas
+
+No se suman baterías que cubren las mismas pruebas. Los números `+2` de los
+drivers nativos incluyen `tearDownAll`: representan un escenario principal,
+no dos escenarios financieros.
+
+| Comprobación | Resultado / evidencia local |
+| --- | --- |
+| Backend focalizado de caja, revisión, permiso y conciliación | 124 pruebas PASS, 12 suites. `.uat/recovery-closing-backend-final.log`; compilación TypeScript PASS. |
+| Prisma | `prisma validate --schema apps/api/prisma/schema.prisma` PASS. Tres migraciones aditivas aplicadas únicamente en PostgreSQL aislado. |
+| API/PostgreSQL: aperturas y revisiones | 9 escenarios PASS. `.uat/recovery-closing-20261120/api-closing-1795205782084.json`: firma/dispositivo/empresa/fecha rechazados, apertura demorada preservada, idempotencia, caja cerrada, autorización revocada y cierre no realizado. La demora de diez minutos se representa con tiempos sintéticos firmados; no fue una espera física de diez minutos. |
+| API/PostgreSQL: estabilización | 11 escenarios PASS. `.uat/recovery-stabilization-20261120/api-postgresql-evidence.json`: turnos antiguos/nocturnos, fechas inválidas/futuras, conflictos, autenticación, permisos y límite de peticiones. |
+| Windows: ventas, caja y cola | Aceptación nativa PASS. `.uat/recovery-closing-windows-final.log`, evidencia `windows-1795203251943856.json/png`. Dos ventas de 50, tres movimientos de 7, cierre 114/esperado114/diferencia0, 46 incidencias conservadas. |
+| Android 15/API35: ventas, caja y cola | Aceptación nativa PASS. `.uat/recovery-closing-android-final.log`, evidencia `android-1795203682643544.json/png`. Mismos invariantes, datos de otra empresa de prueba. |
+| Windows: respuestas perdidas de caja | PASS con el código final. `.uat/recovery-closing-windows-journal-verified.log`, `windows-journal-1795207471066903.json` y `-postgresql.json`. Un turno, un movimiento7, cierre7/esperado7/diferencia0, cero duplicados, revisión conservada y comprobada también en SQLite. |
+| Android: respuestas perdidas de caja | PASS después de corregir el desfase de reloj. `.uat/recovery-closing-android-journal-corrected.log`, `android-journal-1795206212230458.json` y `-postgresql.json`. Mismos invariantes financieros y comprobación de diario previo a cada POST. |
+| Android: detención de proceso y reinicio | PASS. `.uat/recovery-closing-android-restart-final.log`; `android-1795203682643544-restart.json/png`. Usuario recuperado, 30 claves cifradas, 46 incidencias y dos identificadores de venta comprobados mediante conciliación sin POST financiero. |
+| SQLite frente a PostgreSQL en ambas plataformas | PASS. En Android, copia binaria de DB/WAL tras detener únicamente el paquete UAT bajo `.uat/android-native-20261120/evidence/sqlite-before-restart`. Dos ventas sincronizadas coinciden con servidor, 46 incidencias permanentes. `android-1795203682643544-postgresql-crosscheck.json` y `windows-1795203251943856-postgresql-crosscheck.json`. El verificador del diario también leyó la incidencia de cierre de la otra empresa sintética: sigue presente como `review_resolved`, con el mismo turno, importe y revisión. |
+| Windows: detención de proceso y reinicio final | PASS. `.uat/recovery-closing-windows-restart-latest.log`; `windows-1795203251943856-restart.json/png`. Los mismos invariantes de usuario, 30 claves y 46 incidencias. |
+| Flutter completo | `flutter test --no-pub`: 2.562 PASS, 10 omitidas, 5 FAIL iniciales. `.uat/recovery-closing-all-flutter-latest.log`. No se presenta esta ejecución como una batería completa verde. Los cinco fallos se corrigieron y repitieron en las suites afectadas, según las filas siguientes. |
+| Regresión de las suites corregidas y cotizaciones | 225 PASS. `.uat/recovery-closing-final-regression-confirmed.log`: empresa, topbar, login/router, revisión y toda `test/modules/cotizaciones`. Incluye los cinco casos inicialmente fallidos y las cuatro comprobaciones nuevas del turno devuelto. |
+| Última regresión de recuperación/caja | 196 PASS. `.uat/recovery-closing-regression-final.log`: caja, cambio de propietario, revisión, empresa, topbar, login y pantalla de recuperación. Incluye los doce importes inválidos/ausentes. Tiene un aviso de hit-test en la prueba de pantalla; no se silenció ni se convirtió la comprobación en una omisión. |
+| Análisis final | `flutter analyze --no-pub`: PASS sin incidencias. `.uat/recovery-closing-analyze-verified.log`. |
+| Compilación Web final | `flutter build web --release --no-pub` con perfil UAT y API loopback: PASS (JavaScript). `.uat/recovery-closing-web-final.log`. El sondeo WebAssembly informa dependencias incompatibles; no se afirma soporte Wasm. La compilación no equivale a aceptación offline de navegador. |
+
+Los JSON/PNG mencionados están bajo `.uat/windows-native-20261120/evidence`
+o `.uat/android-native-20261120/evidence`. Se mantienen locales e ignorados por
+Git. Las credenciales y claves privadas del laboratorio no forman parte del
+informe ni se deben compartir.
+
+### Fallos de pruebas conservados y corregidos
+
+Se conservan los logs iniciales: dos errores estáticos al trasladar una utilidad
+a extensión Dart; dos fixtures antiguos de caja sin propietario o confirmación
+completa; ejecución amplia anterior con argumentos que invalidaban tres tests
+de configuración; aislamiento de scheduler de almacenamiento seguro en tests;
+primera prueba Android con destino incompatible con el guard UAT; primer diario
+Android rechazado por desfase de reloj. No se presentan como ejecuciones PASS.
+Las correcciones se repitieron con validaciones estrictas; no se borraron
+filas para resolver errores ni se redujeron requisitos financieros para
+hacerlas pasar. La incidencia del instalador Android se detalla debajo.
+La batería completa final encontró tres fixtures de cola sin usuario, una
+expectativa del texto anterior y el test de router con almacenamiento pendiente.
+Desmontar correctamente ese test permitió reproducir y corregir la lectura
+tardía del controlador de cotizaciones. Las nuevas pruebas de revisión primero
+intentaban sustituir una operación por otro tipo con la misma referencia: el
+almacén las rechazó correctamente; se corrigió el fixture para crear referencias
+independientes, manteniendo la protección contra sobrescrituras.
+Las diez omisiones corresponden a pruebas condicionadas por sus entornos UAT,
+TLS, proceso auxiliar o conexión dedicada; no se afirma haberlas ejecutado.
+Se ejecutaron por separado las aceptaciones nativas y de API aquí enumeradas.
+
+**Incidente de herramienta Android durante la última repetición:** el emulador
+del usuario quedó con unos 601 MiB libres. La instalación del APK debug de
+215 MB falló con `INSTALL_FAILED_INSUFFICIENT_STORAGE`. Flutter hizo su
+reintento automático de `installApp`, que desinstala el paquete anterior si la
+primera instalación falla (comportamiento comprobado en el SDK local).
+El paquete UAT `com.daleventa.pos.uat.recovery` quedó desinstalado; no se debe
+afirmar que sus datos sigan presentes en ese dispositivo. La aplicación
+habitual `com.daleventa.pos` sigue instalada y no fue seleccionada para borrar,
+reinstalar ni limpiar. No se modificó su configuración para liberar espacio.
+
+La copia binaria DB/WAL previa bajo
+`.uat/android-native-20261120/evidence/sqlite-before-restart` conserva las
+incidencias y ventas de prueba, y sus invariantes se contrastaron con
+PostgreSQL. Las 30 claves sintéticas fueron verificadas antes del incidente;
+no se afirma que sigan en el keystore del paquete desinstalado. No hubo una
+operación financiera ni una modificación de datos de producción por este fallo.
+Log conservado: `.uat/recovery-closing-android-journal-verified.log`.
+
+Para completar la repetición se creó el AVD desechable
+`FullPOS_Recovery_Closing_20261120` con partición de 12 GiB, ubicado bajo `.uat`,
+en `emulator-5556`; no se sobrescribe el AVD del usuario. El nuevo flujo exige
+comprobar el nombre del dispositivo y al menos 3 GiB libres antes de instalar.
+La repetición completada y sus evidencias finales se describen a continuación.
+
+**Repetición completada en el AVD separado:** PASS con el código final. Se
+perdió el enlace de depuración al primer arranque en frío; se reconectó a la
+misma app mediante el VM Service observado, sin reinstalar ni alterar datos.
+El flujo posterior usa `adb install -r` directamente, copia DB/WAL antes de
+actualizar y conecta `flutter drive --use-existing-app`; se evita así el
+fallback automático de desinstalación. Script local:
+`scripts/uat/run-recovery-android-native.ps1`. Se corrigieron y conservaron en
+el historial de ejecución dos fallos del helper (redirección PowerShell y
+`pidof` todavía vacío al arrancar); el probe final ejecutó el helper completo
+con éxito.
+
+Evidencia final bajo `.uat/android-isolated-final-20261120/evidence`:
+
+- `android-1795207906161479.json/png`: aceptación completa de ventas, caja,
+  cola, autenticación y aislamiento. Log:
+  `.uat/recovery-closing-android-isolated-attached.log`.
+- `android-journal-1795208241234539.json` y `-postgresql.json`: apertura,
+  movimiento y cierre con respuesta perdida; un movimiento de7, diferencia0,
+  cero duplicados y revisión original conservada en SQLite. Log:
+  `.uat/recovery-closing-android-isolated-journal-attached.log`.
+- `android-1795207906161479-restart.json/png`: proceso detenido y relanzado,
+  mismo usuario, 30 claves cifradas y 46 incidencias; cero POST financieros en
+  el probe. Log: `run-recovery_restart_probe_test.dart.log`.
+- `android-1795207906161479-postgresql-crosscheck.json`: dos ventas, tres
+  movimientos, identificadores de SQLite iguales al servidor, cierre114,
+  esperado114, diferencia0, 46 incidencias conservadas y cero duplicados.
+- `snapshots/`: copias DB/WAL y manifiestos SHA256 previos a las actualizaciones
+  manuales del APK. El APK de pruebas se actualiza conservando datos y firma;
+  un fallo cancela el flujo, sin desinstalar ni limpiar cachés de otras apps.
+
+La copia del emulador anterior se volvió a consultar después de su incidente y
+sigue pasando los dos verificadores contra PostgreSQL. Este resultado prueba
+la conservación de la evidencia archivada; no restaura automáticamente el
+paquete ni el keystore eliminado del emulador anterior.
+
+### Aplicación visible al finalizar
+
+Se ejecutó `flutter run --no-pub -d windows --target lib/main.dart` con perfil
+UAT, API loopback y actualizador deshabilitado. Se abrió la aplicación normal
+del código final y se navegó mediante UI al **Centro de recuperación**.
+La observación final confirmó: servidor accesible, cero pendientes, cero
+reintentables, 46 bloqueadas y cero que requieren intervención. Las 46 son
+incidencias sintéticas conservadas deliberadamente, no datos de un negocio real.
+La pantalla distingue cobros inciertos locales, cola y revisiones; no afirma
+sincronización completa. La app se deja abierta en ese perfil aislado.
+El AVD desechable separado se detuvo después de las pruebas, conservando sus
+archivos; el emulador habitual del usuario permanece en ejecución.
+
+### Archivos y compatibilidad
+
+Cambios principales en `apps/api/src/{auth,cash,recovery,sales,common}`,
+`apps/api/prisma/schema.prisma` y sus tres migraciones; cliente en
+`apps/fulltech_app/lib/core/{api,auth,cache,offline,storage}`,
+`lib/features/offline`, `lib/modules/{cash,ventas}`; regresiones en `test/`,
+aceptación en `integration_test/` y verificadores locales en `scripts/uat/`.
+Android añade sufijo y etiqueta al perfil UAT; conserva la identidad normal.
+No se actualizaron dependencias ni se alteraron reglas fiscales, de licencia o
+inventario. Se probaron regresiones de payload fiscal y ticket offline dentro
+de sus suites. Esto limita el riesgo observado; no demuestra ausencia universal
+de regresiones en cada funcionalidad histórica.
+En plataformas nativas, si SQLite no puede guardar el diario previo, se detiene
+el envío de la operación y se informa el error. Las aperturas offline anteriores
+sin prueba verificable permanecen para intervención administrativa; no se les
+asigna una fecha nueva ni se sustituyen por una apertura financiera automática.
+
+Las migraciones son `20261120120000_cash_movement_occurred_at`,
+`20261120180000_offline_cash_open_evidence` y
+`20261120183000_recovery_review_cases`. Agregan datos/evidencia; no borran
+operaciones ni sustituyen las tablas financieras existentes. Las columnas
+nuevas permiten registros anteriores sin evidencia; esos registros no reciben
+una confirmación automática inventada.
+
+### Decisión y pendientes reales
+
+**NO-GO para publicar/desplegar de forma general.** Las aceptaciones Windows y
+Android emulado descritas pasan, pero no hay Mac/iPhone ni teléfono físico para
+aceptación de hardware. Web conserva sus capacidades actuales: no se promete
+persistencia SQLite nativa ni durabilidad equivalente frente a cierre abrupto
+del navegador/concurrencia entre pestañas. Una compilación Web solo demuestra
+compatibilidad de compilación. Hace falta revisar/integrar esta rama con la otra
+sesión y validar la versión integrada antes de cualquier decisión de release.
+La copia de fuentes está aislada; `node_modules` del monorepo sigue enlazado a
+la instalación local anterior. La instalación reproducible con el lockfile y
+la generación de Prisma deben repetirse en el checkout integrado de release.
+El contrato de apertura del cliente nuevo exige `openingAmount` y la prueba
+firmada para apertura offline: se debe validar la pareja cliente/API con sus
+migraciones. Un servidor anterior que omita evidencia deja el resultado para
+revisión; no autoriza una confirmación inventada.
+No se ejecutó commit, merge, push, publicación ni despliegue en esta continuación.
+La revisión general de la página pública y de todos los mensajes del backend
+permanece como siguiente etapa; este informe cubre recuperación/sincronización.
+
+## Continuación en copia aislada — 2026-11-20
+
+El usuario confirmó que otra sesión continúa editando el worktree anterior.
+Esta continuación pertenece a `C:/src/fullpos-recovery-closing-isolated-20261120`,
+rama `recovery-closing-isolated-20261120`, basada en `840caadf`. Se copió la
+instantánea local con sus cambios y archivos nuevos; no se sobrescribe la copia
+de la otra sesión. Los cambios de esta continuación deben revisarse e integrarse
+desde esta rama; el archivo del worktree anterior no es el estado actual.
+
+Producción, publicación y despliegue siguen excluidos. Todas las operaciones
+financieras de prueba son sintéticas en PostgreSQL dedicado de loopback 56560,
+base `fullpos_recovery_closing`. API propia en `127.0.0.1:4005`; Windows conserva
+el guardia UAT usando un reenvío exclusivamente local `[::1]:4004 -> 127.0.0.1:4005`.
+Android utiliza `adb reverse tcp:4004 tcp:4005`. El servidor ajeno de IPv4 4004
+no fue detenido. La clave del laboratorio permanece privada bajo `.uat`, sin
+credenciales ni tokens en los informes.
+
+### Correcciones añadidas respecto al informe anterior
+
+- Apertura offline: autorización HMAC con propósito separado, formato no JWT,
+  limitada a empresa, usuario, dispositivo, sesión de autorización e intervalo
+  de 48 horas. Se conserva `openedAt` original y evidencia de autorización;
+  no se acepta una fecha arbitraria anterior a la autorización. Se comprueba
+  revocación, solapamiento y caja diaria cerrada. Se mantiene la ventana
+  financiera configurada de 24 horas: son límites diferentes. Las aperturas
+  legacy sin evidencia quedan para revisión, sin inventar fechas.
+- Intentos de venta antes del POST: durabilidad activada por defecto en todas
+  las plataformas nativas con SQLite, además de Windows release. La ausencia
+  de almacenamiento durable impide dar por completada una operación.
+- Aperturas y movimientos offline: caché y cola se escriben en la misma
+  transacción SQLite antes de presentar el resultado local. La fecha de negocio
+  utiliza el helper común de Santo Domingo.
+- Revisión administrativa: casos idempotentes con ámbito de empresa y usuario,
+  eventos de auditoría conservados y decisiones con versión. Confirmar exige
+  registro, actor, turno, tipo e importe coincidentes. El cierre comprueba el
+  actor que cerró el turno. Un registro ausente o discrepante conserva el caso.
+  Solo ADMIN puede declarar que no se realizó o mantenerlo en revisión, con
+  motivo obligatorio. Estas rutas no crean asientos financieros ni reenvían
+  ventas o movimientos. Se conserva el registro local original y su resolución.
+- Centro: solicitudes de revisión, consulta del registro y decisiones auditadas;
+  las resoluciones dejan los contadores activos y los importes locales pendientes
+  sin eliminar la evidencia. Una declaración humana no equivale a confirmación
+  financiera. Los fallos al solicitar revisión conservan la incidencia original.
+- Almacén seguro: acceso serializado entre credenciales, sello offline y Guardian;
+  se mantienen el plugin y el cifrado existentes. Un timeout del consumidor no
+  permite solapar una operación nativa todavía activa. Un error no envenena
+  permanentemente la cola de acceso. No se borraron archivos seguros para reparar
+  el problema.
+
+### Evidencia comprobada durante la continuación
+
+- Backend: 122 pruebas PASS en 12 suites; TypeScript compilado.
+- API/PostgreSQL reales: 8 escenarios PASS. Apertura de hace 10 minutos y
+  movimiento original preservados; reenvío exacto conserva un solo movimiento;
+  firma alterada, otra empresa, otro dispositivo y fecha futura rechazados.
+  Dos casos conservados, cuatro eventos auditados, empresa ajena sin cambios.
+  Caja diaria cerrada y autorización histórica revocada rechazadas con cero
+  aperturas nuevas. JSON: `.uat/recovery-closing-20261120/api-closing-*.json`.
+- Android 15/API35: primera aceptación funcional PASS con venta offline,
+  reapertura SQLite, respuesta perdida tras commit, replay idempotente, refresh
+  real, turno rechazado y operación nueva detrás de 45 bloqueadas. Se observaron
+  46 incidencias conservadas al reabrir el almacén durante la prueba. La primera
+  ejecución falló en la fase visual por el puerto UAT; el reenvío local corrigió
+  la configuración sin modificar el guardia. `flutter test` retiró su paquete
+  temporal al finalizar; no confundirlo con una instalación durable final.
+- Windows: escenarios financieros y 30 escrituras cifradas concurrentes PASS;
+  la primera fase visual falló por una espera de SQLite insuficiente. Se corrigió
+  la espera y la devolución inmediata de los manejadores de errores del arnés.
+  Esa ejecución parcial no se cuenta como aceptación nativa completa.
+- Grupo de caja: 19 pruebas PASS en la última repetición aislada. Otras pruebas
+  de revisión, sello y serialización pasaron en sus ejecuciones específicas.
+- Análisis Flutter: PASS sin incidencias. La batería amplia y las aceptaciones
+  nativas finales siguen en ejecución; sus resultados deben añadirse debajo.
+
+No sumar recuentos de baterías solapadas. Se conservan los logs de ejecuciones
+fallidas bajo `.uat`; no se presentan como PASS. Las esperas corregidas son del
+arnés con I/O real: no se debilitaron las validaciones del producto.
+
+### Límites todavía vigentes
+
+La aceptación en emulador no sustituye un teléfono físico. El usuario solo tiene
+Windows y no hay Mac/iPhone disponible: no se afirma aceptación iOS. Web mantiene
+su alcance de persistencia existente; compilar no demuestra durabilidad frente
+a cierre abrupto ni concurrencia entre pestañas. Producción continúa NO-GO hasta
+cerrar las aceptaciones pendientes y revisar la versión concreta a publicar.
+No hubo push, merge ni despliegue. La web pública y la revisión general de todos
+los mensajes del backend son una etapa posterior a este flujo de recuperación.
+
+## Continuación autorizada — cierre de pendientes (2026-11-20)
+
+El usuario autoriza continuar la implementación pendiente sin producción.
+Android 15/API35 `emulator-5554` está disponible; no hay Mac/iPhone disponible.
+Se preserva todo el trabajo local anterior sobre840caadf.
+
+Plan de cierre: autorización firmada y limitada por empresa/usuario/dispositivo
+para reconstruir aperturas offline originales, sin ampliar la ventana financiera
+ni reabrir cajas diarias cerradas; durabilidad previa de ventas en plataformas
+nativas con SQLite; registro y decisiones administrativas auditadas para
+operaciones rechazadas sin inventar asientos financieros; revisión del almacén
+seguro UAT Windows; regresiones y aceptación local secuencial Windows/Android/Web.
+Las incidencias legacy sin prueba de apertura requieren revisión explícita.
+Ninguna corrección autoriza fiscalidad offline, cambios de licencia/inventario,
+confirmaciones inciertas, publicación o despliegue.
+
+## Current work — offline recovery stabilization (2026-11-20)
+
+Base840caadf; own worktree C:/src/fullpos-detalles-finales-importante, branch
+detalles-finales-importante. Owner authorizes the complete local correction and
+validation of the ten recovery/synchronization requirements. No production,
+publication or deployment. All financial test operations must be synthetic in
+a new isolated PostgreSQL/API/Windows storage environment. Preserve fiscal,
+license, inventory and existing cash-window rules. Do not delete incidents.
+
+Plan: (1) scoped automatic recovery and strict confirmation validation;
+(2) original movement timestamps and server validation; (3) fair dependency-aware
+queue and consistent permanent/auth/conflict/rate-limit handling; (4) separate
+connectivity, queue and intervention UI states; (5) regression tests for each
+reproduced issue; (6) real Windows/API/PostgreSQL disconnect/reconnect/restart,
+shift and tenant scenarios with before/after persistent evidence; (7) final
+review and GO/NO-GO report including platform limits and user-visible messages.
+The public website remains available for subsequent authorized work.
+
+Audit baseline: existing Flutter68 and backend54 tests passed but five temporary
+probes reproduced missing recovery scope, movement timestamp loss, starvation
+behind40 blocked actions, unvalidated confirmation and mapped422 retries.
+The baseline app is running as an isolated UAT Windows debug build; stop only
+this owned process when rebuilding. Baseline has no production modifications.
+
+### Informe de estabilización — 20 de noviembre de 2026
+
+**Resultado: correcciones verificadas en Windows/UAT; NO-GO para producción.**
+La recomendación no equivale a una garantía universal de ausencia de pérdidas.
+Los límites y pendientes que impiden esa garantía están indicados más abajo.
+HEAD permanece en `840caadf`; los cambios están locales y sin publicar.
+
+#### Cambios realizados
+
+| Requisito | Corrección y comportamiento resultante |
+| --- | --- |
+| Ámbito de recuperación | Inicio, temporizador, final de cola y reconexión obtienen empresa/usuario actuales. Se comprueba el propietario antes y después de consultar. Los reintentos HTTP quedan ligados al JWT del propietario original. El estado y los mensajes persistidos del motor y de la cola se separan por empresa/usuario y entorno UAT. |
+| Fecha original | El replay de caja transmite `occurredAt`; un registro antiguo puede utilizar su `createdAt` original, nunca inventar la fecha del reenvío. Sin fecha comprobable queda bloqueado para revisión. La API valida ISO con zona, calendario, futuro y ventana del turno. Una columna nullable `cash_movements.occurred_at` conserva el instante original separado de `createdAt` de recepción, con precisión de milisegundos. No se reescriben filas históricas. |
+| Cola y dependencias | Los registros permanentes se excluyen de la selección procesable; no ocupan los primeros 40 lugares. Se limita a 40 envíos reales por pasada. Se conservan dependencias de apertura, movimientos, ventas, devoluciones, abonos, cierres y productos/stock. Una operación independiente nueva puede continuar. |
+| Confirmaciones | La conciliación exige requestId coincidente, identificador de venta string no vacío, importe esperado/registrado finito, igualdad monetaria y `matchesExpected=true`. Una discrepancia conserva evidencia e incidencia. El envío de ventas y el replay de movimientos también comprueban identidad e importe. El cierre exige turno exacto, estado CLOSED e importe coincidente; una respuesta incierta o un 404/409 no se considera por sí solo un cierre confirmado y deja incidencia durable. |
+| HTTP 422 | El error mapeado y el Dio original reciben el mismo tratamiento permanente. Las consultas de recuperación con validación permanente dejan de sondearse automáticamente. |
+| Otros HTTP | 401 conserva la operación y permite renovación real de sesión/reanudación del mismo propietario; 403 exige revisión de permisos y no se rehabilita como un 401; 409 se conserva para intervención. 429 acepta Retry-After en segundos o fecha HTTP, conserva la espera y evita saltarla mediante reintento manual. La API de conciliación devuelve Retry-After. No se modificaron reglas de licencia. |
+| Contadores | Se distinguen pendientes, enviando, reintentables, bloqueadas y que requieren intervención. Se eliminan los límites de 200/500 registros que ocultaban incidencias o contadores. También se evita truncar a 50 registros las escrituras de la cola en preferencias. Una colisión de id local no puede sobrescribir otra empresa/usuario. |
+| Conexión y presentación | La respuesta HTTP real demuestra accesibilidad; una caché no la demuestra. La cola vacía muestra «Sin pendientes locales», no «Todo sincronizado». El Centro muestra las ventas y operaciones de caja rechazadas, además de los intentos inciertos y declaraciones, con referencias y pasos de revisión. Cambiar de propietario limpia la vista anterior. |
+| Turnos | Se preservan el destino original, la regla de cierre, el bloqueo de turnos de día anterior y la ventana financiera. No se reasigna una operación a otro turno ni se cierra caja automáticamente. |
+| Duplicaciones | Se conserva el mismo identificador al desconectar, reconectar y reiniciar. El backend devuelve el movimiento original solamente si usuario, turno, tipo e importe coinciden; reutilizar la identidad con otro importe devuelve conflicto. |
+
+#### Entorno y evidencia
+
+- API NestJS exclusivamente en `127.0.0.1:4004`, con `APP_ENV=uat`, guardia local activada y ventana configurada a 24 horas.
+- PostgreSQL exclusivo: contenedor `fullpos_recovery_stabilization_20261120`, puerto de loopback 56560, base `fullpos_recovery_stabilization`. Ningún contenedor compartido fue alterado.
+- Perfil de datos Windows: `.uat/recovery-stabilization-20261120`; datos financieros exclusivamente sintéticos. No se ejecutaron ventas ni movimientos de producción, cambios fiscales, cambios de licencia o ajustes de inventario para aprobar pruebas.
+- Se conservaron las incidencias rechazadas. La retirada normal de un intento correctamente confirmado conserva su auditoría transaccional; no se utilizó una eliminación de incidencias para resolver fallos.
+- Se detectó otra sesión escribiendo en el mismo worktree; el usuario indicó que la pausaría. La migración duplicada del laboratorio se consolidó en un único archivo de código. La carpeta vacía sobrante fue archivada, sin borrar datos.
+- La primera base experimental conserva su historial de laboratorio. Se verificó además toda la cadena de migraciones sobre la base nueva y vacía `fullpos_recovery_stabilization_clean`, sin resetear ni borrar la primera base.
+
+| Validación ejecutada | Resultado y alcance |
+| --- | --- |
+| Flutter: offline, auth, API, errores, caja, durabilidad de ventas y Centro | 341 pruebas PASS; 4 pruebas opt-in omitidas, sin contarlas como aprobadas. |
+| Regresiones finales después de aislar metadatos | 51 PASS; incluyen restauración de mensajes/contadores por propietario, 401/403/409/422/429, reinicio SQLite, dependencias y cierres inciertos. No deben sumarse a 341 como si fueran pruebas distintas. |
+| Backend: caja, conciliación y obligaciones | 104 pruebas PASS, 11 suites. Incluyen seis regresiones nuevas de fechas, persistencia e identidad del movimiento. |
+| Flutter analyze | PASS sin incidencias; análisis focal posterior de los últimos cambios también PASS. |
+| API build | PASS con Prisma generado y TypeScript. |
+| Web release build | PASS JavaScript. El dry-run Wasm advierte sobre dependencias existentes; no se afirma soporte Wasm. |
+| API real + SQLite real en Windows host | 5 PASS: intento inexistente, intento confirmado, declaración tras caída, HTTP 422 real permanente tras reinicio, y 429/500/timeout mediante sockets reales con envío posterior único a PostgreSQL. |
+| Ejecutable nativo Windows | PASS: venta offline, reapertura SQLite/motor, respuesta perdida después del commit del servidor, replay idempotente, fecha de movimiento, renovación real tras 401, rechazo de turno anterior, 45 registros bloqueados delante de trabajo válido, cambio de ámbito y render del Centro con incidencias persistidas. |
+| Verificación PostgreSQL posterior al escenario nativo | PASS: exactamente 2 ventas y 3 movimientos, cero duplicados, ningún movimiento aplicado al turno rechazado; cierre contado=114, esperado=114, diferencia=0; turno posterior permanece OPEN. Se conservan 46 incidencias en SQLite después de reiniciar. |
+| Aceptación API/PostgreSQL adicional | 11 escenarios comprobados, incluyendo empresas reales distintas, permisos 401/403, rate limit real, turno de 26 horas, operación nocturna histórica y cierre de turno antiguo. Uno documenta el límite de apertura offline tardía, no su resolución. |
+| Migraciones desde base vacía | PASS de la cadena completa, incluida la columna nueva nullable. No se aplicó ninguna migración a producción. |
+
+Archivos de evidencia local, ignorados por Git y sin credenciales en el informe:
+
+- `.uat/audit-caja-sync-20261120/flutter-final.log`
+- `.uat/audit-caja-sync-20261120/last-regression.log`
+- `.uat/audit-caja-sync-20261120/live-api-5-sequential.log`
+- `.uat/audit-caja-sync-20261120/windows-scope-final.log`
+- `.uat/audit-caja-sync-20261120/flutter-analyze-final.log`
+- `.uat/audit-caja-sync-20261120/web-build.log`
+- `.uat/audit-caja-sync-20261120/migrations-clean.log`
+- `.uat/recovery-stabilization-20261120/windows-persistence.json`
+- `.uat/recovery-stabilization-20261120/postgresql-native-crosscheck.json`
+- `.uat/recovery-stabilization-20261120/api-postgresql-evidence.json`
+- `.uat/recovery-stabilization-20261120/windows-recovery-center.png`
+
+Verificación visual final tras iniciar un proceso nuevo con `flutter run -d
+windows`: aplicación abierta y Centro de recuperación visible. El menú muestra
+servidor accesible, 0 pendientes, 0 reintentables y 46 bloqueadas sintéticas;
+el Centro muestra esos mismos contadores y conserva las referencias originales.
+Se comprobó mediante lectura y captura de la ventana nativa. La aplicación y la
+API local quedan abiertas para revisión. Las 46 incidencias son fixtures de
+aceptación, no registros de un negocio real.
+
+Se registraron fallos intermedios del banco de pruebas (proxy gzip, comparación
+de microsegundos frente a milisegundos y restauración de handlers de Flutter).
+Fueron corregidos y la aceptación nativa pasó. Ejecutar builds/tests Flutter
+simultáneos también produjo conflictos de assets nativos/MSBuild; se repitió
+la aceptación de forma secuencial. Estos intentos fallidos permanecen en los
+logs y no se presentan como aprobaciones.
+
+#### Límites financieros comprobados
+
+HECHO: el proceso local usa `CASH_SHIFT_MAX_SPAN_HOURS=24`. El valor por defecto
+del código es 24, con techo 72; el desfase por defecto es 5 minutos, con techo
+30. No se inspeccionó ni se afirma el valor configurado en producción.
+
+HECHO: el gate exige cierre al cambiar el día comercial. La validación de un
+replay usa la fecha original y permite una operación nocturna del día siguiente
+dentro de la ventana, si el turno original sigue abierto. Son comprobaciones
+distintas; la prueba de replay nocturno no demuestra que la interfaz permita
+mantener cualquier turno abierto indefinidamente.
+
+#### Pendientes y recomendación
+
+1. **Aperturas offline antiguas:** la apertura actual del servidor usa la hora
+   de recepción. Un movimiento ocurrido más de la tolerancia antes de esa
+   apertura devuelve `CASH_OPERATION_BEFORE_SHIFT`. Se reprodujo con 10 minutos
+   de diferencia y cero movimientos insertados. La cola conserva la operación
+   para revisión. Aceptar una apertura retroactiva requiere un protocolo de
+   evidencia autorizado; no se habilitó una fecha arbitraria del cliente ni se
+   debilitó la ventana financiera para aprobar el escenario.
+2. **Alcance de durabilidad por plataforma:** la reserva previa de intentos de
+   venta del código base está habilitada por defecto en Windows release. La
+   prueba nativa activa explícitamente ese mismo modo. No se afirma que Android,
+   iPhone o Web tengan esa misma garantía frente al cierre abrupto de una venta
+   online incierta. Esa extensión y su aceptación por plataforma quedan
+   pendientes; el build Web no sustituye esa prueba.
+3. **Revisión administrativa de caja rechazada:** ahora es visible y conserva
+   evidencia, pero el Centro no incorpora un nuevo mecanismo financiero para
+   regularizar esos movimientos. No se inventó una venta ni se trasladó el
+   movimiento a otra caja. Hace falta completar la resolución autorizada de
+   estos casos antes de prometer que todos pueden resolverse dentro de la app.
+4. **Credenciales UAT Windows:** el plugin registró advertencias de descifrado
+   de su archivo seguro UAT; el fallback permitió renovar la sesión en la
+   prueba. No se borró manualmente ese archivo. Debe verificarse el almacén
+   seguro de una instalación limpia antes de aprobar distribución.
+5. Quedan pendientes aceptación física Android/iPhone y pruebas de navegador
+   sobre sus capacidades reales de persistencia. No se verificó una instalación
+   de producción ni se modificó su configuración.
+
+RECOMENDACIÓN: GO únicamente para revisión y más aceptación en este laboratorio
+local. **NO-GO para publicar o desplegar** mientras sigan pendientes la apertura
+offline tardía, la resolución administrativa y la garantía por plataforma.
+La revisión integral de la web y de todos los mensajes del backend es una etapa
+posterior; en esta corrección se revisaron los mensajes del flujo de recuperación,
+cola y caja descritos arriba. No hubo push, publicación ni despliegue.
+
 ## Current work — final public website refinements (2026-11-20)
 
 Worktree C:/src/fullpos-detalles-finales-importante; branch
