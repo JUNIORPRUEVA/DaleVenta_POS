@@ -368,8 +368,9 @@ const proofIcons = [icons.gift, icons.wifi, icons.headphones];
         <span class="eyebrow">Planes</span>
         <h2>Elige tu plan</h2>
         <p class="lead">
-          Todos incluyen los mismos módulos en todos tus dispositivos. Empiezas con la
-          prueba y pagas por transferencia bancaria cuando decidas seguir.
+          Los cuatro corren en todos tus dispositivos. Cambian la capacidad, los módulos
+          incluidos y el soporte. Empiezas con la prueba y pagas por transferencia bancaria
+          cuando decidas seguir.
         </p>
       </div>
 
@@ -426,6 +427,13 @@ const proofIcons = [icons.gift, icons.wifi, icons.headphones];
               ))}
             </ul>
 
+            {plan.excluded && plan.excluded.length > 0 && (
+              <p class="plan-excluded">
+                <span class="plan-excluded-title">No incluye</span>
+                {plan.excluded.join(' · ')}
+              </p>
+            )}
+
             <p class="plan-platform">
               <svg
                 viewBox="0 0 24 24"
@@ -481,6 +489,11 @@ const proofIcons = [icons.gift, icons.wifi, icons.headphones];
 
       <p class="plans-note">
         El único medio de pago del plan es la transferencia bancaria, al terminar la prueba de 7 días.
+      </p>
+
+      <p class="plans-note">
+        Los módulos que incluye tu plan llegan apagados: tú activas desde Configuración
+        los que necesites, cuando los necesites. Nada se enciende solo.
       </p>
 
       <p class="plans-note">

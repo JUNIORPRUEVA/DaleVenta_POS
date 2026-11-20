@@ -1594,6 +1594,26 @@ small,
   color: var(--ink-3);
 }
 
+/* Modulos que el plan no incluye: se dicen, no se esconden */
+.plan-excluded {
+  margin: 0 0 12px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line-strong);
+  font-size: 0.775rem;
+  line-height: 1.45;
+  color: var(--ink-3);
+}
+
+.plan-excluded-title {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
 .plan-cta {
   gap: 7px;
   letter-spacing: -0.012em;
@@ -1763,6 +1783,20 @@ small,
   width: 15px;
   height: 15px;
   stroke-width: 1.9;
+}
+
+/* Desde que plan esta incluido un modulo */
+.module-tag {
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--blue-soft);
+  border: 1px solid var(--blue-line);
+  font-size: 0.655rem;
+  font-weight: 660;
+  letter-spacing: 0.01em;
+  color: var(--blue);
+  white-space: nowrap;
 }
 
 /* ==========================================================================

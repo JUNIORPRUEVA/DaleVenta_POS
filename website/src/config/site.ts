@@ -329,6 +329,8 @@ export type Plan = {
   badge?: string;
   highlight?: boolean;
   specs: PlanSpec[];
+  /** Modulos que el plan NO incluye. Se dicen aparte para no prometer de mas. */
+  excluded?: string[];
   cta: string;
   ctaHint: string;
 };
@@ -349,10 +351,16 @@ export const plans: Plan[] = [
     trial: '7 días gratis',
     specs: [
       { svg: icons.box, label: '100 productos' },
-      { svg: icons.users, label: '2 usuarios' },
+      { svg: icons.users, label: '1 usuario' },
       { svg: icons.building, label: '1 almacén' },
-      { svg: icons.fileText, label: 'Facturación electrónica opcional' },
+      { svg: icons.receipt, label: 'Ventas, cotizaciones e inventario' },
       { svg: icons.headphones, label: 'Soporte estándar' },
+    ],
+    excluded: [
+      'Facturación electrónica',
+      'Impuestos (ITBIS)',
+      'Mayoreo y listas de precio',
+      'Multi-almacén',
     ],
     cta: 'Elegir Básico',
     ctaHint: 'Prueba de 7 días antes de pagar',
@@ -361,8 +369,8 @@ export const plans: Plan[] = [
     id: 'negocio',
     name: 'FullPOS Negocio',
     short: 'Negocio',
-    price: 'RD$2,000',
-    monthly: 2000,
+    price: 'RD$2,500',
+    monthly: 2500,
     period: 'al mes',
     summary: 'El equilibrio entre precio y capacidad.',
     trial: '7 días gratis',
@@ -370,12 +378,14 @@ export const plans: Plan[] = [
     highlight: true,
     specs: [
       { svg: icons.box, label: '400 productos' },
-      { svg: icons.users, label: '5 usuarios' },
-      { svg: icons.building, label: '1 a 2 almacenes' },
+      { svg: icons.users, label: '3 usuarios' },
+      { svg: icons.building, label: '1 almacén' },
+      { svg: icons.scale, label: 'Impuestos (ITBIS)' },
+      { svg: icons.tag, label: 'Mayoreo y listas de precio' },
       { svg: icons.fileText, label: 'Facturación electrónica incluida' },
-      { svg: icons.shield, label: 'Postulación e-CF gratis con asistente guiado' },
       { svg: icons.headphones, label: 'Soporte prioritario' },
     ],
+    excluded: ['Multi-almacén'],
     cta: 'Elegir Negocio',
     ctaHint: 'El favorito de los negocios',
   },
@@ -383,17 +393,19 @@ export const plans: Plan[] = [
     id: 'pro',
     name: 'FullPOS Pro',
     short: 'Pro',
-    price: 'RD$3,000',
-    monthly: 3000,
+    price: 'RD$3,500',
+    monthly: 3500,
     period: 'al mes',
     summary: 'Para operaciones con más movimiento.',
     trial: '7 días gratis',
     specs: [
       { svg: icons.box, label: '1,000 productos' },
-      { svg: icons.users, label: '10 usuarios' },
-      { svg: icons.building, label: 'Multi-almacén' },
-      { svg: icons.fileText, label: 'Mayor capacidad de facturación' },
-      { svg: icons.shield, label: 'Postulación e-CF gratis con asistente guiado' },
+      { svg: icons.users, label: '4 usuarios' },
+      { svg: icons.building, label: 'Hasta 5 almacenes' },
+      { svg: icons.layers, label: 'Multi-almacén' },
+      { svg: icons.scale, label: 'Impuestos (ITBIS)' },
+      { svg: icons.tag, label: 'Mayoreo y listas de precio' },
+      { svg: icons.fileText, label: 'Más uso de facturación electrónica' },
       { svg: icons.headphones, label: 'Soporte más rápido' },
     ],
     cta: 'Elegir Pro',
@@ -403,17 +415,19 @@ export const plans: Plan[] = [
     id: 'empresa',
     name: 'FullPOS Empresa',
     short: 'Empresa',
-    price: 'RD$4,500',
-    monthly: 4500,
+    price: 'RD$5,000',
+    monthly: 5000,
     period: 'al mes',
     summary: 'Capacidad máxima y acompañamiento.',
     trial: '7 días gratis',
     specs: [
       { svg: icons.box, label: '5,000 productos' },
-      { svg: icons.users, label: '20 usuarios' },
-      { svg: icons.building, label: 'Mayor capacidad operativa' },
+      { svg: icons.users, label: '7 usuarios' },
+      { svg: icons.building, label: 'Hasta 10 almacenes' },
+      { svg: icons.layers, label: 'Multi-almacén' },
+      { svg: icons.scale, label: 'Impuestos (ITBIS)' },
+      { svg: icons.tag, label: 'Mayoreo y listas de precio' },
       { svg: icons.fileText, label: 'Facturación electrónica ampliada' },
-      { svg: icons.shield, label: 'Postulación e-CF gratis con asistente guiado' },
       { svg: icons.headphones, label: 'Soporte extendido y arranque' },
     ],
     cta: 'Elegir Empresa',
@@ -437,7 +451,8 @@ export const planIncludes = [
 
 export type ModuleGroup = {
   title: string;
-  items: { name: string; svg: string }[];
+  /** `plans` indica desde que plan esta incluido el modulo; si falta, va en todos. */
+  items: { name: string; svg: string; plans?: string }[];
 };
 
 /** Modulos del sistema, agrupados para la pagina de funciones. */
@@ -455,16 +470,16 @@ export const moduleGroups: ModuleGroup[] = [
     items: [
       { name: 'Contabilidad', svg: icons.chart },
       { name: 'Gestión de clientes', svg: icons.users },
-      { name: 'Multi almacenes', svg: icons.building },
+      { name: 'Multi almacenes', svg: icons.building, plans: 'Desde Pro' },
       { name: 'Multi unidad de medida', svg: icons.scale },
-      { name: 'Mayoreo y detalle', svg: icons.tag },
+      { name: 'Mayoreo y detalle', svg: icons.tag, plans: 'Desde Negocio' },
     ],
   },
   {
     title: 'Siempre disponible',
     items: [
       { name: 'Hasta 48 horas sin internet', svg: icons.wifi },
-      { name: 'Facturación electrónica', svg: icons.fileText },
+      { name: 'Facturación electrónica', svg: icons.fileText, plans: 'Desde Negocio' },
       { name: 'Todo en un solo lugar', svg: icons.cloud },
     ],
   },

@@ -1,5 +1,42 @@
 # Execution State
 
+## Current work — recover pending Plans, IA and cash warning (2026-11-20)
+
+Owner authorizes auditing all related branches and recovering the omitted work
+for commit/PR integration into production-main, followed by a safe owner-driven
+deployment. Worktree C:/src/fullpos-recover-ui-20261120, branch
+agent/recover-plans-ia-cash-20261120, base d35fc09e (deployed PR51).
+Execution is continuous through local audit, integration, validation and authorized
+commits; owner retains merge/deploy. No production configuration/data changes.
+
+Audit: 219 Git references inventoried, 19 named related references reviewed.
+The existing IA design (19d3a57c/bf03b30e/b2fb1b54) and backend account context
+1bb48ae0 are already in main; do not replace them with older dirty worktrees.
+Omitted: seven uncommitted files from fullpos-planes-de-pago-impl (POS company
+Plans side panel, navigation test and five marketing website files). Source
+checkpoint captured privately without env/backups. Original source remains intact.
+Cash warning aa79fa75 was absent; merge c0f32092 retains its original ancestry.
+Excluded: unrelated menu-removal commit13e039b1, host baseline ebfdda35, unrelated
+generated files, media evidence and real database backups.
+
+Plan: recover only the pending UI diff, align public catalogue copy with the
+existing documented/seeded catalogue, retain server license/fiscal rules and
+cash policy. Cash wording reflects the existing previous-business-day condition,
+not a new 24-hour timer or an automatic close. Revalidate AI, cash, plans, fiscal
+flows and visuals before publication. No API/schema/migration changes required.
+
+Local checks: company-panel10 PASS at1280/390, including payment navigation,
+legacy license preservation and neutral blocked-license wording. Broad859 PASS;
+final Plans/panel64 PASS after preserving themed button typography. Final full
+Flutter analyze PASS, web release build PASS54.9s. Website14 PASS, Astro0 errors/
+0 warnings (one existing hint), build14 routes PASS. Visual captures use actual
+widgets and synthetic data. API, schema, fiscal and AI code diffs remain empty.
+
+Pending: commit recovered files only, publish PR and inspect CI. Owner's claim
+that IA appears old in private remains under visual clarification; all named IA
+design commits are already preserved and must not be replaced by old snapshots.
+Never merge/deploy automatically or assign catalogue plans to existing clients.
+
 ## Current work — state-aware fiscal home and public logout (2026-11-15)
 
 Owner requests visual audit before local fixes: no fiscal bottom-sheet menu or
