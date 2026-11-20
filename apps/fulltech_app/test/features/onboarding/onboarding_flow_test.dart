@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:daleventa_pos/core/auth/app_bootstrap_status.dart';
 import 'package:daleventa_pos/core/auth/auth_provider.dart';
 import 'package:daleventa_pos/core/auth/business_registration_policy.dart';
+import 'package:daleventa_pos/core/license/license_repository.dart';
 import 'package:daleventa_pos/core/models/product_model.dart';
 import 'package:daleventa_pos/core/models/user_model.dart';
 import 'package:daleventa_pos/core/routing/app_router.dart';
@@ -225,6 +226,12 @@ void main() {
             ),
             businessRegistrationDisabledProvider.overrideWithValue(false),
             onboardingRepositoryProvider.overrideWithValue(repo),
+            // El armazon consulta la licencia para el menu de cuenta; sin esta
+            // licencia falsa se dispara una llamada real y queda un temporizador
+            // de 18 s pendiente que rompe la prueba.
+            licenseStatusProvider.overrideWith(
+              (_) async => LicenseStatusModel.fromJson({}),
+            ),
           ],
           child: Consumer(
             builder: (context, ref, _) {

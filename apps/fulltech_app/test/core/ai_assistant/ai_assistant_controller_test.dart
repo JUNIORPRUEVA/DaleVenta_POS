@@ -173,7 +173,12 @@ void main() {
       reason: 'El turno necesita una frase con sentido, no un mensaje vacío.',
     );
     final userMessage = controller.state.messages.lastWhere((m) => m.isUser);
-    expect(userMessage.content, contains('nota-de-voz-20261111-124530.m4a'));
+    expect(
+      userMessage.attachment?.filename,
+      'nota-de-voz-20261111-124530.m4a',
+      reason: 'El adjunto viaja como dato del mensaje, no dentro del texto.',
+    );
+    expect(userMessage.attachment?.isAudio, isTrue);
     expect(
       controller.state.attachment,
       isNull,

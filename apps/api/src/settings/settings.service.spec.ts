@@ -82,6 +82,7 @@ describe("SettingsService company master data protection", () => {
         getCompanyFiscalSettings: jest.fn().mockResolvedValue(fiscal),
         updateFiscalSettings: jest.fn(),
       } as any,
+      { assertFeatureAllowed: jest.fn() } as any,
     );
   }
 
@@ -526,6 +527,7 @@ describe("SettingsService company master data protection", () => {
         })),
       } as any,
       taxes as any,
+      { assertFeatureAllowed: jest.fn() } as any,
     );
 
     const response = await service.updateSettings(
@@ -604,6 +606,7 @@ describe("SettingsService company master data protection", () => {
         })),
       } as any,
       taxes as any,
+      { assertFeatureAllowed: jest.fn() } as any,
     );
 
     await service.updateSettings(
@@ -1104,6 +1107,7 @@ describe("SettingsService company master data protection", () => {
         getCompanyFiscalSettings: jest.fn(),
         updateFiscalSettings: jest.fn(),
       } as any,
+      { assertFeatureAllowed: jest.fn() } as any,
     );
 
     const result = await service.verifyAdminPin(

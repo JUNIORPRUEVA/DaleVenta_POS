@@ -60,6 +60,12 @@ class Routes {
   static const manualInterno = '/manual-interno';
   static const apps = '/apps';
   static const licencias = '/licencias';
+  /// Pantalla unica de plan, uso y renovacion. Siempre accesible, incluso con
+  /// la licencia vencida.
+  static const planes = '/planes';
+  static const planesCatalogo = '/planes/catalogo';
+  static const planesPago = '/planes/pago';
+  static const planesHistorial = '/planes/historial';
   static const actualizaciones = '/actualizaciones';
   static const configuracion = '/configuracion';
   static const configuracionEmpresa = '/configuracion/empresa';

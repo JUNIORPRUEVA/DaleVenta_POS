@@ -253,6 +253,11 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
     final location = safeCurrentLocation(context);
     AppNavigator.recordShellLocation(location);
     _scheduleAuthorizationCleanup(location);
+    // Con la licencia vencida no hay punto de venta operativo: la barra
+    // inferior de tickets no se muestra en ningun sitio, tampoco al pasar por
+    // las pantallas de Planes/Pago (que abren encima del armazon).
+    final licenseExpired =
+        ref.watch(licenseStatusProvider).valueOrNull?.isLicenseExpired ?? false;
     final title = resolveNavigationTitle(location, sections);
     final showShellAppBar = desktopShellShouldShowOwnAppBar(location);
     final routeActions = _routeActions;
@@ -326,9 +331,10 @@ class _ResponsiveShellState extends ConsumerState<ResponsiveShell> {
                       ),
                     ),
                   ),
-                  footerBuilder == null
-                      ? const DesktopShellFooter()
-                      : footerBuilder(context),
+                  if (!licenseExpired)
+                    footerBuilder == null
+                        ? const DesktopShellFooter()
+                        : footerBuilder(context),
                 ],
               ),
             ),

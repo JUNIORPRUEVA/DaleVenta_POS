@@ -131,6 +131,10 @@ describe('LicenseService limits', () => {
       product: { count: jest.fn().mockResolvedValue(1) },
       companyMember: { findFirst: jest.fn().mockResolvedValue(null) },
       appConfig: { findFirst: jest.fn().mockResolvedValue(null) },
+      // La empresa no tiene plan asignado y no hay excepcion del CRM: el cupo
+      // efectivo es el de la propia empresa (2 usuarios / 1 producto).
+      licensePlan: { findUnique: jest.fn().mockResolvedValue(null) },
+      licenseCompanyOverride: { findUnique: jest.fn().mockResolvedValue(null) },
     };
     const scopedService = new LicenseService(
       {} as any,
@@ -152,6 +156,75 @@ describe('LicenseService limits', () => {
       });
     }
     expect(tx.$queryRaw).toHaveBeenCalled();
+  });
+
+  it('honra las excepciones del CRM al comprobar el cupo', async () => {
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ pg_advisory_xact_lock: '' }]),
+      company: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'company-a',
+          name: 'Empresa A',
+          slug: 'empresa-a',
+          status: 'ACTIVE',
+          plan: 'STANDARD',
+          planCode: 'basico',
+          licenseStatus: LicenseStatus.ACTIVE,
+          licenseKey: 'DV-123',
+          trialStartedAt: null,
+          trialEndsAt: null,
+          licenseActivatedAt: new Date('2026-08-01T00:00:00Z'),
+          licenseExpiresAt: null,
+          licenseBlockedAt: null,
+          licenseNotes: null,
+          maxUsers: 2,
+          maxProducts: 1,
+          updatedAt: new Date('2026-08-02T00:00:00Z'),
+        }),
+      },
+      user: { count: jest.fn().mockResolvedValue(1) },
+      product: { count: jest.fn().mockResolvedValue(1) },
+      companyMember: { findFirst: jest.fn().mockResolvedValue(null) },
+      appConfig: { findFirst: jest.fn().mockResolvedValue(null) },
+      licensePlan: {
+        findUnique: jest.fn().mockResolvedValue({
+          code: 'basico',
+          name: 'FullPOS Basico',
+          version: 1,
+          maxUsers: 1,
+          maxProducts: 1,
+          maxWarehouses: 1,
+          ecf: false,
+          taxes: false,
+          wholesale: false,
+          uom: true,
+          ecfMonthlyQuota: null,
+        }),
+      },
+      // El CRM concedio 5 productos extra: la comprobacion tiene que verlo.
+      licenseCompanyOverride: {
+        findUnique: jest.fn().mockResolvedValue({
+          extraUsers: 0,
+          extraProducts: 5,
+          extraWarehouses: 0,
+          allowEcf: false,
+          allowTaxes: false,
+          allowWholesale: false,
+          allowUom: false,
+          allowMultiWarehouse: false,
+          expiresAt: null,
+        }),
+      },
+    };
+    const scopedService = new LicenseService(
+      {} as any,
+      {} as any,
+      {} as any,
+    ) as any;
+
+    await expect(
+      scopedService.assertCanCreateProductInTransaction(tx, 'company-a'),
+    ).resolves.toBeUndefined();
   });
 
   it('returns authoritative usage with unsupported warehouse and device limits', async () => {

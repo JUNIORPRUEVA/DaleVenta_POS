@@ -1,4 +1,4 @@
-import { CompanyMemberRole, CompanyMemberStatus, Role } from '@prisma/client';
+﻿import { CompanyMemberRole, CompanyMemberStatus, Role } from '@prisma/client';
 import { JwtStrategy } from './jwt.strategy';
 
 describe('JwtStrategy tenant authorization role', () => {
@@ -46,7 +46,7 @@ describe('JwtStrategy tenant authorization role', () => {
     const strategy = new JwtStrategy(
       { get: jest.fn().mockReturnValue('test-secret') } as any,
       prisma as any,
-      { assertCompanyCanUseApp: jest.fn() } as any,
+      { assertCompanyCanUseApp: jest.fn(), getLicenseAccess: jest.fn().mockResolvedValue({ level: 'FULL', reason: 'ACTIVE', effectiveStatus: 'ACTIVE', isTrial: false, periodEndsAt: null, daysRemaining: null, restricted: false }), } as any,
     );
 
     const user = await strategy.validate({
@@ -82,7 +82,7 @@ describe('JwtStrategy tenant authorization role', () => {
     const strategy = new JwtStrategy(
       { get: jest.fn().mockReturnValue('test-secret') } as any,
       prisma as any,
-      { assertCompanyCanUseApp: jest.fn() } as any,
+      { assertCompanyCanUseApp: jest.fn(), getLicenseAccess: jest.fn().mockResolvedValue({ level: 'FULL', reason: 'ACTIVE', effectiveStatus: 'ACTIVE', isTrial: false, periodEndsAt: null, daysRemaining: null, restricted: false }), } as any,
     );
 
     const payload = {

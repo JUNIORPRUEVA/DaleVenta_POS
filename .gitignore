@@ -43,6 +43,10 @@ release/
 !scripts/release/
 !scripts/release/*.ps1
 evidence/
+# ...pero el codigo del motor OCR no es una evidencia subida: es fuente y tiene
+# que versionarse (el patron de arriba es para las carpetas de comprobantes).
+!apps/api/src/license/evidence/
+!apps/api/src/license/evidence/**
 installer/inno-build-report.txt
 
 # Temporary audit / E2E capture artifacts (not source, not test assets)

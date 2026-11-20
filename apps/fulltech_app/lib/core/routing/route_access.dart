@@ -105,6 +105,14 @@ class RouteAccess {
         return AppPermission.manageWarehouses;
       case Routes.whatsapp:
         return null;
+      case Routes.planes:
+      case Routes.planesCatalogo:
+      case Routes.planesPago:
+      case Routes.planesHistorial:
+        // Planes y renovacion estan disponibles para cualquier rol: con la
+        // licencia vencida es la unica salida. Comprar y subir comprobante lo
+        // valida el servidor (solo propietario o administrador).
+        return null;
       case Routes.publicidad:
       case Routes.publicidadInvestigacion:
       case Routes.publicidadEstados:

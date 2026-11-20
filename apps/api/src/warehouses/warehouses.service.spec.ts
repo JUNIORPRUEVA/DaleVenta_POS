@@ -1,4 +1,4 @@
-import {
+﻿import {
   BadRequestException,
   ConflictException,
   NotFoundException,
@@ -16,7 +16,7 @@ function row(overrides: Record<string, any>) {
 
 function buildService(
   source = "LOCAL",
-  options: { inventoryEnabled?: boolean } = {},
+  options: { inventoryEnabled?: boolean; multiWarehousePlan?: boolean } = {},
 ) {
   const db = {
     warehouses: [
@@ -195,6 +195,14 @@ function buildService(
       }),
     },
     warehouse: {
+      count: jest.fn(async (args: any) =>
+        db.warehouses.filter(
+          (warehouse) =>
+            warehouse.companyId === args.where.companyId &&
+            (args.where.isActive === undefined ||
+              warehouse.isActive === args.where.isActive),
+        ).length,
+      ),
       findMany: jest.fn(async (args: any) =>
         db.warehouses
           .filter((warehouse) => warehouse.companyId === args.where.companyId)
@@ -350,6 +358,7 @@ function buildService(
       findFirst: jest.fn(async () => null),
       create: jest.fn(),
     },
+    $queryRaw: jest.fn().mockResolvedValue([]),
     $transaction: jest.fn((input: any) =>
       Array.isArray(input) ? Promise.all(input) : input(api),
     ),
@@ -363,7 +372,16 @@ function buildService(
   };
 
   return {
-    service: new WarehousesService(api as any, resolver as any),
+    service: new WarehousesService(api as any, resolver as any, {
+      getEntitlements: async () => ({
+        planCode: null, planName: null, catalogVersion: null, source: 'none' as const,
+        maxUsers: 100, maxProducts: 1000, maxWarehouses: 10,
+        // Empresa sin plan: no se recorta nada (comportamiento legado).
+        multiWarehouse: options.multiWarehousePlan ?? true,
+        features: { ecf: true, taxes: true, wholesale: true, uom: true },
+        ecfMonthlyQuota: null, overrideApplied: false,
+      }),
+    } as any),
     db,
     api,
   };
@@ -376,6 +394,15 @@ describe("WarehousesService", () => {
     await expect(service.list(userB as any)).rejects.toBeInstanceOf(
       BadRequestException,
     );
+    expect(api.warehouse.findMany).not.toHaveBeenCalled();
+  });
+
+  it("responde 403 cuando el plan no incluye multi-almacen", async () => {
+    const { service, api } = buildService("LOCAL", { multiWarehousePlan: false });
+
+    await expect(service.list(userB as any)).rejects.toMatchObject({
+      response: { code: 'PLAN_FEATURE_NOT_INCLUDED' },
+    });
     expect(api.warehouse.findMany).not.toHaveBeenCalled();
   });
 

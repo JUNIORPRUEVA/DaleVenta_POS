@@ -35,9 +35,18 @@ class ApiRoutes {
   static const settingsAdminPin = '/settings/admin-pin';
   static const settingsAdminPinVerify = '/settings/admin-pin/verify';
   static const license = '/license';
-  static const licenseActivate = '/license/activate';
-  static const licenseBlock = '/license/block';
-  static const licenseLimits = '/license/limits';
+  // `activate`, `block` y `limits` se retiraron del servidor: activar o ampliar
+  // la licencia solo ocurre por el flujo de planes.
+  // Planes y cobro por transferencia (catalogo del servidor, nunca en la app).
+  static const licenseAccess = '/license/access';
+  static const licensePlans = '/license/plans';
+  static const licensePaymentInstructions = '/license/payment-instructions';
+  static const licenseOrders = '/license/orders';
+  static const licenseOrderQuote = '/license/orders/quote';
+  /// Ticket de soporte para ampliar plan cuando ya se esta en el ultimo.
+  static const licensePlanRequests = '/license/plan-requests';
+  static String licenseOrderCancel(String id) => '/license/orders/$id/cancel';
+  static String licenseOrderEvidence(String id) => '/license/orders/$id/evidence';
 
   // Usuarios
   static const users = '/users';

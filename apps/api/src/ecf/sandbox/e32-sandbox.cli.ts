@@ -8,6 +8,7 @@ import { authenticateE32Operator } from "./e32-sandbox-operator";
 import { ConfigService } from "@nestjs/config";
 import { JwtStrategy } from "../../auth/jwt.strategy";
 import { LicenseService } from "../../license/license.service";
+import { LicenseRenewalService } from "../../license/renewal/license-renewal.service";
 import { CatalogRealtimeRelayService } from "../../products/catalog-realtime-relay.service";
 import { E32SandboxService, type E32TrialAuthorization } from "./e32-sandbox.service";
 import { E32SandboxOneShotWire } from "./e32-sandbox.wire";
@@ -60,7 +61,7 @@ async function main() {
       const config = new ConfigService();
       // Constructors do not connect a socket or start the application. The
       // existing validator checks session, membership, blocked user and license.
-      const licenses = new LicenseService(prisma,config,new CatalogRealtimeRelayService(config));
+      const licenses = new LicenseService(prisma,config,new CatalogRealtimeRelayService(config),new LicenseRenewalService(prisma));
       return new JwtStrategy(config,prisma,licenses).validate(payload);
     });
     facts.actorAuthorized = Boolean(actor?.companyId && actor.role === "ADMIN");

@@ -1,0 +1,52 @@
+{
+  "mode": "REVIEW_ONLY_DO_NOT_APPLY",
+  "productionChangesAuthorized": false,
+  "ownerBankAccountConfirmed": true,
+  "bankAccountSource": "Datos de la vista local de Planes confirmados por el propietario el 20/11/2026; no se incluyen numeros ni secretos",
+  "preserve": [
+    "RUN_MIGRATIONS desactivado",
+    "RUN_SEED desactivado",
+    "credenciales y activacion fiscal por empresa",
+    "DOSA_EMISSION_ENABLED y permisos productivos actuales",
+    "montajes existentes, incluido el de secretos",
+    "estados, vencimientos, cupos y funciones de clientes existentes"
+  ],
+  "evidenceStorage": {
+    "proposedContainerPath": "/app/storage/license-evidence",
+    "requiresPersistentPrivateVolume": true,
+    "preserveExistingMounts": true,
+    "publicUploadsAllowed": false,
+    "mustCheckAndPreserveExistingFilesBeforeMount": true,
+    "backupAndRestoreCheckRequired": true
+  },
+  "ocr": {
+    "baseUrlProposal": "http://ventas_appyra-ia:4400",
+    "protocol": "appyra-jobs",
+    "timeoutMs": 120000,
+    "credentialSource": "Integracion autorizada de APPYRA para la empresa de cobros FULLTECH, no una clave DOSA ni el secreto administrativo de licencias",
+    "requiredScopes": ["media:submit", "media:read"],
+    "allowedExternalCalls": false,
+    "tokenIncluded": false,
+    "productionOcrJobExecuted": false,
+    "healthReadOnlyVerified": true
+  },
+  "whatsapp": {
+    "dryRunMustBeExplicitlyEnabledBeforeCredentialBinding": true,
+    "credentialSourceProposal": "Reutilizar solo la integracion oficial ya autorizada de APPYRA CRM; no copiar ni rotar automaticamente",
+    "credentialsIncluded": false,
+    "realSendsAuthorized": false
+  },
+  "database": {
+    "manualMigrationApprovalRequired": true,
+    "verifiedBackupRequired": true,
+    "catalogInitializationRequiresEmptyCatalog": true,
+    "customerBackfillAuthorized": false,
+    "generalSeedAuthorized": false,
+    "historicalChecksumRewriteAllowed": false
+  },
+  "publication": {
+    "pushAuthorized": false,
+    "mergeAuthorized": false,
+    "deployAuthorized": false
+  }
+}
