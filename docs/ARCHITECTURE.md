@@ -279,6 +279,18 @@ Invariant: every tenant-owned read/write must be scoped by authenticated `compan
 
 Backend has a `license` module and Prisma license-related enums/models such as `LicenseStatus` and `CompanyLicenseAuditLog`. Products service calls license checks such as product creation limits. Flutter has `core/license` and account license routes.
 
+The local IA/plans candidate adds an opt-in APPYRA Media jobs adapter through
+`APPYRA_MEDIA_OCR_PROTOCOL=appyra-jobs`: one multipart POST to `/v1/media`, then
+bounded reads of that job's result. It uses the billing company's scoped media
+credential, disallows external processing in the request and checks job/capability
+correlation and zero external calls before returning OCR text. OCR text is still
+untrusted input to existing bank/provisional-payment validation, not proof of
+settlement. The synchronous HTTP adapter and CLI worker remain compatible.
+The client uploads bytes on web and files on native platforms; only evidence
+upload receives an extended timeout. Preparation and production limits are in
+`planes-de-pago/22-preparacion-manual-publicacion-20261120.md`; no deployment is
+implied by these source changes.
+
 OWNER VALIDATION REQUIRED for commercial plan limits and current production license policy.
 
 ## Inventory and Warehouse Architecture

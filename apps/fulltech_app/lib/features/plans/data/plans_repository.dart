@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -65,6 +66,7 @@ class PlansRepository {
 
   final Dio _dio;
   static const _timeout = Duration(seconds: 20);
+  static const _evidenceTimeout = Duration(seconds: 210);
   Options get _silent => Options(extra: const {'skipLoader': true});
 
   Future<List<PlanOffer>> fetchPlans() async {
@@ -140,20 +142,30 @@ class PlansRepository {
   /// el pago registrado; la licencia se actualiza cuando el pago se verifica.
   Future<EvidenceUploadResult> uploadEvidence({
     required String orderId,
-    required String filePath,
+    String? filePath,
+    Uint8List? fileBytes,
     required String fileName,
   }) async {
+    if (fileBytes == null && (filePath == null || filePath.isEmpty)) {
+      throw ApiException('No se pudo leer el comprobante. Seleccionalo nuevamente.');
+    }
     final form = FormData.fromMap({
-      'file': await MultipartFile.fromFile(filePath, filename: fileName),
+      'file': fileBytes != null
+          ? MultipartFile.fromBytes(fileBytes, filename: fileName)
+          : await MultipartFile.fromFile(filePath!, filename: fileName),
     });
     try {
       final res = await _dio
           .post(
             ApiRoutes.licenseOrderEvidence(orderId),
             data: form,
-            options: Options(extra: const {'skipLoader': true}),
+            options: Options(
+              sendTimeout: const Duration(seconds: 45),
+              receiveTimeout: const Duration(seconds: 150),
+              extra: const {'skipLoader': true},
+            ),
           )
-          .timeout(_timeout);
+          .timeout(_evidenceTimeout);
       final data = _map(res.data);
       return EvidenceUploadResult(
         activated: data['license'] is Map,

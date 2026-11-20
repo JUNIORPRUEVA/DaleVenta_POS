@@ -1,4 +1,5 @@
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -77,20 +78,29 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
     final picked = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: const ['pdf', 'jpg', 'jpeg', 'png'],
-      withData: false,
+      withData: kIsWeb,
     );
     final file = picked?.files.isEmpty == false ? picked!.files.first : null;
-    final path = file?.path;
-    if (file == null || path == null) return;
+    if (!mounted || file == null) return;
+    final path = kIsWeb ? null : file.path;
+    if (file.size > 8 * 1024 * 1024) {
+      snack('El comprobante no puede superar 8 MB.');
+      return;
+    }
+    if (file.bytes == null && path == null) {
+      snack('No se pudo leer el comprobante. Seleccionalo nuevamente.');
+      return;
+    }
 
     final result = await run(
       () => ref.read(plansRepositoryProvider).uploadEvidence(
         orderId: order.id,
         filePath: path,
+        fileBytes: file.bytes,
         fileName: file.name,
       ),
     );
-    if (result == null) return;
+    if (!mounted || result == null) return;
     setState(() => _evidenceName = file.name);
     ref.invalidate(licenseOrdersProvider);
     ref.invalidate(licenseStatusProvider);
