@@ -186,3 +186,10 @@ mobile-settings-current.png y mobile-fiscal-header-final.png. Hot reload activo.
 Productos y compras también tienen referencias ficticias finales inspeccionadas:
 catalog_390.png y purchases_orders_390.png. La cobertura anterior distingue las
 visitas pendientes; este cierre no equivale a recorrer todos los formularios.
+
+## Actualización de consolidación — 2026-11-21
+
+Las referencias Linux pendientes se generaron y comprobaron en el worktree
+de integración, incluyendo el dock de IA. Flutter completo Linux serial:
+2.826 PASS y 17 omisiones explícitas. No autoriza publicación ni sustituye el
+recorrido físico de iOS; ver `audits/CONSOLIDACION_AMBOS_CHATS_20261121.md`.

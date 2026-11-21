@@ -157,7 +157,8 @@ jobs:
         working-directory: apps/fulltech_app
       - run: flutter test --platform chrome test/features/settings/printer_settings_web_test.dart
         working-directory: apps/fulltech_app
-      - run: flutter test
+      # Reproduce the verified serial run, including native SQLite and goldens.
+      - run: flutter test --concurrency=1
         working-directory: apps/fulltech_app
 
   # El descargador y el instalador de actualizaciones son API Win32: fuera de

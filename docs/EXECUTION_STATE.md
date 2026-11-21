@@ -11,7 +11,16 @@ Copias verificadas y manifiesto privado en
 C:/Users/pc/.codex/backups/fullpos-consolidacion-20261121.
 Se conservan los diez commits del otro chat y los dos de IA/PDF de este chat.
 El contenido siguiente es evidencia histórica, no certifica esta combinación.
-Validación conjunta pendiente: NO-GO de publicación.
+Código combinado en checkpoint local e5a053e4. CRM 4e8d4a2 y puente dd80d7f
+conservan planes y soporte; APPYRA IA permanece en 4dc19e2. Inventario y decisión
+en docs/audits/CONSOLIDACION_AMBOS_CHATS_20261121.md y su ledger CSV.
+Backend FullPOS 3149 PASS; IA 960 PASS; licencias PostgreSQL25 y fiscal41 PASS;
+HTTP/SQL planes-CRM11, productos9 y recuperación9 PASS. No son sumas de casos
+únicos. Flutter completo Linux serial: 2826 PASS y 17 omisiones explícitas;
+análisis FullPOS final sin incidencias. Código y pruebas importados conservados;
+la subida móvil se estabiliza en c9231113 y el cierre agrega referencias/documentos.
+Bloqueos de publicación: historia privada del puente, dos suites anteriores de
+CRM y verificaciones finales del candidato. NO-GO para producción; sin push.
 
 ## Historial conservado: productos, recuperación, web y planes
 
