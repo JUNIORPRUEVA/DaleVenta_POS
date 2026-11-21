@@ -1,3 +1,4 @@
+import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
 import 'package:flutter/material.dart';
 
 import '../errors/user_facing_error.dart';
@@ -103,7 +104,7 @@ class ProfessionalRecoveryCard extends StatelessWidget {
                   children: [
                     FilledButton.icon(
                       onPressed: isRetrying ? null : onRetryNow,
-                      icon: const Icon(Icons.refresh_rounded),
+                      icon: const MobileActionIcon(Icons.refresh_rounded),
                       label: const Text('Reintentar ahora'),
                     ),
                     if (error.autoRetry)

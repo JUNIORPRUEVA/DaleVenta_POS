@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-13T23:56:42.643Z",
+  "generatedAt": "2026-11-21T01:59:35.125Z",
   "models": [
     {
       "modelName": "EcfSupportGrant",
@@ -198,6 +198,155 @@
       "storageDependencies": [],
       "recommendedMigrationAction": "No tenant migration required.",
       "classification": "Audit/retention data"
+    },
+    {
+      "modelName": "LicensePlan",
+      "tableName": "license_plans",
+      "primaryKey": "id",
+      "tenantColumn": null,
+      "tenantNullable": null,
+      "tenantForeignKey": "not_applicable",
+      "tenantIndex": "not_applicable",
+      "parentOwnershipRelationship": null,
+      "uniqueConstraints": [
+        "code            String   @unique @db.VarChar(32)"
+      ],
+      "indexes": [],
+      "deleteBehavior": [],
+      "storageDependencies": [],
+      "recommendedMigrationAction": "Add companyId through trusted parent backfill or document inherited parent ownership.",
+      "classification": "Company-owned child entity"
+    },
+    {
+      "modelName": "LicensePaymentOrder",
+      "tableName": "license_payment_orders",
+      "primaryKey": "id",
+      "tenantColumn": "company_id",
+      "tenantNullable": false,
+      "tenantForeignKey": "present",
+      "tenantIndex": "present",
+      "parentOwnershipRelationship": null,
+      "uniqueConstraints": [
+        "reference       String             @unique @db.VarChar(32)"
+      ],
+      "indexes": [
+        "@@index([companyId, status])",
+        "@@index([status, createdAt])"
+      ],
+      "deleteBehavior": [
+        "Cascade"
+      ],
+      "storageDependencies": [],
+      "recommendedMigrationAction": "No tenant migration required.",
+      "classification": "Company-owned root entity"
+    },
+    {
+      "modelName": "LicensePaymentEvidence",
+      "tableName": "license_payment_evidence",
+      "primaryKey": "id",
+      "tenantColumn": "company_id",
+      "tenantNullable": false,
+      "tenantForeignKey": "present",
+      "tenantIndex": "missing",
+      "parentOwnershipRelationship": "order",
+      "uniqueConstraints": [
+        "@@unique([companyId, sha256])"
+      ],
+      "indexes": [
+        "@@index([orderId])"
+      ],
+      "deleteBehavior": [
+        "Cascade",
+        "Cascade"
+      ],
+      "storageDependencies": [
+        "storageKey"
+      ],
+      "recommendedMigrationAction": "Add companyId-leading index.",
+      "classification": "Company-owned root entity"
+    },
+    {
+      "modelName": "LicensePlanRequest",
+      "tableName": "license_plan_requests",
+      "primaryKey": "id",
+      "tenantColumn": "company_id",
+      "tenantNullable": false,
+      "tenantForeignKey": "present",
+      "tenantIndex": "present",
+      "parentOwnershipRelationship": null,
+      "uniqueConstraints": [
+        "reference         String                   @unique @db.VarChar(32)"
+      ],
+      "indexes": [
+        "@@index([companyId, status])",
+        "@@index([status, createdAt])"
+      ],
+      "deleteBehavior": [
+        "Cascade"
+      ],
+      "storageDependencies": [],
+      "recommendedMigrationAction": "No tenant migration required.",
+      "classification": "Company-owned root entity"
+    },
+    {
+      "modelName": "LicenseCompanyOverride",
+      "tableName": "license_company_overrides",
+      "primaryKey": "id",
+      "tenantColumn": "company_id",
+      "tenantNullable": false,
+      "tenantForeignKey": "present",
+      "tenantIndex": "missing",
+      "parentOwnershipRelationship": null,
+      "uniqueConstraints": [
+        "companyId       String    @unique @map(\"company_id\") @db.Uuid"
+      ],
+      "indexes": [],
+      "deleteBehavior": [
+        "Cascade"
+      ],
+      "storageDependencies": [],
+      "recommendedMigrationAction": "Add companyId-leading index.",
+      "classification": "Company-owned root entity"
+    },
+    {
+      "modelName": "LicenseNotificationJob",
+      "tableName": "license_notification_jobs",
+      "primaryKey": "id",
+      "tenantColumn": "company_id",
+      "tenantNullable": false,
+      "tenantForeignKey": "present",
+      "tenantIndex": "missing",
+      "parentOwnershipRelationship": null,
+      "uniqueConstraints": [],
+      "indexes": [
+        "@@index([status, scheduledAt])"
+      ],
+      "deleteBehavior": [
+        "Cascade"
+      ],
+      "storageDependencies": [],
+      "recommendedMigrationAction": "Add companyId-leading index.",
+      "classification": "Audit/retention data"
+    },
+    {
+      "modelName": "LicenseReminderLog",
+      "tableName": "license_reminder_logs",
+      "primaryKey": "id",
+      "tenantColumn": "company_id",
+      "tenantNullable": false,
+      "tenantForeignKey": "present",
+      "tenantIndex": "missing",
+      "parentOwnershipRelationship": null,
+      "uniqueConstraints": [
+        "@@unique([companyId, kind, periodEndSnapshot])"
+      ],
+      "indexes": [],
+      "deleteBehavior": [
+        "Cascade"
+      ],
+      "storageDependencies": [],
+      "recommendedMigrationAction": "Add companyId-leading index.",
+      "classification": "Company-owned root entity"
     },
     {
       "modelName": "EcfCompanyConfiguration",
@@ -1484,6 +1633,29 @@
       "classification": "Audit/retention data"
     },
     {
+      "modelName": "CompanyUsagePulse",
+      "tableName": "company_usage_pulses",
+      "primaryKey": "id",
+      "tenantColumn": "company_id",
+      "tenantNullable": false,
+      "tenantForeignKey": "present",
+      "tenantIndex": "present",
+      "parentOwnershipRelationship": null,
+      "uniqueConstraints": [
+        "@@unique([companyId, sessionId, streamId, sequence], map: \"company_usage_pulses_stream_sequence_key\")"
+      ],
+      "indexes": [
+        "@@index([companyId, observedAt])",
+        "@@index([observedAt])"
+      ],
+      "deleteBehavior": [
+        "Cascade"
+      ],
+      "storageDependencies": [],
+      "recommendedMigrationAction": "No tenant migration required.",
+      "classification": "Company-owned root entity"
+    },
+    {
       "modelName": "TelemetryOutbox",
       "tableName": "telemetry_outbox",
       "primaryKey": "id",
@@ -1555,6 +1727,26 @@
       "classification": "Global platform data"
     },
     {
+      "modelName": "ProductLifecycleEvent",
+      "tableName": "product_lifecycle_events",
+      "primaryKey": "id",
+      "tenantColumn": "company_id",
+      "tenantNullable": false,
+      "tenantForeignKey": "missing",
+      "tenantIndex": "present",
+      "parentOwnershipRelationship": null,
+      "uniqueConstraints": [
+        "@@unique([companyId, operationId], map:\"product_lifecycle_events_company_operation_key\")"
+      ],
+      "indexes": [
+        "@@index([companyId,productId,createdAt])"
+      ],
+      "deleteBehavior": [],
+      "storageDependencies": [],
+      "recommendedMigrationAction": "Add Company foreign key after ownership audit passes.",
+      "classification": "Company-owned root entity"
+    },
+    {
       "modelName": "Product",
       "tableName": "Product",
       "primaryKey": "id",
@@ -1562,19 +1754,22 @@
       "tenantNullable": false,
       "tenantForeignKey": "present",
       "tenantIndex": "present",
-      "parentOwnershipRelationship": "unitOfMeasure",
+      "parentOwnershipRelationship": "unitOfMeasure, annulledInitialMovement",
       "uniqueConstraints": [
-        "@@unique([companyId, id], map: \"products_company_id_id_key\")"
+        "@@unique([companyId, id], map: \"products_company_id_id_key\")",
+        "@@unique([companyId, annulmentOperationId], map: \"products_company_annulment_operation_key\")"
       ],
       "indexes": [
         "@@index([companyId])",
         "@@index([companyId, archivedAt], map: \"products_company_archived_idx\")",
+        "@@index([companyId, annulledAt], map: \"products_company_annulled_idx\")",
         "@@index([unitOfMeasureId])",
         "@@index([companyId, nombre])",
         "@@index([companyId, imageKey])"
       ],
       "deleteBehavior": [
         "Cascade",
+        "Restrict",
         "Restrict"
       ],
       "storageDependencies": [
@@ -1665,7 +1860,7 @@
       "tenantNullable": false,
       "tenantForeignKey": "present",
       "tenantIndex": "present",
-      "parentOwnershipRelationship": "product, warehouse, sourceWarehouse, destinationWarehouse, createdBy",
+      "parentOwnershipRelationship": "annulledProducts, product, warehouse, sourceWarehouse, destinationWarehouse, createdBy",
       "uniqueConstraints": [
         "@@unique([companyId, operationId], map: \"inventory_movements_company_operation_key\")"
       ],
@@ -4002,6 +4197,44 @@
       "storageDependencies": [],
       "recommendedMigrationAction": "Add companyId through trusted parent backfill or document inherited parent ownership.",
       "classification": "Company-owned child entity"
+    },
+    {
+      "modelName": "RecoveryReviewCase",
+      "tableName": "recovery_review_cases",
+      "primaryKey": "id",
+      "tenantColumn": "company_id",
+      "tenantNullable": false,
+      "tenantForeignKey": "missing",
+      "tenantIndex": "present",
+      "parentOwnershipRelationship": null,
+      "uniqueConstraints": [
+        "@@unique([companyId, sourceUserId, actionType, operationId], map:\"recovery_review_case_operation_key\")"
+      ],
+      "indexes": [
+        "@@index([companyId, status, createdAt])"
+      ],
+      "deleteBehavior": [],
+      "storageDependencies": [],
+      "recommendedMigrationAction": "Add Company foreign key after ownership audit passes.",
+      "classification": "Company-owned root entity"
+    },
+    {
+      "modelName": "RecoveryReviewEvent",
+      "tableName": "recovery_review_events",
+      "primaryKey": "id",
+      "tenantColumn": "company_id",
+      "tenantNullable": false,
+      "tenantForeignKey": "missing",
+      "tenantIndex": "present",
+      "parentOwnershipRelationship": null,
+      "uniqueConstraints": [],
+      "indexes": [
+        "@@index([companyId, caseId, createdAt])"
+      ],
+      "deleteBehavior": [],
+      "storageDependencies": [],
+      "recommendedMigrationAction": "Add Company foreign key after ownership audit passes.",
+      "classification": "Company-owned root entity"
     },
     {
       "modelName": "SaleReconciliationObligation",

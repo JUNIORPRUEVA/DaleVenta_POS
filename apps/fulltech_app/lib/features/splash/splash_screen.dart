@@ -1,3 +1,4 @@
+import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -241,7 +242,7 @@ class _SplashRecoveryActions extends StatelessWidget {
           children: [
             FilledButton.icon(
               onPressed: onRetry,
-              icon: const Icon(Icons.refresh_rounded),
+              icon: const MobileActionIcon(Icons.refresh_rounded),
               label: const Text('Reintentar'),
             ),
             OutlinedButton.icon(

@@ -1,4 +1,5 @@
 import '../auth/token_storage.dart';
+import '../auth/operation_scope.dart';
 import '../config/uat_identity.dart';
 import '../debug/trace_log.dart';
 import '../offline/offline_store.dart';
@@ -8,16 +9,19 @@ class LocalJsonCache {
   static String get _prefix => UatIdentity.cachePrefix();
 
   final OfflineStore _store = OfflineStore.instance;
-  final TokenStorage _tokenStorage = TokenStorage();
 
   Future<String> storageKeyFor(String key) => _key(key);
 
   Future<String> _key(String key) async {
     if (isFlutterTest) return '${_prefix}default:$key';
+    final owner = OperationScope.current;
+    if (owner != null) return '$_prefix${owner.companyId}:$key';
 
     var companyId = 'default';
     try {
-      final user = await _tokenStorage.getUserSnapshot();
+      // A long-lived cache must not retain another TokenStorage instance's
+      // in-memory owner after login/logout switches the authenticated account.
+      final user = await TokenStorage().getUserSnapshot();
       final value = user?.companyId?.trim() ?? '';
       if (value.isNotEmpty) companyId = value;
     } catch (_) {

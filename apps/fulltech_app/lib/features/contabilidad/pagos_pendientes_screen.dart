@@ -1,3 +1,4 @@
+import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -1047,13 +1048,13 @@ class _PagosPendientesScreenState extends ConsumerState<PagosPendientesScreen> {
                 IconButton.filledTonal(
                   tooltip: 'Filtros y opciones',
                   onPressed: _openFilters,
-                  icon: const Icon(Icons.filter_alt_outlined),
+                  icon: const MobileActionIcon(Icons.filter_alt_outlined),
                 ),
                 const SizedBox(width: 8),
                 IconButton.filledTonal(
                   tooltip: _loading ? 'Actualizando...' : 'Actualizar',
                   onPressed: _loading ? null : _load,
-                  icon: const Icon(Icons.refresh_rounded),
+                  icon: const MobileActionIcon(Icons.refresh_rounded),
                 ),
                 const SizedBox(width: 8),
                 FilledButton.icon(
@@ -1072,12 +1073,12 @@ class _PagosPendientesScreenState extends ConsumerState<PagosPendientesScreen> {
                 IconButton(
                   tooltip: 'Filtros y opciones',
                   onPressed: _openFilters,
-                  icon: const Icon(Icons.filter_alt_outlined),
+                  icon: const MobileActionIcon(Icons.filter_alt_outlined),
                 ),
                 IconButton(
                   tooltip: 'Actualizar',
                   onPressed: _loading ? null : _load,
-                  icon: const Icon(Icons.refresh_rounded),
+                  icon: const MobileActionIcon(Icons.refresh_rounded),
                 ),
               ],
               trailing: const SizedBox.shrink(),
@@ -1873,7 +1874,7 @@ class _ErrorView extends StatelessWidget {
             const SizedBox(height: 16),
             FilledButton.icon(
               onPressed: onRetry,
-              icon: const Icon(Icons.refresh_rounded),
+              icon: const MobileActionIcon(Icons.refresh_rounded),
               label: const Text('Reintentar'),
             ),
           ],
@@ -1950,7 +1951,7 @@ class _PagosOptionsSheetState extends State<_PagosOptionsSheet> {
                           color: const Color(0xFFEAF1FF),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Icon(
+                        child: const MobileActionIcon(
                           Icons.filter_alt_rounded,
                           color: AppColors.secondary,
                         ),

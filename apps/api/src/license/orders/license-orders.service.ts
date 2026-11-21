@@ -83,6 +83,14 @@ const OPEN_STATUSES: LicenseOrderStatus[] = [
   LicenseOrderStatus.AWAITING_TRANSFER,
 ];
 
+type CreateOrderInput = {
+  companyId: string;
+  plan: { code: string; name: string; version: number; currency: string; monthlyPrice: Prisma.Decimal };
+  months: number;
+  createdByUserId: string | null;
+  ttlHours?: number;
+};
+
 export type EvidenceFile = {
   originalname?: string;
   mimetype?: string;
@@ -211,11 +219,11 @@ export class LicenseOrdersService {
       monthlyPrice: Prisma.Decimal;
     };
     months: number;
-  }): Promise<OrderQuote> {
+  }, db: Prisma.TransactionClient = this.prisma): Promise<OrderQuote> {
     const { companyId, plan, months } = input;
     const monthlyPrice = plan.monthlyPrice.toNumber();
     const subtotal = round2(monthlyPrice * months);
-    const company = await this.prisma.company.findUnique({
+    const company = await db.company.findUnique({
       where: { id: companyId },
       select: { planCode: true, licenseStatus: true, licenseExpiresAt: true },
     });
@@ -235,7 +243,7 @@ export class LicenseOrdersService {
       // adelantados: el cliente no pierde tiempo ni dinero al mejorar.
       creditDays = Math.max(0, Math.ceil(msLeft / 86_400_000));
       if (creditDays > 0) {
-        const current = await this.prisma.licensePlan.findUnique({
+        const current = await db.licensePlan.findUnique({
           where: { code: currentCode },
         });
         if (current) {
@@ -283,35 +291,35 @@ export class LicenseOrdersService {
     return { id: order.id, reference: order.reference };
   }
 
-  private async createOrReuseOrder(input: {
-    companyId: string;
-    plan: {
-      code: string;
-      name: string;
-      version: number;
-      currency: string;
-      monthlyPrice: Prisma.Decimal;
-    };
-    months: number;
-    createdByUserId: string | null;
-    /** Horas de vida de la orden (por defecto, las de una compra normal). */
-    ttlHours?: number;
-  }) {
+  private async createOrReuseOrder(input: CreateOrderInput) {
+    return this.prisma.$transaction(async tx => {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`fullpos:license-order:${input.companyId}`})) IS NULL AS locked`;
+      return this.createOrReuseOrderLocked(tx, input);
+    }, { maxWait: 5000, timeout: 15000 });
+  }
+
+  private async createOrReuseOrderLocked(tx: Prisma.TransactionClient, input: CreateOrderInput) {
     const { companyId, plan, months } = input;
     const now = new Date();
-    await this.expireStaleOrders(companyId, now);
+    await this.expireStaleOrders(companyId, now, tx);
 
     // Mismo importe que la cotizacion: precio x meses menos credito.
-    const quote = await this.quoteFor({ companyId, plan, months });
+    const quote = await this.quoteFor({ companyId, plan, months }, tx);
 
-    const openOrder = await this.prisma.licensePaymentOrder.findFirst({
+    const candidates = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM license_payment_orders WHERE company_id=${companyId}::uuid
+        AND status IN ('CREATED','AWAITING_TRANSFER') AND expires_at>${now}
+      ORDER BY created_at DESC LIMIT 1 FOR UPDATE
+    `;
+    const openOrder = candidates[0] ? await tx.licensePaymentOrder.findFirst({
       where: {
+        id: candidates[0].id,
         companyId,
         status: { in: OPEN_STATUSES },
         expiresAt: { gt: now },
       },
       orderBy: { createdAt: 'desc' },
-    });
+    }) : null;
     if (openOrder) {
       if (
         openOrder.planCode === plan.code &&
@@ -320,7 +328,7 @@ export class LicenseOrdersService {
       ) {
         return this.toPublicOrder(openOrder, plan.name);
       }
-      await this.prisma.licensePaymentOrder.update({
+      await tx.licensePaymentOrder.update({
         where: { id: openOrder.id },
         data: { status: LicenseOrderStatus.CANCELLED },
         select: { id: true },
@@ -328,8 +336,8 @@ export class LicenseOrdersService {
     }
 
     const amount = quote.amountDue;
-    const reference = await this.generateReference();
-    const order = await this.prisma.licensePaymentOrder.create({
+    const reference = await this.generateReference(tx);
+    const order = await tx.licensePaymentOrder.create({
       data: {
         companyId,
         planCode: plan.code,
@@ -376,32 +384,35 @@ export class LicenseOrdersService {
   async cancelOrder(user: TenantUser, orderId: string) {
     const companyId = requireTenant(user);
     this.requireAdmin(user);
-    const order = await this.prisma.licensePaymentOrder.findFirst({
-      where: { id: orderId, companyId },
-      include: { evidences: { select: { id: true } } },
-    });
-    if (!order) {
-      throw new NotFoundException({
-        code: 'ORDER_NOT_FOUND',
-        message: 'No encontramos esa orden.',
+    return this.prisma.$transaction(async tx => {
+      await tx.$queryRaw`SELECT id FROM license_payment_orders WHERE id=${orderId}::uuid AND company_id=${companyId}::uuid FOR UPDATE`;
+      const order = await tx.licensePaymentOrder.findFirst({
+        where: { id: orderId, companyId },
+        include: { evidences: { select: { id: true } } },
       });
-    }
-    if (order.evidences.length > 0 || !OPEN_STATUSES.includes(order.status)) {
-      throw new ConflictException({
-        code: 'ORDER_NOT_CANCELLABLE',
-        message: 'Solo se puede cancelar una orden sin comprobante enviado.',
+      if (!order) {
+        throw new NotFoundException({
+          code: 'ORDER_NOT_FOUND',
+          message: 'No encontramos esa orden.',
+        });
+      }
+      if (order.evidences.length > 0 || !OPEN_STATUSES.includes(order.status)) {
+        throw new ConflictException({
+          code: 'ORDER_NOT_CANCELLABLE',
+          message: 'Solo se puede cancelar una orden sin comprobante enviado.',
+        });
+      }
+      const updated = await tx.licensePaymentOrder.update({
+        where: { id: order.id },
+        data: { status: LicenseOrderStatus.CANCELLED },
       });
-    }
-    const updated = await this.prisma.licensePaymentOrder.update({
-      where: { id: order.id },
-      data: { status: LicenseOrderStatus.CANCELLED },
+      return this.toPublicOrder(updated);
     });
-    return this.toPublicOrder(updated);
   }
 
   /**
-   * Sube el comprobante y **activa al instante**. El pago queda `UNCONFIRMED`
-   * (informacion interna) y el administrador recibe el aviso para revisarlo.
+   * Conserva el comprobante y aplica las reglas existentes de verificación.
+   * Recibir un archivo no equivale a verificar el pago ni activar la licencia.
    */
   async uploadEvidence(
     user: TenantUser,
@@ -410,6 +421,7 @@ export class LicenseOrdersService {
   ) {
     const companyId = requireTenant(user);
     this.requireAdmin(user);
+    const uploadStartedAt = new Date();
     if (!file || !file.buffer || file.buffer.length === 0) {
       throw new BadRequestException({
         code: 'EVIDENCE_REQUIRED',
@@ -428,6 +440,7 @@ export class LicenseOrdersService {
         reference: true,
         catalogVersion: true,
         createdAt: true,
+        expiresAt: true,
       },
     });
     if (!order) {
@@ -435,6 +448,10 @@ export class LicenseOrdersService {
         code: 'ORDER_NOT_FOUND',
         message: 'No encontramos esa orden.',
       });
+    }
+    if (order.expiresAt.getTime() <= uploadStartedAt.getTime()) {
+      throw new ConflictException({ code: 'ORDER_EXPIRED',
+        message: 'Esta orden venció. Si ya transferiste, contacta soporte; no pagues de nuevo.' });
     }
     if (!OPEN_STATUSES.includes(order.status)) {
       const gate = canAcceptEvidence(order.status, order.activationState);
@@ -566,15 +583,19 @@ export class LicenseOrdersService {
         // cerrada, asi que no puede sumar los meses otra vez ni pisar el
         // periodo que la primera acaba de aplicar.
         const lockedRows = await tx.$queryRaw<
-          Array<{ status: string; activation_state: string | null }>
+          Array<{ status: string; activation_state: string | null; expiresAt: Date }>
         >`
           SELECT status::text AS status,
-                 activation_state::text AS activation_state
+                 activation_state::text AS activation_state, expires_at AS "expiresAt"
           FROM license_payment_orders
           WHERE id = ${order.id}::uuid
           FOR UPDATE
         `;
         const locked = lockedRows[0];
+        if (locked && locked.expiresAt.getTime() <= uploadStartedAt.getTime()) {
+          throw new ConflictException({ code: 'ORDER_EXPIRED',
+            message: 'Esta orden venció. Si ya transferiste, contacta soporte; no pagues de nuevo.' });
+        }
         if (
           !locked ||
           !OPEN_STATUSES.includes(locked.status as LicenseOrderStatus)
@@ -1092,8 +1113,8 @@ export class LicenseOrdersService {
     }
   }
 
-  private async expireStaleOrders(companyId: string, now: Date) {
-    await this.prisma.licensePaymentOrder.updateMany({
+  private async expireStaleOrders(companyId: string, now: Date, db: Prisma.TransactionClient = this.prisma) {
+    await db.licensePaymentOrder.updateMany({
       where: {
         companyId,
         status: { in: OPEN_STATUSES },
@@ -1103,11 +1124,11 @@ export class LicenseOrdersService {
     });
   }
 
-  private async generateReference() {
+  private async generateReference(db: Prisma.TransactionClient = this.prisma) {
     const year = new Date().getUTCFullYear();
     for (let attempt = 0; attempt < 8; attempt += 1) {
       const reference = `FP-${year}-${String(randomInt(0, 1_000_000)).padStart(6, '0')}`;
-      const existing = await this.prisma.licensePaymentOrder.findUnique({
+      const existing = await db.licensePaymentOrder.findUnique({
         where: { reference },
         select: { id: true },
       });
@@ -1134,6 +1155,7 @@ export class LicenseOrdersService {
       periodEnd?: Date | null;
       createdAt?: Date;
       notes?: string | null;
+      evidences?: Array<{ id: string; mime: string; sizeBytes: number; createdAt: Date }>;
     },
     planName?: string | null,
   ) {
@@ -1152,6 +1174,9 @@ export class LicenseOrdersService {
       periodEnd: order.periodEnd ?? null,
       createdAt: order.createdAt ?? null,
       notes: order.notes ?? null,
+      evidences: (order.evidences ?? []).map(evidence => ({
+        id: evidence.id, mime: evidence.mime, sizeBytes: evidence.sizeBytes, createdAt: evidence.createdAt,
+      })),
     };
   }
 

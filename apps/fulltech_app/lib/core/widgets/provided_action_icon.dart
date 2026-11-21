@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/native_phone_layout.dart';
 
 enum ProvidedAction {
   refresh,
@@ -33,7 +34,10 @@ class ProvidedActionIcon extends StatelessWidget {
   final Color? color;
   @override
   Widget build(BuildContext context) => Image.asset(
-    'assets/image/action_${action.name}.png',
+    usesNativePhoneLayout(context) &&
+      {ProvidedAction.search, ProvidedAction.filter, ProvidedAction.refresh, ProvidedAction.reload}.contains(action)
+      ? 'assets/image/mobile_navigation/${action == ProvidedAction.reload ? 'refresh' : action.name}.png'
+      : 'assets/image/action_${action.name}.png',
     width: size,
     height: size,
     fit: BoxFit.contain,

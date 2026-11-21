@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 
 import '../debug/trace_log.dart';
 import 'api_error_mapper.dart';
+import 'retry_after.dart';
 
 class ApiRetryInterceptor extends Interceptor {
   static const String _retryAttemptKey = '__api_retry_attempt';
@@ -24,7 +25,14 @@ class ApiRetryInterceptor extends Interceptor {
 
     final nextAttempt = currentAttempt + 1;
     options.extra[_retryAttemptKey] = nextAttempt;
-    final delay = Duration(milliseconds: 350 * nextAttempt);
+    final serverDelay = parseRetryAfter(err.response?.headers.value('retry-after'));
+    final delay = serverDelay ?? Duration(milliseconds: 350 * nextAttempt);
+    // Long server deadlines belong to the durable outbox, not a suspended
+    // in-memory request that could disappear when the app is closed.
+    if (delay > const Duration(seconds: 5)) {
+      handler.next(err);
+      return;
+    }
     final traceId = options.extra['__api_trace_id'] as int?;
     TraceLog.log(
       'ApiHttp',

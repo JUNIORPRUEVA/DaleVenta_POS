@@ -1,3 +1,4 @@
+import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -723,7 +724,7 @@ class _MovementsPanel extends ConsumerWidget {
               IconButton(
                 tooltip: 'Actualizar',
                 onPressed: () => ref.invalidate(cashMovementsProvider),
-                icon: const Icon(Icons.refresh_rounded),
+                icon: const MobileActionIcon(Icons.refresh_rounded),
               ),
             ],
           ),

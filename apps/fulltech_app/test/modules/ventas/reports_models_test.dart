@@ -732,7 +732,14 @@ void main() {
         expect(find.text('Utilidad bruta'), findsOneWidget);
         expect(find.text('Gastos'), findsOneWidget);
         expect(find.text('Utilidad neta'), findsOneWidget);
-        expect(find.text('Margen y tickets'), findsOneWidget);
+        final summary = find.text(size.width < 600 ? 'Márgenes y tickets' : 'Margen y tickets');
+        expect(summary, findsOneWidget);
+        if (size.width < 600) {
+          expect(find.text('Margen bruto'), findsNothing);
+          await tester.tap(summary);
+          await tester.pumpAndSettle();
+          expect(find.text('Margen bruto'), findsOneWidget);
+        }
       });
     }
 
@@ -769,7 +776,7 @@ void main() {
           expect(find.text('Utilidad neta'), findsOneWidget);
           // La utilidad bruta y la neta NO son la misma tarjeta: el reporte
           // siempre muestra las 4 metricas principales.
-          expect(find.text('Margen y tickets'), findsOneWidget);
+          expect(find.text(size.width < 600 ? 'Márgenes y tickets' : 'Margen y tickets'), findsOneWidget);
 
           final sales = tester.getTopLeft(
             find.byKey(const ValueKey('reports-kpi-sales')),
@@ -829,6 +836,8 @@ void main() {
       final zero = formatRdCurrencyAccounting(0);
       // Ventas, Utilidad bruta, Gastos y Utilidad neta en cero.
       expect(find.text(zero), findsNWidgets(4));
+      await tester.tap(find.text('Márgenes y tickets'));
+      await tester.pumpAndSettle();
       // Margen bruto y margen neto, ambos en 0.0%.
       expect(find.text('0.0%'), findsNWidgets(2));
       expect(find.text('0'), findsOneWidget);

@@ -52,6 +52,13 @@ Role-specific branding can change primary/secondary/tertiary colors. Check `role
 
 ## Buttons and Inputs
 
+Action notices (owner clarification, 2026-11-21): AppFeedback transient notices
+use a compact paragraph with a bold short title, icon and close action, at 12 px
+from the top and right safe edges. Product lifecycle notices use the same upper
+right position; the previous lower corner instruction is superseded. Technical
+record identifiers are hidden in customer-facing product labels and these
+notices; persisted identifiers and commercial product codes remain unchanged.
+
 - Elevated/Filled buttons use role primary color and white foreground.
 - Outlined/Text buttons use role primary color.
 - Buttons use Manrope label styling and minimum 40px size.
@@ -72,10 +79,82 @@ History refinement requested on2026-11-15: sales, quotation and credit history
 search remains36px tall and is limited to560px on desktop. Filter controls use
 6px corners; side panels are capped at380px, with compact headers and40px footer
 actions. Other modules keep their existing toolbar defaults. Public marketing
-adds a separate e-CF/RD announcement above its navigation; auth on mobile uses
+includes a compact e-CF announcement within its navigation header; auth on mobile uses
 document scrolling so browser chrome can respond naturally to user gestures.
 
+Public website refinement (2026-11-20): at widths up to900px the marketing header
+scrolls with the document. Desktop keeps its sticky navigation. The mobile menu
+has an explicit close action and closes on section links. Plan carousels accept
+keyboard focus, leave room above recommendation badges and use larger mobile
+body text. Preserve root document scrolling; browser toolbar visibility remains
+controlled by the browser, not by page scripts.
+
+Final header refinement (2026-11-20): the e-CF notice is one24px white line inside
+the header, with a subtle animated1px accent (static for reduced motion). No
+second geographic line. The mobile menu is a full-height rectangular right drawer,
+up to340px wide, with square outer and action corners, a close button and
+bottom registration/plan actions. Omit the phone number from this drawer.
+
+Owner's public website button style (2026-11-20): square corners, using
+`--button-radius: 0` for marketing, navigation, drawer, plan, download and
+authentication actions. The floating WhatsApp button and its pulse stay circular
+as an explicit owner-approved exception. Keep existing colors, focus states and touch
+areas. The standalone preparation page uses the same0px corners. Decorative
+chips, cards and status indicators retain their own shapes.
+
 ## Tables, Lists, Menus
+
+Owner-approved recovery refinement (2026-11-20): keep the Recovery Center in a
+920px bounded card, with compact 12–13px rows, square actions and a single
+top sync control. The empty state contains only a success icon and «Todo en
+orden». Uncertain charges first offer verification; a valid absent-record
+result replaces it with the two resolution actions. Omit import/export menus
+and diagnostic histories from this customer flow; retain their stored evidence.
+
+Native phone billing refinement approved on2026-11-21: Android/iOS phones use
+compact horizontal product cards and matching64px assistant/calculator controls
+inside Actions. The owner then requested the hint visually flush to the right
+edge; its gesture surface still extends inward beyond the OS back-gesture inset,
+and the hint can also be tapped. Do not disable Android system navigation.
+The final approved phone layout keeps only search above the catalog. Customer,
+voucher and enabled price lists appear in the same flat Actions list as Tickets
+and the existing tools, without section headings or nested cards. The panel uses
+60% of the screen width, with a narrow transparent-to-white fade on the edge
+facing the catalog, thin row separators and circular assistant/calculator
+controls. A separate category icon on a white36px square matches the search
+field. Existing selection handlers are reused. Checkout repeats the current customer,
+voucher selector and optional price mode before confirmation. Normal cash sales
+retain Cliente general without requiring customer selection. The owner authorized refining the phone
+cart: small item count, no product thumbnails, rectangular line editor and
+checkout surfaces flush with the side edges. Existing calculations and actions
+are reused. These overrides exclude web, Windows and desktop tablet layouts.
+The phone cart count is a small left label with its drag indicator independently
+centered. Rows retain tap/double-tap editing and a single transparent trash
+control with a22px icon inside a44px touch area; no duplicate edit action.
+Phone product images use60px square areas, retaining contain fitting. The totals
+surface has a subtle upward shadow and44px action buttons.
+The native phone appbar reuses BrandedMenuButton (logo and menu); Tickets is
+available inside Actions. Search/category/customer/
+price icons use the owner's supplied PNG set; other platforms retain their icons.
+Native phone drawers use75% width, flat48px group rows and a full-width square
+account footer. Profile, users, settings, logout and user-management icons use
+the supplied mobile_navigation assets with44px touch targets. Settings on phones
+uses neutral list rows and dividers, reusing the shared destination list; App y
+actualizaciones and Planes expose the existing update and plans routes. The global
+floating assistant is hidden on native phone routes; the billing Actions entry
+remains available. Desktop/web presentation stays unchanged.
+Phone billing shows the existing CashTurnMenuButton with a compact state label
+beside Actions. Scanning is inside Actions. The native phone drawer omits its
+duplicate Turno group; other platforms retain their navigation and turn styling.
+
+Native phone module review (2026-11-21): CustomAppBar prioritizes Back outside
+billing and uses the billing blue gradient. MobilePageAppBar adapts direct bars;
+Windows/web return the original widget. MobileActionIcon supplies the approved
+back/search/filter/refresh PNGs only on Android/iOS phones. Shared mobile lists
+use compact spacing while preserving touch areas and text scaling. Reportes
+keeps its four primary KPIs visible and reveals detailed sections on request.
+Fiscal pages without a desktop-independent header receive a native-only bar.
+Coverage and remaining visual checks: AUDITORIA_UI_MOVIL_MODULOS_20261121.md.
 
 - `DataTableTheme` uses muted heading row and medium body weight.
 - `ListTileTheme` uses rounded 16px shape and role primary icons.

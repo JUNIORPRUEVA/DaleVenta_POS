@@ -43,7 +43,13 @@ void main() {
       });
     return CashRepository(
       dio,
-      SyncQueueService(OfflineStore.instance),
+      SyncQueueService(
+        OfflineStore.instance,
+        scopeResolver: () async => const OfflineSyncScope(
+          companyId: 'history-fixture-company',
+          userId: 'history-fixture-user',
+        ),
+      ),
       offlineCircuitState: offlineCircuitState,
     );
   }

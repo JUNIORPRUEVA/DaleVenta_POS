@@ -68,7 +68,7 @@ void main() {
       expect(find.byTooltip('Abrir menú principal'), findsOneWidget);
       expect(
         tester.getSize(find.byType(AiAssistantDockButton)),
-        const Size(64, 64),
+        const Size(60, 60),
       );
       expect(tester.takeException(), isNull);
       await expectLater(

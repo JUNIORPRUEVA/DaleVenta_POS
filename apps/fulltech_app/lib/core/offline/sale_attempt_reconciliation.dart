@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../debug/trace_log.dart';
+import '../auth/operation_scope.dart';
 import 'pending_sync_action.dart';
 import 'sale_attempt_audit.dart';
 
@@ -72,6 +73,7 @@ class SaleAttemptReconciliationResult {
     this.movementId,
     this.guidance,
     this.voided = false,
+    this.retryAfter,
   });
 
   final SaleAttemptReconciliationStatus status;
@@ -89,6 +91,7 @@ class SaleAttemptReconciliationResult {
   /// La venta se registró pero después fue anulada o borrada. Sigue siendo un
   /// registro confirmado: NO es un cobro rechazado.
   final bool voided;
+  final Duration? retryAfter;
 
   static SaleAttemptReconciliationResult? fromJson(Map<String, dynamic> json) {
     final status = SaleAttemptReconciliationStatus.parse(
@@ -104,7 +107,7 @@ class SaleAttemptReconciliationResult {
     return SaleAttemptReconciliationResult(
       status: status,
       clientRequestId: (json['clientRequestId'] ?? '').toString(),
-      saleId: saleMap?['id']?.toString(),
+      saleId: saleMap?['id'] is String ? saleMap!['id'] as String : null,
       totalSold: _toDouble(saleMap?['totalSold']),
       paymentMethod: saleMap?['paymentMethod']?.toString(),
       matchesExpected: json['matchesExpected'] is bool
@@ -113,6 +116,9 @@ class SaleAttemptReconciliationResult {
       movementId: movementMap?['id']?.toString(),
       guidance: json['guidance']?.toString(),
       voided: json['voided'] == true,
+      retryAfter: json['retryAfterSeconds'] is num
+          ? Duration(seconds: (json['retryAfterSeconds'] as num).ceil())
+          : null,
     );
   }
 
@@ -200,9 +206,11 @@ class SaleAttemptReconciler {
     required this.resolveAttempt,
     this.readAudit,
     this.declareMoneyReceived,
+    this.canAccessAttempt,
   });
 
   final SaleAttemptLookup lookup;
+  final Future<bool> Function(PendingSyncAction action)? canAccessAttempt;
 
   /// Intentos pendientes del ámbito actual (normalmente la cola local).
   final Future<List<PendingSyncAction>> Function({
@@ -236,11 +244,38 @@ class SaleAttemptReconciler {
   @visibleForTesting
   static void resetInFlightForTests() => _inFlight.clear();
 
+  /// Two fresh, read-only checks for a genuine inconclusive server answer.
+  /// Authentication, validation, rate limits and transport failures never
+  /// trigger a second request. Existing Retry-After remains authoritative.
+  Future<SaleAttemptReconciliationResult?> verifyThoroughly(PendingSyncAction action) async {
+    final candidate = action.payload['reconciliationRetryAfterIsServer'] == false &&
+        action.payload['reconciliationBlocked'] != true
+        ? action.copyWith(clearNextAttemptAt: true) : action;
+    final first = await verify(candidate);
+    if (first == null ||
+        first.status != SaleAttemptReconciliationStatus.notFound ||
+        !const ['NOT_REGISTERED', 'INCONCLUSIVE'].contains(first.guidance)) {
+      return first;
+    }
+    final second = await verify(candidate);
+    return second; // A failed second check must not appear conclusive.
+  }
+
   /// Verifica un intento concreto. Devuelve `null` si no se pudo consultar.
   Future<SaleAttemptReconciliationResult?> verify(
     PendingSyncAction action,
   ) async {
     if (action.type != attemptType) return null;
+    if (canAccessAttempt != null && !await canAccessAttempt!(action)) {
+      return null;
+    }
+    if (action.nextAttemptAt?.isAfter(DateTime.now().toUtc()) == true) {
+      return SaleAttemptReconciliationResult(
+        status: SaleAttemptReconciliationStatus.unknown,
+        clientRequestId: requestIdOf(action),
+        guidance: 'WAIT_RETRY_AFTER',
+      );
+    }
 
     final requestId = requestIdOf(action);
     if (requestId.isEmpty) {
@@ -256,7 +291,12 @@ class SaleAttemptReconciler {
       final expected = _expectedTotalOf(action);
       Map<String, dynamic>? raw;
       try {
-        raw = await lookup(requestId, expected);
+        raw = canAccessAttempt == null
+            ? await lookup(requestId, expected)
+            : await OperationScope(
+                action.companyId!,
+                action.userId!,
+              ).run(() => lookup(requestId, expected));
       } catch (error, stack) {
         TraceLog.log('reconcile', 'attempt.consulta.fallida id=${action.id}');
         debugPrint('[reconcile] consulta fallida: $error\n$stack');
@@ -267,9 +307,35 @@ class SaleAttemptReconciler {
         return null;
       }
 
-      final result = SaleAttemptReconciliationResult.fromJson(raw);
+      var result = SaleAttemptReconciliationResult.fromJson(raw);
       if (result == null) {
         TraceLog.log('reconcile', 'attempt.respuesta.invalida id=${action.id}');
+        return null;
+      }
+
+      // A successful HTTP response is not financial proof. Bind the response
+      // to this exact request and require a finite, matching recorded amount.
+      final recorded = result.totalSold;
+      if (result.clientRequestId != requestId ||
+          (result.status == SaleAttemptReconciliationStatus.confirmed &&
+              ((result.saleId ?? '').trim().isEmpty ||
+                  expected == null ||
+                  !expected.isFinite ||
+                  expected < 0 ||
+                  recorded == null ||
+                  !recorded.isFinite ||
+                  (recorded - expected).abs() > 0.005 ||
+                  result.matchesExpected != true))) {
+        result = SaleAttemptReconciliationResult(
+          status: SaleAttemptReconciliationStatus.unknown,
+          clientRequestId: requestId,
+          saleId: result.saleId,
+          totalSold: result.totalSold,
+          movementId: result.movementId,
+          guidance: 'RESPONSE_MISMATCH_REQUIRES_REVIEW',
+        );
+      }
+      if (canAccessAttempt != null && !await canAccessAttempt!(action)) {
         return null;
       }
 
@@ -278,12 +344,13 @@ class SaleAttemptReconciler {
         // Evidencia + retirada del aviso en una sola transacción: si el equipo
         // se apaga a mitad, no queda ni rastro sin intento ni intento sin
         // rastro (el intento sigue y se vuelve a verificar).
-        await resolveAttempt(
+        final resolved = await resolveAttempt(
           action: action,
           clientRequestId: requestId,
           result: result,
           decision: decision,
         );
+        if (!resolved) return null;
         TraceLog.log(
           'reconcile',
           'attempt.resuelto id=${action.id} status=${result.status.name}',
@@ -318,6 +385,9 @@ class SaleAttemptReconciler {
     String? note,
   }) async {
     if (action.type != attemptType) return false;
+    if (canAccessAttempt != null && !await canAccessAttempt!(action)) {
+      return false;
+    }
     if (!decision.isManual) return false;
     final requestId = requestIdOf(action);
     if (requestId.isEmpty) return false;
@@ -351,7 +421,7 @@ class SaleAttemptReconciler {
       if (declarer == null || total == null || total <= 0) {
         TraceLog.log(
           'reconcile',
-          'declaracion.no.registrable id=${action.id} total=${total ?? 'null' }',
+          'declaracion.no.registrable id=${action.id} total=${total ?? 'null'}',
         );
         return false;
       }
@@ -398,6 +468,10 @@ class SaleAttemptReconciler {
 
     for (final action in actions) {
       if (action.type != attemptType) continue;
+      if (action.payload['reconciliationBlocked'] == true ||
+          action.nextAttemptAt?.isAfter(DateTime.now().toUtc()) == true) {
+        continue;
+      }
       if (processed >= maxAttempts) break;
       processed++;
       final result = await verify(action);

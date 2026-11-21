@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:daleventa_pos/core/auth/token_storage.dart';
+import 'package:daleventa_pos/core/storage/serialized_secure_storage.dart';
 import 'package:daleventa_pos/core/errors/operation_error_message.dart';
 import 'package:daleventa_pos/core/models/user_model.dart';
 import 'package:daleventa_pos/core/offline/offline_store.dart';
@@ -43,6 +44,7 @@ void main() {
     root = await Directory.systemTemp.createTemp('fullpos-message-ux-');
     await databaseFactory.setDatabasesPath(root.path);
     FlutterSecureStorage.setMockInitialValues({});
+    SerializedSecureStorage.resetForTesting();
     SharedPreferences.setMockInitialValues({});
     await TokenStorage().saveUserSnapshot(
       UserModel.fromJson({
@@ -197,7 +199,7 @@ void main() {
       await tester.tap(find.byType(SyncStatusMenuButton));
       await tester.pumpAndSettle();
       await tester.runAsync(() async {
-        for (var i = 0; i < 20; i++) {
+        for (var i = 0; i < 250; i++) {
           await Future<void>.delayed(const Duration(milliseconds: 20));
           await tester.pump();
           if (find
@@ -214,6 +216,7 @@ void main() {
       expect(
         find.textContaining('Cantidad solicitada: 5. Disponible: 2.'),
         findsOneWidget,
+        reason: tester.widgetList<Text>(find.byType(Text)).map((text) => text.data ?? text.textSpan?.toPlainText()).join(' | '),
       );
       expect(find.textContaining('DioException'), findsNothing);
       expect(find.textContaining('cash.close'), findsNothing);

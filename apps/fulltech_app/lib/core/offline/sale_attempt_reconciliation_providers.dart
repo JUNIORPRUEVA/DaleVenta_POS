@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/api_routes.dart';
+import '../api/retry_after.dart';
 import '../auth/auth_repository.dart';
 import '../debug/trace_log.dart';
 import 'pending_sync_action.dart';
@@ -19,6 +20,7 @@ import 'sync_queue_service.dart';
 final saleAttemptReconcilerProvider = Provider<SaleAttemptReconciler>((ref) {
   final dio = ref.watch(dioProvider);
   final store = ref.watch(offlineStoreProvider);
+  final storage = ref.watch(tokenStorageProvider);
 
   SaleAttemptAuditEntry buildEntry({
     required PendingSyncAction action,
@@ -31,7 +33,7 @@ final saleAttemptReconcilerProvider = Provider<SaleAttemptReconciler>((ref) {
     required DateTime checkedAt,
   }) {
     return SaleAttemptAuditEntry(
-      id: '${action.id}#${checkedAt.millisecondsSinceEpoch}#${decision.code}',
+      id: '${action.id}#${checkedAt.microsecondsSinceEpoch}#${decision.code}',
       pendingActionId: action.id,
       clientRequestId: clientRequestId,
       decision: decision,
@@ -54,6 +56,12 @@ final saleAttemptReconcilerProvider = Provider<SaleAttemptReconciler>((ref) {
   }
 
   return SaleAttemptReconciler(
+    canAccessAttempt: (action) async {
+      final user = await storage.getUserSnapshot();
+      return user != null &&
+          action.companyId == user.companyId &&
+          action.userId == user.id;
+    },
     listAttempts: ({companyId, userId}) =>
         store.listUnresolvedSaleAttempts(companyId: companyId, userId: userId),
     lookup: (clientRequestId, expectedTotalSold) async {
@@ -63,13 +71,32 @@ final saleAttemptReconcilerProvider = Provider<SaleAttemptReconciler>((ref) {
           queryParameters: expectedTotalSold == null
               ? null
               : {'expectedTotalSold': expectedTotalSold.toStringAsFixed(2)},
-          options: Options(extra: const {'skipLoader': true}),
+          options: Options(
+            extra: const {
+              'skipLoader': true,
+              'disableRetry': true,
+              'disableOfflineCache': true,
+            },
+          ),
         );
         final data = res.data;
         if (data is Map) return data.cast<String, dynamic>();
         return null;
-      } on DioException {
-        return null;
+      } on DioException catch (error) {
+        final status = error.response?.statusCode;
+        if (status == null) return null;
+        return {
+          'status': 'UNKNOWN',
+          'clientRequestId': clientRequestId,
+          'guidance': 'LOOKUP_HTTP_$status',
+          if (status == 429)
+            'retryAfterSeconds':
+                (parseRetryAfter(
+                          error.response?.headers.value('retry-after'),
+                        ) ??
+                        const Duration(minutes: 1))
+                    .inSeconds,
+        };
       } catch (_) {
         return null;
       }
@@ -94,6 +121,22 @@ final saleAttemptReconcilerProvider = Provider<SaleAttemptReconciler>((ref) {
               actorRole: actorRole,
               note: note,
               checkedAt: DateTime.now().toUtc(),
+            ),
+          );
+          await store.updatePendingAction(
+            action.copyWith(
+              payload: {
+                ...action.payload,
+                'reconciliationRetryAfterIsServer': result.retryAfter != null || result.guidance == 'LOOKUP_HTTP_429',
+                'reconciliationBlocked':
+                    result.guidance == 'LOOKUP_HTTP_422' ||
+                    result.guidance == 'LOOKUP_HTTP_403' ||
+                    result.guidance == 'RESPONSE_MISMATCH_REQUIRES_REVIEW',
+              },
+              nextAttemptAt: DateTime.now().toUtc().add(
+                result.retryAfter ?? const Duration(minutes: 1),
+              ),
+              updatedAt: DateTime.now().toUtc(),
             ),
           );
         },

@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 
 import '../auth/app_role.dart';
 import '../theme/role_branding.dart';
+import '../theme/app_colors.dart';
+import '../utils/native_phone_layout.dart';
 
 class FulltechGlobalBackground extends StatelessWidget {
   final AppRole role;
@@ -17,6 +19,11 @@ class FulltechGlobalBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (usesNativePhoneLayout(context)) {
+      return const Positioned.fill(
+        child: IgnorePointer(child: ColoredBox(color: AppColors.background)),
+      );
+    }
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final branding = resolveRoleBranding(role);

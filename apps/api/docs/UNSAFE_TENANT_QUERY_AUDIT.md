@@ -1,9 +1,9 @@
 # Unsafe Tenant Query Audit
 
-Generated at: 2026-11-13T23:56:44.402Z
+Generated at: 2026-11-21T01:59:37.341Z
 
-Errors: 0
-Warnings: 296
+Errors: 5
+Warnings: 311
 
 | Severity | File | Line | Pattern | Query |
 | --- | --- | --- | --- | --- |
@@ -34,19 +34,19 @@ Warnings: 296
 | warning | backups/backups.service.ts | 89 | findMany possibly unscoped | `}).backupRecord.findMany({` |
 | warning | backups/backups.service.ts | 236 | findMany possibly unscoped | `const companies: Array<{ id: string }> = await this.prisma.company.findMany({` |
 | warning | backups/backups.service.ts | 280 | findMany possibly unscoped | `}).backupRecord.findMany({` |
-| warning | cash/cash.service.ts | 103 | findMany possibly unscoped | `this.prisma.cashSession.findMany({` |
-| warning | cash/cash.service.ts | 692 | findMany possibly unscoped | `return this.prisma.cashMovement.findMany({` |
-| warning | cash/cash.service.ts | 739 | findMany possibly unscoped | `const rows = await this.prisma.cashMovement.findMany({` |
-| warning | cash/cash.service.ts | 818 | findMany possibly unscoped | `const rows = await this.prisma.cashSession.findMany({` |
-| warning | cash/cash.service.ts | 876 | findMany possibly unscoped | `this.prisma.cashMovement.findMany({` |
-| warning | cash/cash.service.ts | 995 | aggregate possibly unscoped | `this.prisma.cashSession.aggregate({` |
-| warning | cash/cash.service.ts | 1000 | count possibly unscoped | `this.prisma.cashSession.count({` |
-| warning | cash/cash.service.ts | 1037 | findMany possibly unscoped | `const rows = await this.prisma.cashSession.findMany({` |
-| warning | cash/cash.service.ts | 1283 | aggregate possibly unscoped | `const totals = await tx.cashSession.aggregate({` |
-| warning | cash/cash.service.ts | 1361 | aggregate possibly unscoped | `this.prisma.saleCreditPayment.aggregate({` |
-| warning | cash/cash.service.ts | 1371 | aggregate possibly unscoped | `this.prisma.saleCreditPayment.aggregate({` |
-| warning | cash/cash.service.ts | 1581 | findMany possibly unscoped | `const sales = await this.prisma.sale.findMany({` |
-| warning | cash/cash.service.ts | 1609 | findMany possibly unscoped | `this.prisma.saleCreditPayment.findMany({` |
+| warning | cash/cash.service.ts | 108 | findMany possibly unscoped | `this.prisma.cashSession.findMany({` |
+| warning | cash/cash.service.ts | 741 | findMany possibly unscoped | `return this.prisma.cashMovement.findMany({` |
+| warning | cash/cash.service.ts | 788 | findMany possibly unscoped | `const rows = await this.prisma.cashMovement.findMany({` |
+| warning | cash/cash.service.ts | 867 | findMany possibly unscoped | `const rows = await this.prisma.cashSession.findMany({` |
+| warning | cash/cash.service.ts | 925 | findMany possibly unscoped | `this.prisma.cashMovement.findMany({` |
+| warning | cash/cash.service.ts | 1063 | aggregate possibly unscoped | `this.prisma.cashSession.aggregate({` |
+| warning | cash/cash.service.ts | 1068 | count possibly unscoped | `this.prisma.cashSession.count({` |
+| warning | cash/cash.service.ts | 1105 | findMany possibly unscoped | `const rows = await this.prisma.cashSession.findMany({` |
+| warning | cash/cash.service.ts | 1351 | aggregate possibly unscoped | `const totals = await tx.cashSession.aggregate({` |
+| warning | cash/cash.service.ts | 1429 | aggregate possibly unscoped | `this.prisma.saleCreditPayment.aggregate({` |
+| warning | cash/cash.service.ts | 1439 | aggregate possibly unscoped | `this.prisma.saleCreditPayment.aggregate({` |
+| warning | cash/cash.service.ts | 1649 | findMany possibly unscoped | `const sales = await this.prisma.sale.findMany({` |
+| warning | cash/cash.service.ts | 1677 | findMany possibly unscoped | `this.prisma.saleCreditPayment.findMany({` |
 | warning | clients/clients.service.ts | 468 | findMany possibly unscoped | `this.prisma.client.findMany({` |
 | warning | clients/clients.service.ts | 483 | count possibly unscoped | `this.prisma.client.count({ where }),` |
 | warning | clients/clients.service.ts | 618 | findMany possibly unscoped | `const clients = await this.prisma.client.findMany({` |
@@ -93,29 +93,30 @@ Warnings: 296
 | warning | ecf/dgii/ecf-support-grant.service.ts | 166 | findMany possibly unscoped | `const rows = await this.prisma.ecfSupportGrant.findMany({` |
 | warning | ecf/dgii/ecf-support-grant.service.ts | 247 | findMany possibly unscoped | `const rows = await this.prisma.ecfSupportGrant.findMany({` |
 | warning | ecf/documents/ecf-dgii-authorized-sequences.service.ts | 33 | findMany possibly unscoped | `const rows = await this.prisma.ecfDgiiAuthorizedSequence.findMany({` |
-| warning | ecf/documents/ecf-document-query.service.ts | 92 | findMany possibly unscoped | `const documents = await this.prisma.ecfElectronicDocument.findMany({` |
-| warning | ecf/documents/ecf-document-query.service.ts | 114 | findMany possibly unscoped | `const originals = sales.length ? await this.prisma.ecfElectronicDocument.findMany({` |
-| warning | ecf/documents/ecf-document-query.service.ts | 145 | findMany possibly unscoped | `? await this.prisma.ecfSequence.findMany({` |
-| warning | ecf/documents/ecf-document-query.service.ts | 231 | count possibly unscoped | `this.prisma.ecfElectronicDocument.count({ where }),` |
-| warning | ecf/documents/ecf-document-query.service.ts | 232 | findMany possibly unscoped | `this.prisma.ecfElectronicDocument.findMany({` |
-| warning | ecf/documents/ecf-document-query.service.ts | 353 | findMany possibly unscoped | `const candidates = await this.prisma.ecfElectronicDocument.findMany({` |
+| warning | ecf/documents/ecf-document-query.service.ts | 81 | findMany possibly unscoped | `const documents = await this.prisma.ecfElectronicDocument.findMany({` |
+| warning | ecf/documents/ecf-document-query.service.ts | 103 | findMany possibly unscoped | `const originals = sales.length ? await this.prisma.ecfElectronicDocument.findMany({` |
+| warning | ecf/documents/ecf-document-query.service.ts | 136 | findMany possibly unscoped | `? await db.ecfSequence.findMany({` |
+| warning | ecf/documents/ecf-document-query.service.ts | 147 | findMany possibly unscoped | `const authorizations = config?.enabled ? await db.ecfDgiiAuthorizedSequence.findMany({` |
+| warning | ecf/documents/ecf-document-query.service.ts | 226 | count possibly unscoped | `this.prisma.ecfElectronicDocument.count({ where }),` |
+| warning | ecf/documents/ecf-document-query.service.ts | 227 | findMany possibly unscoped | `this.prisma.ecfElectronicDocument.findMany({` |
+| warning | ecf/documents/ecf-document-query.service.ts | 348 | findMany possibly unscoped | `const candidates = await this.prisma.ecfElectronicDocument.findMany({` |
 | warning | ecf/documents/ecf-legacy-test-classification.ts | 36 | findMany possibly unscoped | `const rows = await tx.ecfElectronicDocument.findMany({` |
 | warning | ecf/documents/ecf-legacy-test-classification.ts | 55 | findMany possibly unscoped | `const allocations = await tx.ecfSequenceAuditLog.findMany({` |
 | warning | ecf/documents/ecf-line-classification.service.ts | 184 | findMany possibly unscoped | `const rows = await this.prisma.ecfElectronicDocument.findMany({` |
 | warning | ecf/documents/ecf-line-classification.service.ts | 202 | findMany possibly unscoped | `const rows = await this.prisma.ecfLineClassification.findMany({` |
 | warning | ecf/documents/ecf-sales-without-document.service.ts | 123 | findMany possibly unscoped | `const rows = await this.prisma.ecfSaleWithoutDocument.findMany({` |
-| warning | ecf/ecf.service.ts | 138 | findMany possibly unscoped | `this.prisma.ecfOnboardingStep.findMany({` |
-| warning | ecf/ecf.service.ts | 142 | findMany possibly unscoped | `this.prisma.ecfAuditLog.findMany({` |
-| warning | ecf/ecf.service.ts | 258 | findMany possibly unscoped | `return this.prisma.ecfAuditLog.findMany({` |
-| warning | ecf/ecf.service.ts | 497 | findMany possibly unscoped | `const steps = await tx.ecfOnboardingStep.findMany({` |
-| warning | ecf/ecf.service.ts | 521 | count possibly unscoped | `const completeWebhookEvents = await tx.ecfDosaWebhookEvent.count({` |
+| warning | ecf/ecf.service.ts | 140 | findMany possibly unscoped | `this.prisma.ecfOnboardingStep.findMany({` |
+| warning | ecf/ecf.service.ts | 144 | findMany possibly unscoped | `this.prisma.ecfAuditLog.findMany({` |
+| warning | ecf/ecf.service.ts | 260 | findMany possibly unscoped | `return this.prisma.ecfAuditLog.findMany({` |
+| warning | ecf/ecf.service.ts | 499 | findMany possibly unscoped | `const steps = await tx.ecfOnboardingStep.findMany({` |
+| warning | ecf/ecf.service.ts | 523 | count possibly unscoped | `const completeWebhookEvents = await tx.ecfDosaWebhookEvent.count({` |
 | warning | ecf/platform/ecf-platform.controller.ts | 115 | findMany possibly unscoped | `this.prisma.ecfDgiiHabilitation.findMany({` |
 | warning | ecf/platform/ecf-platform.controller.ts | 132 | count possibly unscoped | `this.prisma.ecfDgiiHabilitation.count({ where }),` |
 | warning | ecf/platform/ecf-platform.controller.ts | 188 | findMany possibly unscoped | `this.prisma.ecfEvidence.findMany({` |
 | warning | ecf/portal/ecf-certification-portal.service.ts | 265 | findMany possibly unscoped | `const audits = await this.prisma.ecfAuditLog.findMany({` |
-| warning | ecf/portal/ecf-portal-enrollment.service.ts | 251 | findMany possibly unscoped | `return this.prisma.ecfPortalEnrollment.findMany({` |
-| warning | ecf/pos/ecf-sale-fiscal.adapter.ts | 236 | aggregate possibly unscoped | `? await this.prisma.saleCreditPayment.aggregate({` |
-| warning | ecf/pos/ecf-sale-fiscal.adapter.ts | 310 | findMany possibly unscoped | `const rows = await this.prisma.ecfLineClassification.findMany({` |
+| warning | ecf/portal/ecf-portal-enrollment.service.ts | 252 | findMany possibly unscoped | `return this.prisma.ecfPortalEnrollment.findMany({` |
+| warning | ecf/pos/ecf-sale-fiscal.adapter.ts | 235 | aggregate possibly unscoped | `? await this.prisma.saleCreditPayment.aggregate({` |
+| warning | ecf/pos/ecf-sale-fiscal.adapter.ts | 309 | findMany possibly unscoped | `const rows = await this.prisma.ecfLineClassification.findMany({` |
 | warning | ecf/provider/dosa/dosa-certification-intent.controller.ts | 709 | findMany possibly unscoped | `const audits = await tx.ecfAuditLog.findMany({` |
 | warning | ecf/provider/dosa/dosa-certification-intent.controller.ts | 900 | findMany possibly unscoped | `return this.prisma.ecfAuditLog.findMany({` |
 | warning | ecf/provider/dosa/dosa-emission-dispatch.service.ts | 305 | findMany possibly unscoped | `const candidates = await this.prisma.ecfElectronicDocument.findMany({` |
@@ -127,7 +128,7 @@ Warnings: 296
 | warning | ecf/sandbox/e32-reconciliation-executor.ts | 155 | count possibly unscoped | `const postAttempts = await tx.ecfElectronicDocumentAttempt.count({` |
 | warning | ecf/sandbox/e32-reconciliation-executor.ts | 158 | count possibly unscoped | `const dbQueryAttempts = await tx.ecfElectronicDocumentAttempt.count({` |
 | warning | ecf/sandbox/e32-reconciliation-executor.ts | 225 | count possibly unscoped | `const conflicts = await tx.ecfElectronicDocument.count({` |
-| warning | ecf/sandbox/e32-sandbox.cli.ts | 57 | count possibly unscoped | `const occupied = facts.schema ? await prisma.ecfSandboxE32Trial.count({where:{slot:"FIRST_E32_SANDBOX"}}) : 1;` |
+| warning | ecf/sandbox/e32-sandbox.cli.ts | 58 | count possibly unscoped | `const occupied = facts.schema ? await prisma.ecfSandboxE32Trial.count({where:{slot:"FIRST_E32_SANDBOX"}}) : 1;` |
 | warning | guardian/guardian.admin.controller.ts | 137 | findMany possibly unscoped | `await this.prisma.guardianIncident.findMany({` |
 | warning | guardian/guardian.admin.controller.ts | 156 | count possibly unscoped | `this.prisma.guardianIncident.count({` |
 | warning | guardian/guardian.admin.controller.ts | 159 | count possibly unscoped | `this.prisma.guardianIncident.count({` |
@@ -178,9 +179,28 @@ Warnings: 296
 | warning | inventory/zero-config-inventory.ts | 251 | findMany possibly unscoped | `const existingStocks = await tx.warehouseStock.findMany({` |
 | warning | inventory/zero-config-inventory.ts | 293 | count possibly unscoped | `const warehouseStockCount = await tx.warehouseStock.count({` |
 | warning | inventory/zero-config-inventory.ts | 335 | findMany possibly unscoped | `const companies = await prisma.company.findMany({` |
-| warning | license/license.service.ts | 133 | count possibly unscoped | `this.prisma.company.count({ where }),` |
-| warning | license/license.service.ts | 134 | findMany possibly unscoped | `this.prisma.company.findMany({` |
-| warning | license/license.service.ts | 150 | findMany possibly unscoped | `const auditLogs = await this.prisma.companyLicenseAuditLog.findMany({` |
+| error | license/company-activity.service.ts | 61 | findUnique id-only | `if(!await tx.company.findUnique({where:{id},select:{id:true}}))throw new NotFoundException('company_not_found');` |
+| error | license/crm-license.service.ts | 80 | findUnique id-only | `if (!await tx.company.findUnique({ where: { id }, select: { id: true } })) throw new NotFoundException('company_not_found');` |
+| warning | license/crm-license.service.ts | 93 | count possibly unscoped | `const total = await tx.company.count({ where });` |
+| warning | license/crm-license.service.ts | 94 | findMany possibly unscoped | `const rows = await tx.company.findMany({ where, skip: (page - 1) * limit, take: limit, orderBy: [{ createdAt: 'desc' }, { id: 'asc' }], select: { id: true } });` |
+| error | license/crm-license.service.ts | 114 | findUnique id-only | `const receipt = await tx.companyLicenseAuditLog.findUnique({ where: { id: command.operationId } });` |
+| error | license/crm-license.service.ts | 152 | update id-only | `await tx.licensePaymentOrder.update({ where: { id: order.id }, data: {` |
+| warning | license/crm-license.service.ts | 195 | findMany possibly unscoped | `const rows = await this.prisma.licensePaymentOrder.findMany({ where, orderBy: [{ createdAt: 'desc' }, { id: 'asc' }], take: limit,` |
+| error | license/crm-license.service.ts | 219 | findUnique id-only | `const company = await tx.company.findUnique({ where: { id }, select: { id: true, name: true } });` |
+| warning | license/license.service.ts | 230 | count possibly unscoped | `this.prisma.company.count({ where }),` |
+| warning | license/license.service.ts | 231 | findMany possibly unscoped | `this.prisma.company.findMany({` |
+| warning | license/license.service.ts | 247 | findMany possibly unscoped | `const auditLogs = await this.prisma.companyLicenseAuditLog.findMany({` |
+| warning | license/notifications/license-notifier.service.ts | 85 | findMany possibly unscoped | `const jobs = await this.prisma.licenseNotificationJob.findMany({` |
+| warning | license/notifications/license-reminder.scheduler.ts | 53 | findMany possibly unscoped | `const companies = await this.prisma.company.findMany({` |
+| warning | license/notifications/license-reminder.scheduler.ts | 74 | count possibly unscoped | `const inReview = await this.prisma.licensePaymentOrder.count({` |
+| warning | license/orders/license-order-insights.ts | 210 | findMany possibly unscoped | `? await db.licensePlan.findMany({` |
+| warning | license/orders/license-orders.service.ts | 356 | findMany possibly unscoped | `const orders = await this.prisma.licensePaymentOrder.findMany({` |
+| warning | license/orders/license-orders.service.ts | 460 | count possibly unscoped | `const uploadsToday = await this.prisma.licensePaymentEvidence.count({` |
+| warning | license/orders/license-orders.service.ts | 874 | findMany possibly unscoped | `const orders = await this.prisma.licensePaymentOrder.findMany({` |
+| warning | license/orders/license-provisional.scheduler.ts | 58 | findMany possibly unscoped | `const orders = await this.prisma.licensePaymentOrder.findMany({` |
+| warning | license/plans/license-plans.service.ts | 45 | count possibly unscoped | `const total = await this.prisma.licensePlan.count();` |
+| warning | license/plans/license-plans.service.ts | 57 | findMany possibly unscoped | `const rows = await this.prisma.licensePlan.findMany({` |
+| warning | license/renewal/license-plan-request.service.ts | 119 | findMany possibly unscoped | `const rows = await this.prisma.licensePlanRequest.findMany({` |
 | warning | locations/locations.service.ts | 53 | findMany possibly unscoped | `return prismaAny.userLocation.findMany({` |
 | warning | notifications/notifications.service.ts | 513 | findMany possibly unscoped | `const candidates = await this.prisma.notificationOutbox.findMany({` |
 | warning | notifications/notifications.service.ts | 537 | findMany possibly unscoped | `return this.prisma.notificationOutbox.findMany({` |
@@ -207,24 +227,21 @@ Warnings: 296
 | warning | price-lists/price-lists.service.ts | 28 | findMany possibly unscoped | `return this.prisma.priceList.findMany({` |
 | warning | price-lists/price-lists.service.ts | 297 | findMany possibly unscoped | `this.prisma.product.findMany({` |
 | warning | price-lists/price-lists.service.ts | 301 | findMany possibly unscoped | `this.prisma.priceListProductRule.findMany({` |
-| warning | products/products.service.ts | 145 | findMany possibly unscoped | `const activeWarehouses = await tx.warehouse.findMany({` |
-| warning | products/products.service.ts | 342 | count possibly unscoped | `tx.warehouseStock.count({` |
-| warning | products/products.service.ts | 351 | count possibly unscoped | `tx.purchaseOrderItem.count({` |
-| warning | products/products.service.ts | 481 | findMany possibly unscoped | `const rows = await this.prisma.unitOfMeasure.findMany({` |
-| warning | products/products.service.ts | 599 | findMany possibly unscoped | `const candidates = await tx.product.findMany({` |
-| warning | products/products.service.ts | 653 | count possibly unscoped | `tx.saleItem.count({ where: { productId } }),` |
-| warning | products/products.service.ts | 654 | count possibly unscoped | `tx.cotizacionItem.count({ where: { productId } }),` |
-| warning | products/products.service.ts | 655 | count possibly unscoped | `tx.purchaseOrderItem.count({ where: { productId } }),` |
-| warning | products/products.service.ts | 656 | count possibly unscoped | `tx.websiteProductOverride.count({ where: { productId } }),` |
-| warning | products/products.service.ts | 762 | count possibly unscoped | `tx.saleItem.count({` |
-| warning | products/products.service.ts | 765 | count possibly unscoped | `tx.cotizacionItem.count({` |
-| warning | products/products.service.ts | 768 | count possibly unscoped | `tx.purchaseOrderItem.count({` |
-| warning | products/products.service.ts | 771 | count possibly unscoped | `tx.purchaseReceiptItem.count({` |
-| warning | products/products.service.ts | 807 | findMany possibly unscoped | `const candidates = await tx.product.findMany({` |
-| warning | products/products.service.ts | 1401 | findMany possibly unscoped | `this.prisma.product.findMany({` |
-| warning | products/products.service.ts | 1409 | count possibly unscoped | `? this.prisma.product.count({ where })` |
-| warning | products/products.service.ts | 1421 | findMany possibly unscoped | `this.prisma.product.findMany({` |
-| warning | products/products.service.ts | 1429 | count possibly unscoped | `? this.prisma.product.count({ where: legacyWhere })` |
+| warning | products/products.service.ts | 147 | findMany possibly unscoped | `const activeWarehouses = await tx.warehouse.findMany({` |
+| warning | products/products.service.ts | 344 | count possibly unscoped | `tx.warehouseStock.count({` |
+| warning | products/products.service.ts | 353 | count possibly unscoped | `tx.purchaseOrderItem.count({` |
+| warning | products/products.service.ts | 483 | findMany possibly unscoped | `const rows = await this.prisma.unitOfMeasure.findMany({` |
+| warning | products/products.service.ts | 601 | findMany possibly unscoped | `const candidates = await tx.product.findMany({` |
+| warning | products/products.service.ts | 753 | count possibly unscoped | `tx.saleItem.count({` |
+| warning | products/products.service.ts | 756 | count possibly unscoped | `tx.cotizacionItem.count({` |
+| warning | products/products.service.ts | 759 | count possibly unscoped | `tx.purchaseOrderItem.count({` |
+| warning | products/products.service.ts | 762 | count possibly unscoped | `tx.purchaseReceiptItem.count({` |
+| warning | products/products.service.ts | 772 | count possibly unscoped | `tx.websiteProductOverride.count({ where: { productId } }),` |
+| warning | products/products.service.ts | 803 | findMany possibly unscoped | `const candidates = await tx.product.findMany({` |
+| warning | products/products.service.ts | 1391 | findMany possibly unscoped | `this.prisma.product.findMany({` |
+| warning | products/products.service.ts | 1399 | count possibly unscoped | `? this.prisma.product.count({ where })` |
+| warning | products/products.service.ts | 1412 | findMany possibly unscoped | `this.prisma.product.findMany({` |
+| warning | products/products.service.ts | 1420 | count possibly unscoped | `? this.prisma.product.count({ where: legacyWhere })` |
 | warning | purchases/purchases.service.ts | 141 | findMany possibly unscoped | `const activeWarehouses = await tx.warehouse.findMany({` |
 | warning | purchases/purchases.service.ts | 186 | findMany possibly unscoped | `const rows = await this.prisma.supplier.findMany({` |
 | warning | purchases/purchases.service.ts | 250 | findMany possibly unscoped | `const rows = await this.prisma.purchaseInvoice.findMany({` |
@@ -234,29 +251,31 @@ Warnings: 296
 | warning | purchases/purchases.service.ts | 1174 | findMany possibly unscoped | `? await this.prisma.product.findMany({` |
 | warning | purchases/purchases.service.ts | 1197 | findMany possibly unscoped | `? await this.prisma.supplier.findMany({` |
 | warning | purchases/purchases.service.ts | 1390 | findMany possibly unscoped | `this.prisma.purchaseOrder.findMany({` |
+| warning | recovery/recovery-review.service.ts | 49 | findMany possibly unscoped | `const rows=await this.prisma.recoveryReviewCase.findMany({where,orderBy:{id:'asc'},take:100,` |
 | warning | reports/reports.service.ts | 175 | findMany possibly unscoped | `this.prisma.sale.findMany({` |
 | warning | reports/reports.service.ts | 188 | findMany possibly unscoped | `this.prisma.sale.findMany({` |
 | warning | reports/reports.service.ts | 201 | findMany possibly unscoped | `this.prisma.sale.findMany({` |
 | warning | reports/reports.service.ts | 220 | findMany possibly unscoped | `this.prisma.sale.findMany({` |
 | warning | reports/reports.service.ts | 1381 | findMany possibly unscoped | `const rows = await delegate.saleCreditPayment.findMany({` |
 | warning | reports/reports.service.ts | 1805 | findMany possibly unscoped | `const products = await this.prisma.product.findMany({` |
-| warning | sales/sale-reconciliation-obligation.service.ts | 406 | findMany possibly unscoped | `const rows = await this.prisma.saleReconciliationObligation.findMany({` |
-| warning | sales/sale-reconciliation-obligation.service.ts | 431 | findMany possibly unscoped | `await this.prisma.saleReconciliationDeclarationEvent.findMany({` |
-| warning | sales/sales.service.ts | 473 | count possibly unscoped | `return this.prisma.sale.count({ where });` |
-| warning | sales/sales.service.ts | 475 | findMany possibly unscoped | `const rows = await this.prisma.sale.findMany({` |
-| warning | sales/sales.service.ts | 622 | findMany possibly unscoped | `return await this.prisma.sale.findMany({` |
-| warning | sales/sales.service.ts | 631 | findMany possibly unscoped | `return this.prisma.sale.findMany({` |
-| warning | sales/sales.service.ts | 757 | findMany possibly unscoped | `const refundItems = await tx.saleItem.findMany({` |
-| warning | sales/sales.service.ts | 1021 | findMany possibly unscoped | `const rows = await this.prisma.sale.findMany({` |
-| warning | sales/sales.service.ts | 1315 | aggregate possibly unscoped | `this.prisma.sale.aggregate({` |
-| warning | sales/sales.service.ts | 1324 | aggregate possibly unscoped | `this.prisma.sale.aggregate({` |
-| warning | sales/sales.service.ts | 1334 | aggregate possibly unscoped | `? this.prisma.sale.aggregate({` |
-| warning | sales/sales.service.ts | 1499 | findMany possibly unscoped | `? await this.prisma.user.findMany({` |
-| warning | sales/sales.service.ts | 1662 | findMany possibly unscoped | `products = await this.prisma.product.findMany({` |
-| warning | sales/sales.service.ts | 2302 | findMany possibly unscoped | `? await this.prisma.product.findMany({` |
+| warning | sales/sale-reconciliation-obligation.service.ts | 409 | findMany possibly unscoped | `const rows = await this.prisma.saleReconciliationObligation.findMany({` |
+| warning | sales/sale-reconciliation-obligation.service.ts | 477 | findMany possibly unscoped | `await this.prisma.saleReconciliationDeclarationEvent.findMany({` |
+| warning | sales/sales.service.ts | 475 | count possibly unscoped | `return this.prisma.sale.count({ where });` |
+| warning | sales/sales.service.ts | 477 | findMany possibly unscoped | `const rows = await this.prisma.sale.findMany({` |
+| warning | sales/sales.service.ts | 624 | findMany possibly unscoped | `const rows = await this.prisma.sale.findMany({` |
+| warning | sales/sales.service.ts | 634 | findMany possibly unscoped | `return this.prisma.sale.findMany({` |
+| warning | sales/sales.service.ts | 649 | findMany possibly unscoped | `const documents = await this.prisma.ecfElectronicDocument.findMany({` |
+| warning | sales/sales.service.ts | 775 | findMany possibly unscoped | `const refundItems = await tx.saleItem.findMany({` |
+| warning | sales/sales.service.ts | 1039 | findMany possibly unscoped | `const rows = await this.prisma.sale.findMany({` |
+| warning | sales/sales.service.ts | 1333 | aggregate possibly unscoped | `this.prisma.sale.aggregate({` |
+| warning | sales/sales.service.ts | 1342 | aggregate possibly unscoped | `this.prisma.sale.aggregate({` |
+| warning | sales/sales.service.ts | 1352 | aggregate possibly unscoped | `? this.prisma.sale.aggregate({` |
+| warning | sales/sales.service.ts | 1517 | findMany possibly unscoped | `? await this.prisma.user.findMany({` |
+| warning | sales/sales.service.ts | 1680 | findMany possibly unscoped | `products = await this.prisma.product.findMany({` |
+| warning | sales/sales.service.ts | 2352 | findMany possibly unscoped | `? await this.prisma.product.findMany({` |
 | warning | service-orders/service-orders.service.ts | 72 | findMany possibly unscoped | `const rows = await this.prisma.serviceOrder.findMany({` |
 | warning | service-orders/service-orders.service.ts | 94 | findMany possibly unscoped | `const rows = await this.prisma.serviceOrder.findMany({` |
-| warning | settings/settings.service.ts | 397 | findMany possibly unscoped | `const distributedRows = await tx.warehouseStock.findMany({` |
+| warning | settings/settings.service.ts | 423 | findMany possibly unscoped | `const distributedRows = await tx.warehouseStock.findMany({` |
 | warning | tax/tax.service.ts | 30 | findMany possibly unscoped | `return this.prisma.tax.findMany({` |
 | warning | terminals/terminal-resolution.service.ts | 54 | findMany possibly unscoped | `const matches = await tx.terminal.findMany({` |
 | warning | terminals/terminal-resolution.service.ts | 89 | findMany possibly unscoped | `const activeTerminals = await tx.terminal.findMany({` |
@@ -273,13 +292,14 @@ Warnings: 296
 | warning | usage-telemetry/usage-telemetry.service.ts | 424 | aggregate possibly unscoped | `this.prisma.sale.aggregate({ where: this.saleWhere(company.id, monthStart), _sum: { totalSold: true } }),` |
 | warning | usage-telemetry/usage-telemetry.service.ts | 438 | count possibly unscoped | `this.prisma.serviceOrder.count({` |
 | warning | users/users.service.ts | 271 | count possibly unscoped | `return this.prisma.user.count({ where });` |
-| warning | warehouses/warehouses.service.ts | 48 | findMany possibly unscoped | `const rows = await this.prisma.warehouse.findMany({` |
-| warning | warehouses/warehouses.service.ts | 77 | findMany possibly unscoped | `const rows = await this.prisma.terminal.findMany({` |
-| warning | warehouses/warehouses.service.ts | 192 | count possibly unscoped | `const nonZero = await tx.warehouseStock.count({` |
-| warning | warehouses/warehouses.service.ts | 204 | count possibly unscoped | `const linkedTerminals = await tx.terminal.count({` |
-| warning | warehouses/warehouses.service.ts | 307 | findMany possibly unscoped | `const warehouses = await this.prisma.warehouse.findMany({` |
-| warning | warehouses/warehouses.service.ts | 361 | findMany possibly unscoped | `const rows = await this.prisma.warehouseTransfer.findMany({` |
-| warning | warehouses/warehouses.service.ts | 429 | findMany possibly unscoped | `const products = await tx.product.findMany({` |
+| warning | warehouses/warehouses.service.ts | 51 | findMany possibly unscoped | `const rows = await this.prisma.warehouse.findMany({` |
+| warning | warehouses/warehouses.service.ts | 80 | findMany possibly unscoped | `const rows = await this.prisma.terminal.findMany({` |
+| warning | warehouses/warehouses.service.ts | 198 | count possibly unscoped | `const nonZero = await tx.warehouseStock.count({` |
+| warning | warehouses/warehouses.service.ts | 210 | count possibly unscoped | `const linkedTerminals = await tx.terminal.count({` |
+| warning | warehouses/warehouses.service.ts | 313 | findMany possibly unscoped | `const warehouses = await this.prisma.warehouse.findMany({` |
+| warning | warehouses/warehouses.service.ts | 367 | findMany possibly unscoped | `const rows = await this.prisma.warehouseTransfer.findMany({` |
+| warning | warehouses/warehouses.service.ts | 435 | findMany possibly unscoped | `const products = await tx.product.findMany({` |
+| warning | warehouses/warehouses.service.ts | 694 | count possibly unscoped | `const active = await tx.warehouse.count({` |
 | warning | warranty-configs/warranty-configs.service.ts | 45 | findMany possibly unscoped | `const items = await this.prisma.warrantyProductConfig.findMany({` |
 | warning | warranty-configs/warranty-configs.service.ts | 145 | findMany possibly unscoped | `const configs = await this.prisma.warrantyProductConfig.findMany({` |
 | warning | work-scheduling/work-scheduling.service.ts | 186 | findMany possibly unscoped | `const existing = await this.prisma.workEmployeeConfig.findMany({` |

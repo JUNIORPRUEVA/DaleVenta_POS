@@ -111,28 +111,30 @@ void main() {
     },
   );
 
-  testWidgets('create account opens the official web form externally', (
-    tester,
-  ) async {
-    MethodCall? launch;
-    const channel = MethodChannel('plugins.flutter.io/url_launcher');
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(channel, (call) async {
-          launch = call;
-          return true;
-        });
-    addTearDown(
-      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(channel, null),
-    );
-    await pumpLogin(tester, ApiErrorType.unauthorized, const Size(1280, 900));
-    await tester.tap(find.text('Crear cuenta'));
-    await tester.pumpAndSettle();
-    expect(launch?.method, 'launch');
-    final args = launch!.arguments as Map;
-    expect(args['url'], ProductConfig.productionRegistrationUrl);
-    expect(args['useWebView'], false);
-    expect(args['useSafariVC'], false);
-    expect(find.text('Crear mi empresa'), findsNothing);
-  });
+  testWidgets(
+    'desktop create account opens the official web form externally',
+    (tester) async {
+      MethodCall? launch;
+      const channel = MethodChannel('plugins.flutter.io/url_launcher');
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            launch = call;
+            return true;
+          });
+      addTearDown(
+        () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null),
+      );
+      await pumpLogin(tester, ApiErrorType.unauthorized, const Size(1280, 900));
+      await tester.tap(find.text('Crear cuenta'));
+      await tester.pumpAndSettle();
+      expect(launch?.method, 'launch');
+      final args = launch!.arguments as Map;
+      expect(args['url'], ProductConfig.productionRegistrationUrl);
+      expect(args['useWebView'], false);
+      expect(args['useSafariVC'], false);
+      expect(find.text('Crear mi empresa'), findsNothing);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.linux),
+  );
 }

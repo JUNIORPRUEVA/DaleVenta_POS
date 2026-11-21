@@ -259,7 +259,7 @@ void main() {
         await export(tester, 'history-${width.toInt()}');
         await tester.tap(find.text('Emitir E31'));
         await tester.pumpAndSettle();
-        expect(find.text('Sin conexión'), findsOneWidget);
+        expect(find.textContaining('La factura electrónica requiere internet.', findRichText: true), findsOneWidget);
         expect(find.byType(AlertDialog), findsNothing);
         final notice = tester.getRect(
           find.byKey(const ValueKey('app_feedback_toast_Sin conexión')),
@@ -269,7 +269,7 @@ void main() {
         expect(tester.takeException(), isNull);
         await export(tester, 'offline-${width.toInt()}');
         await tester.pump(const Duration(seconds: 5));
-        expect(find.text('Sin conexión'), findsNothing);
+        expect(find.textContaining('La factura electrónica requiere internet.', findRichText: true), findsNothing);
       },
     );
   }

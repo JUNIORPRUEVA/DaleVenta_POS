@@ -2,6 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../utils/trace_id.dart';
+import '../../errors/api_exception.dart';
+import '../../auth/auth_provider.dart';
 import '../domain/models/ai_chat_context.dart';
 import '../domain/models/ai_assistant_message.dart';
 import '../domain/services/ai_assistant_service.dart';
@@ -67,6 +69,16 @@ class AiPendingAttachment {
 
 final aiAssistantControllerProvider =
     StateNotifierProvider<AiAssistantController, AiAssistantState>((ref) {
+      ref.watch(
+        authStateProvider.select(
+          (auth) => (
+            auth.isAuthenticated,
+            auth.user?.id,
+            auth.user?.companyId,
+            auth.user?.role,
+          ),
+        ),
+      );
       return AiAssistantController(ref.watch(aiAssistantServiceProvider));
     });
 
@@ -85,6 +97,7 @@ class AiAssistantController extends StateNotifier<AiAssistantState> {
   static const int _maxPreviewBytes = 3 * 1024 * 1024;
 
   final AiAssistantService _service;
+  int _contextVersion = 0;
 
   /// Conversación abierta en APPYRA IA. Se conserva entre mensajes del mismo módulo y se
   /// descarta al cambiar de módulo (eso cuenta como conversación nueva).
@@ -93,6 +106,19 @@ class AiAssistantController extends StateNotifier<AiAssistantState> {
   /// Último envío fallido, para reutilizar su identificador si el usuario lo reintenta.
   String? _failedMessageContent;
   String? _failedClientMessageId;
+  String? _failedMediaJobId;
+
+  bool get canRetryLastMessage =>
+      _failedClientMessageId != null &&
+      _failedMessageContent != null &&
+      _failedMediaJobId == state.attachment?.mediaJobId;
+
+  Future<void> retryLastMessage() async {
+    if (!canRetryLastMessage || state.sending || state.uploadingAttachment) {
+      return;
+    }
+    await sendMessage(_failedMessageContent!);
+  }
 
   void setContext(AiChatContext context) {
     final sameContext =
@@ -108,14 +134,18 @@ class AiAssistantController extends StateNotifier<AiAssistantState> {
         ? [_buildStarterMessage(context)]
         : state.messages;
     if (moduleChanged) {
+      _contextVersion++;
       _conversationId = null;
       _failedMessageContent = null;
       _failedClientMessageId = null;
+      _failedMediaJobId = null;
     }
     state = state.copyWith(
       context: context,
       messages: nextMessages,
       clearAttachment: moduleChanged,
+      sending: moduleChanged ? false : null,
+      uploadingAttachment: moduleChanged ? false : null,
     );
   }
 
@@ -129,6 +159,7 @@ class AiAssistantController extends StateNotifier<AiAssistantState> {
     required String mimeType,
   }) async {
     if (state.uploadingAttachment) return;
+    final version = _contextVersion;
     state = state.copyWith(uploadingAttachment: true, clearError: true);
     try {
       final mediaJobId = await _service.uploadAttachment(
@@ -136,6 +167,7 @@ class AiAssistantController extends StateNotifier<AiAssistantState> {
         bytes: bytes,
         mimeType: mimeType,
       );
+      if (!mounted || version != _contextVersion) return;
       state = state.copyWith(
         uploadingAttachment: false,
         attachment: AiPendingAttachment(
@@ -146,6 +178,7 @@ class AiAssistantController extends StateNotifier<AiAssistantState> {
         ),
       );
     } catch (e) {
+      if (!mounted || version != _contextVersion) return;
       state = state.copyWith(
         uploadingAttachment: false,
         lastError: e.toString(),
@@ -159,7 +192,7 @@ class AiAssistantController extends StateNotifier<AiAssistantState> {
   }
 
   String _clientMessageIdFor(String message) {
-    if (_failedClientMessageId != null && _failedMessageContent == message) {
+    if (canRetryLastMessage && _failedMessageContent == message) {
       return _failedClientMessageId!;
     }
     return _uuid.v4();
@@ -171,7 +204,7 @@ class AiAssistantController extends StateNotifier<AiAssistantState> {
       id: TraceId.next('ai-assistant-intro'),
       role: AiAssistantMessageRole.assistant,
       content:
-          'Estoy listo para orientarte en $area. Puedo explicarte la pantalla actual, resumirte normas del Manual Interno y ayudarte a validar datos reales como clientes, cotizaciones u operaciones cuando exista contexto autorizado.',
+          'Puedo orientarte en $area. Cuéntame qué necesitas hacer o qué problema encontraste.',
       createdAt: DateTime.now(),
     );
   }
@@ -213,6 +246,7 @@ class AiAssistantController extends StateNotifier<AiAssistantState> {
     if (normalized.isEmpty && pendingAttachment == null) return;
 
     if (state.sending) return;
+    final version = _contextVersion;
 
     final now = DateTime.now();
     // El turno necesita una frase con sentido: si solo hay archivo, se dice qué
@@ -223,8 +257,10 @@ class AiAssistantController extends StateNotifier<AiAssistantState> {
               ? 'Te envío una nota de voz.'
               : 'Te envío un archivo adjunto.');
 
-    final nextMessages = List<AiAssistantMessage>.from(state.messages)
-      ..add(
+    final isRetry = canRetryLastMessage && _failedMessageContent == turnText;
+    final nextMessages = List<AiAssistantMessage>.from(state.messages);
+    if (!isRetry) {
+      nextMessages.add(
         AiAssistantMessage(
           id: TraceId.next('ai-user'),
           role: AiAssistantMessageRole.user,
@@ -241,6 +277,7 @@ class AiAssistantController extends StateNotifier<AiAssistantState> {
           createdAt: now,
         ),
       );
+    }
 
     state = state.copyWith(
       messages: nextMessages,
@@ -260,19 +297,28 @@ class AiAssistantController extends StateNotifier<AiAssistantState> {
         clientMessageId: clientMessageId,
         mediaJobId: attachment?.mediaJobId,
       );
+      if (!mounted || version != _contextVersion) return;
 
+      if (result.resetConversation) {
+        _conversationId = null;
+      }
       final nextConversationId = result.conversationId;
       if (nextConversationId != null && nextConversationId.trim().isNotEmpty) {
         _conversationId = nextConversationId.trim();
       }
       _failedMessageContent = null;
       _failedClientMessageId = null;
+      _failedMediaJobId = null;
 
       final assistant = AiAssistantMessage(
         id: TraceId.next('ai-assistant'),
         role: AiAssistantMessageRole.assistant,
         content: result.content,
+        resources: result.resources,
         citations: result.citations,
+        incident: result.incident,
+        supportCase: result.supportCase,
+        requiresHumanReview: result.requiresHumanReview,
         createdAt: DateTime.now(),
       );
 
@@ -282,20 +328,14 @@ class AiAssistantController extends StateNotifier<AiAssistantState> {
         clearAttachment: attachment != null,
       );
     } catch (e) {
+      if (!mounted || version != _contextVersion) return;
       _failedMessageContent = turnText;
       _failedClientMessageId = clientMessageId;
-      final content = e.toString();
-      final assistant = AiAssistantMessage(
-        id: TraceId.next('ai-assistant-error'),
-        role: AiAssistantMessageRole.assistant,
-        content: content,
-        createdAt: DateTime.now(),
-      );
-      state = state.copyWith(
-        messages: [...state.messages, assistant],
-        sending: false,
-        lastError: content,
-      );
+      _failedMediaJobId = attachment?.mediaJobId;
+      final content = e is ApiException
+          ? e.message
+          : 'No pude confirmar la respuesta. Vuelve a intentarlo.';
+      state = state.copyWith(sending: false, lastError: content);
     }
   }
 }

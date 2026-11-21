@@ -1,3 +1,4 @@
+import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -306,7 +307,7 @@ class _EcfDosaActivationStatusState
               height: 14,
               child: CircularProgressIndicator(strokeWidth: 2),
             )
-          : const Icon(Icons.refresh_rounded),
+          : const MobileActionIcon(Icons.refresh_rounded),
     );
   }
 }

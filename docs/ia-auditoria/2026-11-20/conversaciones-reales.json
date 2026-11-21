@@ -1,0 +1,198 @@
+{
+  "productionConnected": false,
+  "source": "Real local FullPOS -> APPYRA -> Ollama/PostgreSQL; curated replies identified per turn",
+  "quotationReference": "APPYRA apps/api/content/fullpos-support/knowledge/17-cotizaciones.md",
+  "technicalPassed": 10,
+  "qualityApproved": 8,
+  "total": 10,
+  "limits": [
+    "Keyword checks are not a complete semantic validator.",
+    "Manual review also found unsupported actions in both quotation replies.",
+    "No production provider was evaluated."
+  ],
+  "results": [
+    {
+      "case": "open_quote",
+      "question": "¿Cómo preparo una cotización y luego la convierto en venta?",
+      "source": "appyra-ia",
+      "reply": "Claro, te guiaré paso a paso para preparar una cotización y luego convertirla en venta. Comenzaremos en la pantalla de **Facturación** (`/cotizaciones`).\n\n### Paso 1: Acceder a Facturación\n\n1. **Pantalla actual:** IA\n2. **Módulo:** general\n3. **Ruta:** /ia\n4. **Paso 1:** Entra a **Facturación** (`/cotizaciones`).\n\n### Paso 2: Agregar Productos\n\n1. **Pantalla actual:** Facturación\n2. **Módulo:** cotizaciones\n3. **Ruta:** /cotizaciones\n4. **Paso 2:** Añade los productos con «Buscar productos...».\n\n### Paso 3: Ajustar Precios y Descuentos\n\n1. **Pantalla actual:** Facturación\n2. **Módulo:** cotizaciones\n3. **Ruta:** /cotizaciones\n4. **Paso 3:** Ajusta cantidades, precios y descuentos de línea (% o RD$).\n\n### Paso 4: Seleccionar Cliente\n\n1. **Pantalla actual:** Facturación\n2. **Módulo:** cotizaciones\n3. **Ruta:** /cotizaciones\n4. **Paso 4:** Selecciona el cliente (si no eliges ninguno se guarda como «Consumidor Físico»).\n\n### Paso 5: Guardar la Cotización\n\n1. **Pantalla actual:** Facturación\n2. **Módulo:** cotizaciones\n3. **Ruta:** /cotizaciones\n4. **Paso 5:** Haz clic en el botón **Guardar**.\n\n### Paso 6: Convertir en Venta\n\n1. **Pantalla actual:** Facturación\n2. **Módulo:** cotizaciones\n3. **Ruta:** /cotizaciones\n4. **Paso 6:** Haz clic en el botón **Convertir en Venta**.\n\n### Requisitos Necesarios\n\n- **Pantalla actual:** Facturación\n- **Módulo:** cotizaciones\n- **Ruta:** /cotizaciones\n- **Requisito:** Debes tener al menos un producto en la cotización para poder convertirla en venta.\n\n### Error Habitual\n\n- **Pantalla actual:** Facturación\n- **Módulo:** cotizaciones\n- **Ruta:** /cotizaciones\n- **Error:** Si no tienes ningún producto en la cotización, recibirás un mensaje indicando que no puedes convertirla en venta.\n\nSi tienes alguna otra pregunta o necesitas más ayuda, no dudes en preguntar.",
+      "elapsedSeconds": 48.09,
+      "requiresHumanReview": false,
+      "checks": {
+        "responsePresent": true,
+        "actualProcedure": true,
+        "noFalseAction": true
+      },
+      "passed": true,
+      "transportAndScenarioChecksPassed": true,
+      "qualityChecks": {
+        "noInventedButtonOrCustomerLabel": false,
+        "publishedQuotationActions": false
+      },
+      "approved": false
+    },
+    {
+      "case": "followup_context",
+      "question": "¿Y si no tengo el correo del cliente?",
+      "source": "appyra-ia",
+      "reply": "Si no tienes el correo del cliente, puedes seguir estos pasos para preparar la cotización:\n\n### Paso 1: Acceder a Facturación\n\n1. **Pantalla actual:** IA\n2. **Módulo:** general\n3. **Ruta:** /ia\n4. **Paso 1:** Entra a **Facturación** (`/cotizaciones`).\n\n### Paso 2: Agregar Productos\n\n1. **Pantalla actual:** Facturación\n2. **Módulo:** cotizaciones\n3. **Ruta:** /cotizaciones\n4. **Paso 2:** Añade los productos con «Buscar productos...».\n\n### Paso 3: Ajustar Precios y Descuentos\n\n1. **Pantalla actual:** Facturación\n2. **Módulo:** cotizaciones\n3. **Ruta:** /cotizaciones\n4. **Paso 3:** Ajusta cantidades, precios y descuentos de línea (% o RD$).\n\n### Paso 4: Seleccionar Cliente\n\n1. **Pantalla actual:** Facturación\n2. **Módulo:** cotizaciones\n3. **Ruta:** /cotizaciones\n4. **Paso 4:** Si no eliges ninguno, se guarda como «Consumidor Final».\n\n### Paso 5: Guardar Cotización\n\n1. **Pantalla actual:** Facturación\n2. **Módulo:** cotizaciones\n3. **Ruta:** /cotizaciones\n4. **Paso 5:** Haz clic en el botón **Guardar** (`Guardar`).\n\n### Paso 6: Ver Cotización Guardada\n\n1. **Pantalla actual:** Facturación\n2. **Módulo:** cotizaciones\n3. **Ruta:** /cotizaciones\n4. **Paso 6:** Verifica que la cotización se haya guardado correctamente.\n\n### Paso 7: Convertir Cotización a Venta\n\n1. **Pantalla actual:** Facturación\n2. **Módulo:** cotizaciones\n3. **Ruta:** /cotizaciones\n4. **Paso 7:** Haz clic en el botón **Convertir a Venta** (`Convertir a Venta`).\n\n### Paso 8: Confirmar Convertir a Venta\n\n1. **Pantalla actual:** Facturación\n2. **Módulo:** cotizaciones\n3. **Ruta:** /cotizaciones\n4. **Paso 8:** Confirma la conversión al cliente seleccionado.\n\n### Paso 9: Ver Cotización Convertida a Venta\n\n1. **Pantalla actual:** Facturación\n2. **Módulo:** cotizaciones\n3. **Ruta:** /cotizaciones\n4. **Paso 9:** Verifica que la cotización se haya convertido correctamente.\n\n### Paso 10: Finalizar\n\n1. **Pantalla actual:** Facturación\n2. **Módulo:** cotizaciones\n3. **Ruta:** /cotizaciones\n4. **Paso 10:** Haz clic en el botón **Finalizar** (`Finalizar`).\n\n### Requisitos Necesarios\n\n- **Pantalla actual:** Facturación\n- **Módulo:** cotizaciones\n- **Ruta:** /cotizaciones\n\n### Requisitos Habituales\n\n- **Pantalla actual:** Facturación\n- **Módulo:** cotizaciones\n- **Ruta:** /cotizaciones\n\n### Requisitos Habituales\n\n- **Pantalla actual:** Facturación\n- **Módulo:** cotizaciones\n- **Ruta:** /cotizaciones\n\n### Requisitos Habituales\n\n- **Pantalla actual:** Facturación\n- **Módulo:** cotizaciones\n- **Ruta:** /cotizaciones\n\n### Requisitos Habituales\n\n- **Pantalla actual:** Facturación\n- **Módulo:** cotizaciones\n- **Ruta:** /cotizaciones\n\n### Requisitos Habituales\n\n- **Pantalla",
+      "elapsedSeconds": 95.03,
+      "requiresHumanReview": false,
+      "checks": {
+        "sameConversation": true,
+        "noReset": true,
+        "doesNotInventRequiredEmail": true
+      },
+      "passed": true,
+      "transportAndScenarioChecksPassed": true,
+      "qualityChecks": {
+        "noInventedButtonOrCustomerLabel": false,
+        "publishedQuotationActions": false
+      },
+      "approved": false
+    },
+    {
+      "case": "unknown_module",
+      "question": "¿Cómo activo el módulo de teletransportación interplanetaria?",
+      "source": "appyra-ia-rules",
+      "reply": "Para orientarte con precisión, dime qué intentas hacer y qué aparece en pantalla. No tengo información aprobada para ese caso y prefiero evitar pasos que puedan afectar tus datos. Si es una falla, usa «Reportar una avería» en el chat de FullPOS y confirma su descripción; el registro se acredita con una referencia.",
+      "elapsedSeconds": 8.73,
+      "requiresHumanReview": true,
+      "checks": {
+        "noInventedSteps": true,
+        "acknowledgesUncertainty": true
+      },
+      "passed": true,
+      "transportAndScenarioChecksPassed": true,
+      "qualityChecks": {
+        "scenarioChecks": true
+      },
+      "approved": true
+    },
+    {
+      "case": "unknown_inventory_capability",
+      "question": "¿Cómo conecto drones autónomos para contar mi inventario automáticamente?",
+      "source": "appyra-ia-rules",
+      "reply": "Para orientarte con precisión, dime qué intentas hacer y qué aparece en pantalla. No tengo información aprobada para ese caso y prefiero evitar pasos que puedan afectar tus datos. Si es una falla, usa «Reportar una avería» en el chat de FullPOS y confirma su descripción; el registro se acredita con una referencia.",
+      "elapsedSeconds": 31.23,
+      "requiresHumanReview": true,
+      "checks": {
+        "noInventedSteps": true,
+        "acknowledgesUncertainty": true
+      },
+      "passed": true,
+      "transportAndScenarioChecksPassed": true,
+      "qualityChecks": {
+        "scenarioChecks": true
+      },
+      "approved": true
+    },
+    {
+      "case": "generic_incident",
+      "question": "Quiero reportar una avería",
+      "source": "appyra-ia-rules",
+      "reply": "Describe qué intentaste hacer y qué ocurrió. Puedes adjuntar una captura sin contraseñas ni datos de pago. Con esos detalles podremos registrar una avería útil para soporte.",
+      "elapsedSeconds": 4.38,
+      "requiresHumanReview": true,
+      "checks": {
+        "noReference": true,
+        "asksDetails": true
+      },
+      "passed": true,
+      "transportAndScenarioChecksPassed": true,
+      "qualityChecks": {
+        "scenarioChecks": true
+      },
+      "approved": true
+    },
+    {
+      "case": "detailed_incident",
+      "question": "Quiero reportar una avería: en el historial de cotizaciones al abrir el detalle aparece una pantalla completamente vacía.",
+      "source": "appyra-ia-rules",
+      "reply": "Tu caso sigue abierto con la referencia FPS-2026-000002; añadí este mensaje al historial.",
+      "elapsedSeconds": 5.17,
+      "requiresHumanReview": true,
+      "checks": {
+        "actualReference": true
+      },
+      "passed": true,
+      "transportAndScenarioChecksPassed": true,
+      "qualityChecks": {
+        "scenarioChecks": true
+      },
+      "approved": true
+    },
+    {
+      "case": "identical_retry",
+      "question": "Quiero reportar una avería: en el historial de cotizaciones al abrir el detalle aparece una pantalla completamente vacía.",
+      "source": "appyra-ia-rules",
+      "reply": "Tu caso sigue abierto con la referencia FPS-2026-000002; añadí este mensaje al historial.",
+      "elapsedSeconds": 0.06,
+      "requiresHumanReview": true,
+      "checks": {
+        "sameReference": true,
+        "sameContent": true
+      },
+      "passed": true,
+      "transportAndScenarioChecksPassed": true,
+      "qualityChecks": {
+        "scenarioChecks": true
+      },
+      "approved": true
+    },
+    {
+      "case": "foreign_company",
+      "question": "Continúa con mi caso",
+      "source": "appyra-ia-rules",
+      "reply": "La conversación anterior ya no está disponible. Puedes enviar de nuevo tu consulta para iniciar una nueva. Si estabas registrando una avería, comprueba primero si recibiste su referencia.",
+      "elapsedSeconds": 0.12,
+      "requiresHumanReview": false,
+      "checks": {
+        "resetConversation": true,
+        "noForeignReference": true
+      },
+      "passed": true,
+      "transportAndScenarioChecksPassed": true,
+      "qualityChecks": {
+        "scenarioChecks": true
+      },
+      "approved": true
+    },
+    {
+      "case": "missing_conversation",
+      "question": "Continúa la conversación",
+      "source": "appyra-ia-rules",
+      "reply": "La conversación anterior ya no está disponible. Puedes enviar de nuevo tu consulta para iniciar una nueva. Si estabas registrando una avería, comprueba primero si recibiste su referencia.",
+      "elapsedSeconds": 0.07,
+      "requiresHumanReview": false,
+      "checks": {
+        "resetConversation": true,
+        "noInventedHistory": true
+      },
+      "passed": true,
+      "transportAndScenarioChecksPassed": true,
+      "qualityChecks": {
+        "scenarioChecks": true
+      },
+      "approved": true
+    },
+    {
+      "case": "restart_after_missing",
+      "question": "¿Cómo recupero mi contraseña?",
+      "source": "appyra-ia-rules",
+      "reply": "1. Abre **Recuperar contraseña** desde el acceso a FullPOS.\n2. Escribe el correo de tu cuenta empresarial y pulsa **Enviar instrucciones**.\n3. Revisa el correo y, si recibes el enlace, abrelo para completar **Nueva contraseña** y **Confirmar contraseña**. Pulsa **Guardar nueva contraseña**.\n4. Si el enlace es inválido, solicita uno nuevo desde la recuperación.\n\nEl aviso de la pantalla es condicional: no confirma por sí solo que el correo haya llegado. No compartas el enlace, tokens ni contraseñas en este chat. Si el usuario está bloqueado, un administrador debe revisar su ficha; cambiar la contraseña no elimina el bloqueo.",
+      "elapsedSeconds": 0.13,
+      "requiresHumanReview": true,
+      "checks": {
+        "newConversation": true,
+        "approvedInstructions": true
+      },
+      "passed": true,
+      "transportAndScenarioChecksPassed": true,
+      "qualityChecks": {
+        "scenarioChecks": true
+      },
+      "approved": true
+    }
+  ]
+}

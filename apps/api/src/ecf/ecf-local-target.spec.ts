@@ -19,7 +19,11 @@ const DISPOSABLE_ALT = "postgresql://user:secret@127.0.0.1:55500/fullpos_ecf_eph
 
 describe("strict local e-CF database allowlist", () => {
   it("classifies exactly the authorized local targets", () => {
-    expect(ECF_LOCAL_TARGETS).toHaveLength(4);
+    expect(ECF_LOCAL_TARGETS).toHaveLength(5);
+    expect(matchEcfLocalTarget('postgresql://user:secret@127.0.0.1:56711/fullpos_ecf_ephemeral_test'))
+      .toMatchObject({ kind: 'EPHEMERAL_TEST', port: '56711', name: 'fullpos_ecf_ephemeral_test' });
+    expect(isEcfLocalTarget('postgresql://user:secret@127.0.0.1:56711/postgres')).toBe(false);
+    expect(isEcfLocalTarget('postgresql://user:secret@example.invalid:56711/fullpos_ecf_ephemeral_test')).toBe(false);
     expect(matchEcfLocalTarget(HISTORICAL)).toMatchObject({ kind: "HISTORICAL_UAT", name: "fullpos_alanube_uat", port: "56550" });
     expect(matchEcfLocalTarget(EPHEMERAL)).toMatchObject({ kind: "EPHEMERAL_TEST", name: "fullpos_alanube_uat_test", port: "56551" });
     expect(matchEcfLocalTarget(DISPOSABLE)).toMatchObject({ kind: "EPHEMERAL_TEST", name: "fullpos_ecf_ephemeral_test", port: "56701" });

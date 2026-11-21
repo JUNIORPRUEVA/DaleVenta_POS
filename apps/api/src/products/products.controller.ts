@@ -6,7 +6,9 @@ import {
   Delete,
   Get,
   Header,
+  HttpCode,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -30,8 +32,10 @@ import { CreateProductDto } from "./dto/create-product.dto";
 import { UpdateProductDto } from "./dto/update-product.dto";
 import { ImportProductImageUrlDto } from "./dto/import-product-image-url.dto";
 import { ProductsQueryDto } from "./dto/products-query.dto";
+import { AnnulProductDto } from './dto/product-lifecycle.dto';
 import { ProductCostInterceptor } from "./product-cost.interceptor";
 import { ProductsService } from "./products.service";
+import { ProductLifecycleRealtimeInterceptor } from './product-lifecycle-realtime.interceptor';
 import { FileInterceptor } from "@nestjs/platform-express";
 import * as fs from "node:fs";
 import { R2Service } from "../storage/r2.service";
@@ -41,7 +45,7 @@ import {
 } from "../storage/helpers/storage_helpers";
 import sharp from "sharp";
 
-@UseInterceptors(ProductCostInterceptor)
+@UseInterceptors(ProductCostInterceptor, ProductLifecycleRealtimeInterceptor)
 @Controller("products")
 export class ProductsController {
   private readonly uploadDir: string;
@@ -541,15 +545,32 @@ export class ProductsController {
   @Roles(Role.ADMIN, Role.ASISTENTE)
   @Permissions("editProducts")
   @Patch(":id/archive")
-  archive(@Req() req: Request, @Param("id") id: string) {
+  archive(@Req() req: Request, @Param("id", ParseUUIDPipe) id: string) {
     return this.products.archive(req.user as TenantUser, id);
+  }
+
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(Role.ADMIN,Role.ASISTENTE)
+  @Permissions('editProducts')
+  @Get(':id/lifecycle')
+  lifecycle(@Req() req:Request,@Param('id',ParseUUIDPipe) id:string){
+    return this.products.lifecycle(req.user as TenantUser,id);
+  }
+
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(Role.ADMIN)
+  @Permissions('editProducts')
+  @HttpCode(200)
+  @Post(':id/annul')
+  annul(@Req() req:Request,@Param('id',ParseUUIDPipe) id:string,@Body() body:AnnulProductDto){
+    return this.products.annul(req.user as TenantUser,id,body);
   }
 
   @UseGuards(AuthGuard("jwt"), RolesGuard)
   @Roles(Role.ADMIN, Role.ASISTENTE)
   @Permissions("editProducts")
   @Patch(":id/reactivate")
-  reactivate(@Req() req: Request, @Param("id") id: string) {
+  reactivate(@Req() req: Request, @Param("id", ParseUUIDPipe) id: string) {
     return this.products.reactivate(req.user as TenantUser, id);
   }
 
@@ -568,7 +589,6 @@ export class ProductsController {
   @UseGuards(AuthGuard("jwt"), RolesGuard)
   @Roles(Role.ADMIN)
   @Permissions("editProducts")
-  @Delete("debug/purge")
   purgeAllForDebug(@Req() req: Request) {
     return this.products.purgeAllForDebug(req.user as TenantUser);
   }
@@ -577,7 +597,7 @@ export class ProductsController {
   @Roles(Role.ADMIN, Role.ASISTENTE)
   @Permissions("editProducts")
   @Delete(":id")
-  remove(@Req() req: Request, @Param("id") id: string) {
+  remove(@Req() req: Request, @Param("id",ParseUUIDPipe) id: string) {
     return this.products.remove(req.user as TenantUser, id);
   }
 }

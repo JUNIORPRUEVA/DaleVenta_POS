@@ -9,7 +9,7 @@ const url = process.env.CRM_LICENSE_FIXTURE_URL;
   const now = new Date('2026-11-15T15:00:00Z');
   beforeAll(async () => {
     const target = new URL(url!);
-    if (target.hostname !== '127.0.0.1' || !['55519', '56701'].includes(target.port) || target.pathname !== '/crm_license_fixture' || target.search || target.hash) throw Error('unsafe_fixture_target');
+    if (target.hostname !== '127.0.0.1' || !['55519', '56701', '56711'].includes(target.port) || target.pathname !== '/crm_license_fixture' || target.search || target.hash) throw Error('unsafe_fixture_target');
     db = new PrismaClient({ datasources: { db: { url } } });
     const licenses = new LicenseService(db as any, {} as any, { emitCompany: jest.fn() } as any);
     service = new CompanyActivityService(db as any, { get: () => 'true' } as any, licenses);

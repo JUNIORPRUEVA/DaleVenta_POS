@@ -1,0 +1,14 @@
+{
+  "realPostgreSql": true,
+  "productionConnected": false,
+  "usage": [
+    {
+      "model": "gpt-6.2-astra",
+      "ok": true,
+      "calls": 14,
+      "input_tokens": 42422,
+      "output_tokens": 2656,
+      "cost_micros": "445616"
+    }
+  ]
+}

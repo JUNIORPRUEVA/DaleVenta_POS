@@ -1,3 +1,4 @@
+import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -59,7 +60,7 @@ class AppNavigator {
 
     return IconButton(
       tooltip: tooltip,
-      icon: const Icon(Icons.arrow_back_rounded),
+      icon: const MobileActionIcon(Icons.arrow_back_rounded),
       onPressed: () => goBack(context, fallbackRoute: fallback),
     );
   }

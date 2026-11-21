@@ -1,0 +1,56 @@
+{
+  "result": "PASS",
+  "cases": [
+    "catalog",
+    "create",
+    "edit",
+    "stock",
+    "zero",
+    "initial",
+    "history",
+    "legacy",
+    "inconsistent",
+    "archived",
+    "annulled",
+    "identity",
+    "nonadmin",
+    "disabled",
+    "loading",
+    "offline",
+    "forbidden",
+    "missing",
+    "version",
+    "plan",
+    "pending",
+    "uncertain",
+    "archives",
+    "empty",
+    "pages",
+    "archives-loading",
+    "archives-error",
+    "confirm-archive",
+    "confirm-restore",
+    "confirm-delete",
+    "confirm-annul",
+    "bulk-archive",
+    "bulk-delete",
+    "results",
+    "notice-archive",
+    "notice-restore",
+    "notice-delete",
+    "notice-annul",
+    "notice-refresh"
+  ],
+  "screenshots": 78,
+  "viewports": [
+    [
+      1280,
+      900
+    ],
+    [
+      390,
+      844
+    ]
+  ],
+  "apiRequests": 0
+}

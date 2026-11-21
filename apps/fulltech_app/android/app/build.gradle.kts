@@ -1,5 +1,6 @@
 import java.io.FileInputStream
 import java.util.Properties
+import java.util.Base64
 
 plugins {
     id("com.android.application")
@@ -11,6 +12,10 @@ plugins {
 val keystoreProperties = Properties()
 val keystorePropertiesFile = rootProject.file("key.properties")
 val hasReleaseKeystore = keystorePropertiesFile.exists()
+val fullposUat = (project.findProperty("dart-defines") as? String).orEmpty()
+    .split(',').filter { it.isNotEmpty() }
+    .mapNotNull { runCatching { String(Base64.getDecoder().decode(it), Charsets.UTF_8) }.getOrNull() }
+    .contains("FULLPOS_UAT_PROFILE=true")
 if (hasReleaseKeystore) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
@@ -32,6 +37,8 @@ android {
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.daleventa.pos"
+        if (fullposUat) applicationIdSuffix = ".uat.recovery"
+        manifestPlaceholders["fullposAppLabel"] = if (fullposUat) "FullPOS Recuperación UAT" else "FullPOS"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
@@ -58,6 +65,11 @@ android {
     }
 
     buildTypes {
+        debug {
+            if (project.findProperty("fullposMobilePreview") == "true") {
+                applicationIdSuffix = ".mobilepreview"
+            }
+        }
         // El build de depuracion NO requiere material de firma de produccion.
         // Solo los artefactos release exigen `android/key.properties`; si falta,
         // la tarea release falla con mensaje explicito (ver mas abajo) en lugar

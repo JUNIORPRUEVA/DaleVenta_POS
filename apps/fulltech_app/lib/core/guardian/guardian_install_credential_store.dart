@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../storage/serialized_secure_storage.dart';
 
 /// Credencial de instalación emitida por Guardian.
 ///
@@ -69,11 +70,11 @@ class GuardianInstallCredential {
 /// - Cualquier fallo se trata como "sin credencial" (fail-open).
 class GuardianInstallCredentialStore {
   GuardianInstallCredentialStore({FlutterSecureStorage? storage})
-      : _storage = storage ?? const FlutterSecureStorage();
+      : _storage = SerializedSecureStorage(storage: storage);
 
   static const _key = 'daleventas.guardian.install_credential.v1';
 
-  final FlutterSecureStorage _storage;
+  final SerializedSecureStorage _storage;
 
   bool get isSupported {
     if (kIsWeb) return false;

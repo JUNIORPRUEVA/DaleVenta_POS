@@ -1,3 +1,5 @@
+import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
+import 'package:daleventa_pos/core/widgets/mobile_page_app_bar.dart';
 import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
@@ -891,7 +893,7 @@ class EcfDgiiApplicationWizardState
                     alignment: Alignment.centerLeft,
                     child: TextButton.icon(
                       onPressed: _close,
-                      icon: const Icon(Icons.arrow_back),
+                      icon: const MobileActionIcon(Icons.arrow_back),
                       label: const Text('Volver a la guía'),
                     ),
                   ),
@@ -1015,7 +1017,7 @@ class EcfDgiiApplicationWizardState
     );
     if (widget.embedded) return body;
     return Scaffold(
-      appBar: AppBar(title: const Text('Postulación DGII')),
+      appBar: MobilePageAppBar(appBar: AppBar(title: const Text('Postulación DGII'))),
       body: body,
     );
   }

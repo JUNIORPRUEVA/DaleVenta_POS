@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../../../core/utils/native_phone_layout.dart';
+import '../../../core/widgets/custom_app_bar.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -584,9 +586,12 @@ class _EcfDgiiHabilitationPageState
         if (!didPop) _navigateBack();
       },
       child: Scaffold(
-        // Sin barra propia: la barra del shell ya muestra el título y el botón de
-        // volver. Una segunda barra duplicaba el encabezado y añadía tres iconos
-        // más a una pantalla que debe leerse de un vistazo.
+        appBar: usesNativePhoneLayout(context) ? CustomAppBar(
+          title: 'Facturación electrónica', showLogo: false, showDepartmentLabel: false,
+          leading: IconButton(tooltip: 'Regresar', onPressed: _navigateBack,
+            icon: const Icon(Icons.arrow_back_rounded)),
+        ) : null,
+        // Desktop reuses the shell header; native phones need their own bar.
         backgroundColor: Colors.transparent,
         body: RefreshIndicator(
           onRefresh: _refresh,

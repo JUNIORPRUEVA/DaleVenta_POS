@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:daleventa_pos/core/ai_assistant/application/ai_assistant_controller.dart';
 import 'package:daleventa_pos/core/ai_assistant/data/datasources/ai_assistant_datasource.dart';
 import 'package:daleventa_pos/core/ai_assistant/domain/models/ai_chat_context.dart';
 import 'package:daleventa_pos/core/ai_assistant/domain/services/ai_assistant_service.dart';
 import 'package:dio/dio.dart';
+import 'package:daleventa_pos/core/errors/api_exception.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _FakeAiAssistantDataSource extends AiAssistantDataSource {
@@ -17,7 +19,10 @@ class _FakeAiAssistantDataSource extends AiAssistantDataSource {
   String? nextConversationId = 'conv-1';
   String? nextMediaJobId = 'job-1';
   bool fail = false;
+  ApiException? apiFailure;
   bool failUpload = false;
+  Completer<Map<String, dynamic>>? pending;
+  Map<String, dynamic> extra = {};
 
   @override
   Future<Map<String, dynamic>> chat({
@@ -32,6 +37,8 @@ class _FakeAiAssistantDataSource extends AiAssistantDataSource {
     sentClientMessageIds.add(clientMessageId);
     sentMediaJobIds.add(mediaJobId);
     sentMessages.add(message);
+    if (pending != null) return pending!.future;
+    if (apiFailure != null) throw apiFailure!;
     if (fail) {
       throw StateError('fallo simulado');
     }
@@ -41,6 +48,7 @@ class _FakeAiAssistantDataSource extends AiAssistantDataSource {
       'citations': <Map<String, dynamic>>[],
       'conversationId': nextConversationId,
       'requiresHumanReview': false,
+      ...extra,
     };
   }
 
@@ -67,6 +75,144 @@ void main() {
     controller = AiAssistantController(AiAssistantService(fake));
     controller.setContext(const AiChatContext(module: 'catalogo'));
   });
+
+  test(
+    'muestra un solo aviso legible sin añadir errores al historial',
+    () async {
+      final previousAssistantMessages = controller.state.messages
+          .where((message) => !message.isUser)
+          .toList();
+      fake.apiFailure = ApiException(
+        'Revisa la conexión y vuelve a intentarlo.',
+      );
+      await controller.sendMessage('consulta');
+      expect(
+        controller.state.lastError,
+        'Revisa la conexión y vuelve a intentarlo.',
+      );
+      expect(
+        controller.state.messages.where((message) => !message.isUser),
+        previousAssistantMessages,
+      );
+      expect(controller.state.lastError, isNot(contains('ApiException')));
+      expect(controller.state.lastError, isNot(contains('UNKNOWN')));
+      fake.apiFailure = null;
+      await controller.sendMessage('consulta');
+      expect(controller.state.lastError, isNull);
+      expect(controller.state.messages.last.content, 'respuesta de prueba');
+      expect(fake.sentClientMessageIds.first, fake.sentClientMessageIds.last);
+    },
+  );
+
+  test(
+    'reintenta el mensaje original sin duplicar su burbuja ni identificador',
+    () async {
+      fake.fail = true;
+      await controller.sendMessage('Mi pregunta completa');
+      final firstId = fake.sentClientMessageIds.single;
+      expect(controller.canRetryLastMessage, isTrue);
+      fake.fail = false;
+      await controller.retryLastMessage();
+      expect(fake.sentMessages, [
+        'Mi pregunta completa',
+        'Mi pregunta completa',
+      ]);
+      expect(fake.sentClientMessageIds, [firstId, firstId]);
+      expect(
+        controller.state.messages.where((message) => message.isUser),
+        hasLength(1),
+      );
+      expect(controller.canRetryLastMessage, isFalse);
+      expect(controller.state.lastError, isNull);
+      await controller.retryLastMessage();
+      expect(fake.sentMessages, hasLength(2));
+    },
+  );
+
+  test('no reintenta un mensaje fallido de otro módulo', () async {
+    fake.fail = true;
+    await controller.sendMessage('Pregunta anterior');
+    controller.setContext(const AiChatContext(module: 'ecf'));
+    await controller.retryLastMessage();
+    expect(controller.canRetryLastMessage, isFalse);
+    expect(fake.sentMessages, hasLength(1));
+  });
+
+  test(
+    'un adjunto diferente no reutiliza el identificador del mensaje fallido',
+    () async {
+      fake.nextMediaJobId = 'primero';
+      await controller.attachFile(
+        filename: 'uno.txt',
+        bytes: [1],
+        mimeType: 'text/plain',
+      );
+      fake.fail = true;
+      await controller.sendMessage('Revisa el archivo');
+      final firstId = fake.sentClientMessageIds.single;
+      fake.nextMediaJobId = 'segundo';
+      await controller.attachFile(
+        filename: 'dos.txt',
+        bytes: [2],
+        mimeType: 'text/plain',
+      );
+      expect(controller.canRetryLastMessage, isFalse);
+      await controller.sendMessage('Revisa el archivo');
+      expect(fake.sentClientMessageIds.last, isNot(firstId));
+      expect(fake.sentMediaJobIds, ['primero', 'segundo']);
+    },
+  );
+
+  test('descarta respuestas tardías tras cambiar de módulo', () async {
+    final pending = Completer<Map<String, dynamic>>();
+    fake.pending = pending;
+    final sending = controller.sendMessage('consulta anterior');
+    controller.setContext(const AiChatContext(module: 'ecf'));
+    pending.complete({
+      'content': 'respuesta tardía',
+      'conversationId': 'anterior',
+    });
+    await sending;
+    expect(
+      controller.state.messages.any(
+        (message) => message.content == 'respuesta tardía',
+      ),
+      isFalse,
+    );
+    expect(controller.state.sending, isFalse);
+  });
+
+  test(
+    'no modifica un controlador cerrado mientras el motor responde',
+    () async {
+      final pending = Completer<Map<String, dynamic>>();
+      fake.pending = pending;
+      final sending = controller.sendMessage('consulta');
+      controller.dispose();
+      pending.complete({'content': 'respuesta de la sesión anterior'});
+      await expectLater(sending, completes);
+    },
+  );
+
+  test(
+    'conserva referencia real y revisión humana sin depender del texto',
+    () async {
+      fake.extra = {
+        'requiresHumanReview': true,
+        'incident': {
+          'reference': 'FPS-2026-000001',
+          'status': 'OPEN',
+          'duplicate': false,
+        },
+      };
+      await controller.sendMessage('reportar problema');
+      expect(
+        controller.state.messages.last.incident?.reference,
+        'FPS-2026-000001',
+      );
+      expect(controller.state.messages.last.requiresHumanReview, isTrue);
+    },
+  );
 
   test('conserva el conversationId entre mensajes del mismo módulo', () async {
     await controller.sendMessage('primero');

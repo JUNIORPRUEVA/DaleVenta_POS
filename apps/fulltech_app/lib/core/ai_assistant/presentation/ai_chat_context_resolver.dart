@@ -33,6 +33,16 @@ AiChatContext buildAiChatContextFromLocation(String location) {
     module = 'media-gallery';
   } else if (path.startsWith('/catalogo')) {
     module = 'catalogo';
+  } else if (path.startsWith('/ecf')) {
+    module = 'ecf';
+  } else if (path.startsWith('/planes') || path.startsWith('/licencias')) {
+    module = 'planes';
+  } else if (path.startsWith('/caja')) {
+    module = 'caja';
+  } else if (path.startsWith('/ventas/compras')) {
+    module = 'compras';
+  } else if (path.startsWith('/configuracion/almacenes')) {
+    module = 'almacenes';
   } else if (path.startsWith('/ventas')) {
     module = 'ventas';
   } else if (path.startsWith('/contabilidad')) {
@@ -76,6 +86,30 @@ AiChatContext buildAiChatContextFromLocation(String location) {
 }
 
 String? _screenNameFromPath(String path) {
+  const moduleNames = {
+    '/ecf/documents': 'Facturas electrónicas',
+    '/ecf/config': 'Numeración fiscal',
+    '/ecf/dgii': 'Autorización fiscal',
+    '/ecf': 'Facturación electrónica',
+    '/planes/catalogo': 'Planes disponibles',
+    '/planes/pago': 'Pago del plan por transferencia',
+    '/planes/historial': 'Historial de pagos del plan',
+    '/planes': 'Plan actual',
+    '/licencias': 'Plan actual',
+    '/ventas/compras': 'Compras',
+    '/caja/turnos': 'Historial de turnos',
+    '/caja': 'Caja',
+    '/configuracion/almacenes': 'Almacenes',
+    '/configuracion/empresa': 'Empresa',
+    '/configuracion/impresora': 'Impresora',
+    '/ventas/lista': 'Historial de ventas',
+    '/ventas/creditos': 'Historial de créditos',
+  };
+  for (final entry in moduleNames.entries) {
+    if (path == entry.key || path.startsWith('${entry.key}/')) {
+      return entry.value;
+    }
+  }
   switch (path) {
     case Routes.profile:
       return 'Perfil';
@@ -96,9 +130,9 @@ String? _screenNameFromPath(String path) {
     case Routes.ventas:
       return 'Ventas';
     case Routes.registrarVenta:
-      return 'Registrar venta';
+      return 'Facturación';
     case Routes.cotizaciones:
-      return 'Cotizaciones';
+      return 'Facturación';
     case Routes.cotizacionesHistorial:
       return 'Historial de cotizaciones';
     case Routes.serviceOrders:

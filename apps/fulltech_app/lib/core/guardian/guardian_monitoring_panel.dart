@@ -1,3 +1,4 @@
+import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -328,7 +329,7 @@ class _GuardianMonitoringPanelState extends State<GuardianMonitoringPanel> {
             child: !_requested
                 ? OutlinedButton.icon(
                     onPressed: _load,
-                    icon: const Icon(Icons.refresh, size: 18),
+                    icon: const MobileActionIcon(Icons.refresh, size: 18),
                     label: const Text('Consultar estado del monitoreo'),
                   )
                 : OutlinedButton.icon(

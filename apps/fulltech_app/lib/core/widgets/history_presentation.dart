@@ -1,3 +1,4 @@
+import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
@@ -263,7 +264,7 @@ class HistoryListHeader extends StatelessWidget {
         IconButton(
           tooltip: 'Actualizar',
           onPressed: onRefresh,
-          icon: const Icon(Icons.refresh_rounded, size: 18),
+          icon: const MobileActionIcon(Icons.refresh_rounded, size: 18),
         ),
       ],
     ),
@@ -304,7 +305,7 @@ class HistoryToolbar extends StatelessWidget {
 
 InputDecoration historySearchDecoration(String hint) => InputDecoration(
   hintText: hint,
-  prefixIcon: const Icon(Icons.search_rounded, size: 22),
+  prefixIcon: const MobileActionIcon(Icons.search_rounded, size: 22),
   isDense: true,
   filled: true,
   fillColor: AppColors.surface,

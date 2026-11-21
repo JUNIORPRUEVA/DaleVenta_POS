@@ -1,3 +1,4 @@
+import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
 import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -1178,7 +1179,7 @@ class _CotizacionesHistorialScreenState
             filled: true,
             fillColor: Colors.white,
             isDense: true,
-            prefixIcon: const Icon(
+            prefixIcon: const MobileActionIcon(
               Icons.search_rounded,
               size: 18,
               color: Color(0xFF52667C),
@@ -1278,7 +1279,7 @@ class _CotizacionesHistorialScreenState
           FilledButton.icon(
             onPressed: _openFilters,
             style: style,
-            icon: const Icon(Icons.filter_alt_outlined, size: 18),
+            icon: const MobileActionIcon(Icons.filter_alt_outlined, size: 18),
             label: Text(
               _activeFilterCount > 0
                   ? 'Filtro ($_activeFilterCount)'
@@ -1314,7 +1315,7 @@ class _CotizacionesHistorialScreenState
                 horizontal: 12,
                 vertical: 12,
               ),
-              prefixIcon: const Icon(Icons.search_rounded),
+              prefixIcon: const MobileActionIcon(Icons.search_rounded),
               suffixIcon: _searchQuery.isEmpty
                   ? null
                   : IconButton(
@@ -1324,7 +1325,7 @@ class _CotizacionesHistorialScreenState
             )
           : desktopSalesInputDecoration(
               hintText: 'Buscar cliente, telefono o fecha',
-              prefixIcon: const Icon(Icons.search_rounded),
+              prefixIcon: const MobileActionIcon(Icons.search_rounded),
               suffixIcon: _searchQuery.isEmpty
                   ? null
                   : IconButton(
@@ -1345,7 +1346,7 @@ class _CotizacionesHistorialScreenState
               style: IconButton.styleFrom(
                 backgroundColor: theme.colorScheme.surfaceContainerHighest,
               ),
-              icon: const Icon(Icons.arrow_back_rounded),
+              icon: const MobileActionIcon(Icons.arrow_back_rounded),
             ),
             const SizedBox(width: 8),
           ],
@@ -2142,13 +2143,13 @@ class _CotizacionesHistorialScreenState
               icon: Badge(
                 isLabelVisible: _activeFilterCount > 0,
                 smallSize: 8,
-                child: const Icon(Icons.filter_alt_outlined),
+                child: const MobileActionIcon(Icons.filter_alt_outlined),
               ),
             ),
             IconButton(
               tooltip: 'Actualizar',
               onPressed: _refreshing ? null : _load,
-              icon: const Icon(Icons.refresh_rounded),
+              icon: const MobileActionIcon(Icons.refresh_rounded),
             ),
           ],
         ],

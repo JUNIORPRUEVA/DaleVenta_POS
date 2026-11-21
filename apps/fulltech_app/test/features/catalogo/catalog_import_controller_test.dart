@@ -158,6 +158,7 @@ class _ImportFakeCatalogRepository extends CatalogRepository {
   Future<ProductModel> archiveProduct(
     String id, {
     bool skipLoader = false,
+    String? resolvingActionId,
   }) async {
     archives += 1;
     final product = products.firstWhere((item) => item.id == id);
@@ -352,7 +353,7 @@ void main() {
     },
   );
 
-  test('eliminación optimista quita producto al instante', () async {
+  test('eliminación conserva el producto hasta confirmar el servidor', () async {
     final repo = _ImportFakeCatalogRepository([
       ProductModel(
         id: 'p-1',
@@ -372,7 +373,7 @@ void main() {
     await controller.load();
 
     unawaited(controller.remove('p-1'));
-    expect(container.read(catalogControllerProvider).items, isEmpty);
+    expect(container.read(catalogControllerProvider).items, hasLength(1));
     await Future<void>.delayed(Duration.zero);
 
     expect(repo.deletes, 1);

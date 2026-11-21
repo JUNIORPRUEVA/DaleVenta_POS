@@ -3,7 +3,7 @@ import 'dart:math';
 
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../storage/serialized_secure_storage.dart';
 import 'package:http_parser/http_parser.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -151,6 +151,9 @@ class OfflineEmergencyPolicy {
       validUntilUtc: validUntilUtc,
       observedAtUtc: observedAtUtc,
       advancedProtocolVerified: supportsAdvancedProtocol(data),
+      cashOpenPermit: data['cashOpenPermit'] is String
+          ? data['cashOpenPermit'] as String
+          : null,
       allowedOperations:
           (data['allowedOperations'] as List?)?.whereType<String>().toList() ??
           const ['sales.create'],
@@ -166,6 +169,7 @@ class OfflineEmergencyPolicy {
     DateTime? observedAtUtc,
     List<String> allowedOperations = const ['sales.create'],
     bool advancedProtocolVerified = false,
+    String? cashOpenPermit,
   }) async {
     final normalizedCompanyId = companyId.trim();
     final normalizedUserId = userId.trim();
@@ -187,6 +191,7 @@ class OfflineEmergencyPolicy {
       observedDeviceUtc: (observedAtUtc ?? DateTime.now().toUtc()).toUtc(),
       allowedOperations: allowedOperations,
       advancedProtocolVerified: advancedProtocolVerified,
+      cashOpenPermit: cashOpenPermit,
     );
     final prefs = await _prefsProvider();
     final key = _key(normalizedCompanyId, normalizedUserId);
@@ -281,6 +286,49 @@ class OfflineEmergencyPolicy {
       lastServerValidationUtc: snapshot.serverUtc,
       elapsedSinceValidation: elapsed.isNegative ? Duration.zero : elapsed,
     );
+  }
+
+  Future<String?> cashOpeningPermit({
+    required String companyId,
+    required String userId,
+    required String deviceFingerprint,
+    required DateTime openedAt,
+  }) async => (await cashOpeningAuthorization(
+    companyId: companyId,
+    userId: userId,
+    deviceFingerprint: deviceFingerprint,
+    deviceOpenedAt: openedAt,
+  ))?.permit;
+
+  /// Uses the sealed server observation plus elapsed device time, as the
+  /// existing expiry check does. A small device offset must not put a new
+  /// opening before the signed grant. This instant is journaled once and
+  /// remains unchanged on replay; backend bounds are never relaxed.
+  Future<({String permit, DateTime openedAt})?> cashOpeningAuthorization({
+    required String companyId,
+    required String userId,
+    required String deviceFingerprint,
+    required DateTime deviceOpenedAt,
+  }) async {
+    final decision = await canStartOfflineSale(
+      companyId: companyId,
+      userId: userId,
+      deviceFingerprint: deviceFingerprint,
+      nowUtc: deviceOpenedAt,
+    );
+    if (!decision.allowed) return null;
+    final prefs = await _prefsProvider();
+    final raw = prefs.getString(_key(companyId.trim(), userId.trim()));
+    final snapshot = raw == null
+        ? null
+        : _OfflineEmergencySnapshot.tryDecode(raw);
+    if (snapshot == null || !snapshot.allowedOperations.contains('cash.open')) {
+      return null;
+    }
+    final permit = snapshot.cashOpenPermit;
+    final elapsed = decision.elapsedSinceValidation;
+    if (permit == null || elapsed == null || elapsed.isNegative) return null;
+    return (permit: permit, openedAt: snapshot.serverUtc.add(elapsed));
   }
 
   Future<void> assertOperationAllowed({
@@ -406,7 +454,7 @@ class FlutterSecureOfflineEmergencySealStore
     implements OfflineEmergencySealStore {
   const FlutterSecureOfflineEmergencySealStore();
 
-  static const _storage = FlutterSecureStorage();
+  static const _storage = SerializedSecureStorage();
 
   @override
   Future<String?> read(String key) => _storage.read(key: key);
@@ -427,6 +475,7 @@ class _OfflineEmergencySnapshot {
     required this.observedDeviceUtc,
     this.allowedOperations = const ['sales.create'],
     this.advancedProtocolVerified = false,
+    this.cashOpenPermit,
   });
 
   final String policyVersion;
@@ -438,6 +487,7 @@ class _OfflineEmergencySnapshot {
   final DateTime observedDeviceUtc;
   final List<String> allowedOperations;
   final bool advancedProtocolVerified;
+  final String? cashOpenPermit;
 
   Map<String, dynamic> toJson() {
     return {
@@ -450,6 +500,7 @@ class _OfflineEmergencySnapshot {
       'observedDeviceUtc': observedDeviceUtc.toIso8601String(),
       'allowedOperations': allowedOperations,
       'advancedProtocolVerified': advancedProtocolVerified,
+      if (cashOpenPermit != null) 'cashOpenPermit': cashOpenPermit,
     };
   }
 
@@ -483,6 +534,9 @@ class _OfflineEmergencySnapshot {
       }
       return _OfflineEmergencySnapshot(
         advancedProtocolVerified: decoded['advancedProtocolVerified'] == true,
+        cashOpenPermit: decoded['cashOpenPermit'] is String
+            ? decoded['cashOpenPermit'] as String
+            : null,
         policyVersion: policyVersion,
         companyId: companyId,
         userId: userId,

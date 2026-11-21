@@ -163,6 +163,9 @@ Future<void> _pump(
         context,
       );
     }
+    for (final name in ['back', 'search', 'filter', 'refresh']) {
+      await precacheImage(AssetImage('assets/image/mobile_navigation/$name.png'), context);
+    }
   });
   await tester.pumpAndSettle();
 }
@@ -190,6 +193,25 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
+  testWidgets('native reports keeps key metrics visible and opens details on demand', (tester) async {
+    await _pump(tester, const Size(390, 844), _ReportsRepository());
+    for (final key in ['sales', 'gross-profit', 'expenses', 'net-profit']) {
+      expect(find.byKey(ValueKey('reports-kpi-$key')), findsOneWidget);
+    }
+    expect(find.byType(SalesBarChart), findsNothing);
+    await tester.tap(find.text('Ventas y formas de pago'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SalesBarChart), findsOneWidget);
+    await tester.tap(find.text('Ventas y formas de pago'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SalesBarChart), findsNothing);
+    await tester.tap(find.text('Márgenes y tickets'));
+    await tester.pumpAndSettle();
+    expect(find.text('Margen bruto'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  }, variant: TargetPlatformVariant({TargetPlatform.android, TargetPlatform.iOS}));
+
   for (final size in [
     const Size(390, 844),
     const Size(1024, 640),

@@ -1,3 +1,4 @@
+import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
 import 'dart:async';
 
 import 'package:flutter_map/flutter_map.dart';
@@ -814,7 +815,7 @@ class _CompactDetailHeader extends StatelessWidget {
             minimumSize: const Size(36, 36),
             padding: EdgeInsets.zero,
           ),
-          icon: const Icon(Icons.arrow_back_rounded, size: 20),
+          icon: const MobileActionIcon(Icons.arrow_back_rounded, size: 20),
         ),
         const SizedBox(width: 4),
         Expanded(

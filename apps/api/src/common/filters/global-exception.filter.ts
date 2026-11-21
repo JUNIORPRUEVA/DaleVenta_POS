@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { GuardianCaptureRegistry } from '../../guardian/guardian.capture.registry';
+import { sanitizeRequestUrl } from '../request-log';
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -33,10 +34,24 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       requestId?: string;
       user?: { id?: string; companyId?: string | null };
     }>();
-    const res = ctx.getResponse<{ status: (code: number) => any; json: (body: any) => any }>();
+    const res = ctx.getResponse<{ status: (code: number) => any; json: (body: any) => any; setHeader?: (name: string, value: string) => void }>();
 
     const method = req?.method ?? 'UNKNOWN';
-    const url = req?.originalUrl ?? req?.url ?? 'UNKNOWN';
+    const rawUrl = req?.originalUrl ?? req?.url ?? 'UNKNOWN';
+    const url = sanitizeRequestUrl(rawUrl);
+    const redactRequestUrl = (value: string) => value.split(rawUrl).join(url);
+
+    const databaseMessage=exception instanceof Prisma.PrismaClientKnownRequestError
+      ?safeString(exception.meta):exception instanceof Prisma.PrismaClientUnknownRequestError?exception.message:'';
+    const lifecycleSignal=databaseMessage.match(/PRODUCT_LIFECYCLE_(NOT_ACTIVE|ANNULLED|TENANT_MISMATCH)/)?.[1];
+    if(lifecycleSignal){
+      const forbidden=lifecycleSignal==='TENANT_MISMATCH';
+      res.status(forbidden?403:409).json({statusCode:forbidden?403:409,
+        code:forbidden?'PRODUCT_COMPANY_MISMATCH':lifecycleSignal==='ANNULLED'?'PRODUCT_ANNULLED':'PRODUCT_NOT_ACTIVE',
+        message:forbidden?'El producto no pertenece a esta empresa.':'El producto ya no está activo. Actualiza el catálogo antes de continuar.',
+      });
+      return;
+    }
 
     const isHttp = exception instanceof HttpException;
     const status = isHttp
@@ -77,13 +92,22 @@ export class GlobalExceptionFilter implements ExceptionFilter {
                 : null;
 
     const rawResponse = isHttp ? exception.getResponse() : null;
-    const message = isHttp
+    if (status === HttpStatus.TOO_MANY_REQUESTS && isObject(rawResponse)) {
+      const seconds = rawResponse.retryAfterSeconds;
+      if (typeof seconds === 'number' && Number.isFinite(seconds) && seconds >= 0) {
+        res.setHeader?.('Retry-After', String(Math.ceil(seconds)));
+      }
+    }
+    const rawMessage = isHttp
       ? safeString(rawResponse)
       : exception instanceof Error
         ? exception.message
         : safeString(exception);
 
-    const stack = exception instanceof Error ? exception.stack : undefined;
+    const message = redactRequestUrl(rawMessage);
+    const stack = exception instanceof Error && exception.stack
+      ? redactRequestUrl(exception.stack)
+      : undefined;
     const requestId = req?.requestId ?? null;
     const logPayload = {
       requestId,
@@ -114,7 +138,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         path: url,
         status,
         exceptionType: exception instanceof Error ? exception.constructor.name : typeof exception,
-        message: exception instanceof Error ? exception.message : message,
+        message: exception instanceof Error ? redactRequestUrl(exception.message) : message,
         stack,
         // Metadatos de Prisma sin parámetros de consulta: permiten distinguir
         // una caída de infraestructura (P1001) de una regla de negocio (P2002).

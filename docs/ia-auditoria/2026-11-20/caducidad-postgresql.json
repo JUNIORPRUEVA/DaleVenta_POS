@@ -1,0 +1,7 @@
+{
+  "passed": true,
+  "realPostgreSqlExpiryFixture": true,
+  "resetAfterExpiredSession": true,
+  "newConversationCreated": true,
+  "productionConnected": false
+}

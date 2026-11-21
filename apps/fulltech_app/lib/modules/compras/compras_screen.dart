@@ -20,6 +20,7 @@ import '../../core/routing/app_navigator.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/uom/uom_formatters.dart';
 import '../../core/utils/money_formatters.dart';
+import '../../core/utils/native_phone_layout.dart';
 import '../../core/utils/app_feedback.dart';
 import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/custom_app_bar.dart';
@@ -1942,8 +1943,10 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
     final theme = Theme.of(context);
     final title =
         '${order.orderNumber} · ${order.supplier?.commercialName ?? 'Sin suplidor'}';
-    final subtitle =
-        '${order.items.length} artículos · ${_orderUnitsLabel(order.items)} · ${order.status}';
+    final phone = usesNativePhoneLayout(context);
+    final subtitle = phone
+        ? '${order.items.length} ${order.items.length == 1 ? 'línea' : 'líneas'} · ${_orderUnitsLabel(order.items)} unidades'
+        : '${order.items.length} artículos · ${_orderUnitsLabel(order.items)} · ${order.status}';
     void open() {
       if (showInlineDetail) {
         setState(() => _selectedOrderDetailId = order.id);
@@ -2042,7 +2045,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                       const SizedBox(height: 5),
                       Row(
                         children: [
-                          _StatusChip(label: order.status),
+                          _StatusChip(label: phone ? purchaseOrderStatusLabel(order.status) : order.status),
                           const Spacer(),
                           Text(
                             _money(order.total),

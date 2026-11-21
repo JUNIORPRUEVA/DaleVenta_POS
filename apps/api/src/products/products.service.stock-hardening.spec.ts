@@ -34,6 +34,12 @@ function buildService(
   const implementation = transaction?.getMockImplementation();
   if (implementation) transaction.mockImplementation((fn) => implementation((tx: Record<string, unknown>) => {
     tx.$executeRaw ??= jest.fn().mockResolvedValue(1);
+    tx.$queryRaw ??= jest.fn().mockResolvedValue([]);
+    tx.productLifecycleEvent ??= {findFirst:jest.fn(async()=>null),findMany:jest.fn(async()=>[]),create:jest.fn(async()=>({}))};
+    tx.productLifecycleEvent ??= {findFirst:jest.fn(async()=>null),findMany:jest.fn(async()=>[]),create:jest.fn(async()=>({}))};
+    for(const delegate of ['cotizacionItem','purchaseReceiptItem','priceListProductRule','websiteProductOverride']){
+      tx[delegate] ??= {count:jest.fn(async()=>0)};
+    }
     return fn(tx);
   }));
   const service = new ProductsService(

@@ -1,3 +1,4 @@
+import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -541,7 +542,7 @@ class _CashMovementsHistoryScreenState
               borderRadius: BorderRadius.zero,
               borderSide: BorderSide.none,
             ),
-            prefixIcon: const Icon(
+            prefixIcon: const MobileActionIcon(
               Icons.search_rounded,
               color: Color(0xFF8A9AA8),
             ),
@@ -630,14 +631,14 @@ class _CashMovementsHistoryScreenState
                               _type != _MovementTypeFilter.all ||
                               _date != _MovementDateFilter.today,
                           smallSize: 8,
-                          child: const Icon(Icons.filter_alt_outlined),
+                          child: const MobileActionIcon(Icons.filter_alt_outlined),
                         ),
                       ),
                     if (!_searchOpen)
                       IconButton(
                         tooltip: 'Actualizar',
                         onPressed: () => unawaited(_reloadMovements()),
-                        icon: const Icon(Icons.refresh_rounded),
+                        icon: const MobileActionIcon(Icons.refresh_rounded),
                       ),
                   ],
                   trailing: const SizedBox.shrink(),
@@ -664,7 +665,7 @@ class _CashMovementsHistoryScreenState
                     IconButton.filledTonal(
                       tooltip: 'Actualizar',
                       onPressed: () => unawaited(_reloadMovements()),
-                      icon: const Icon(Icons.refresh_rounded),
+                      icon: const MobileActionIcon(Icons.refresh_rounded),
                     ),
                     const SizedBox(width: 10),
                     const CashTurnMenuButton(),
@@ -939,7 +940,7 @@ class _CashMovementsFilterDrawerState
                           color: const Color(0xFFEAF1FF),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Icon(
+                        child: const MobileActionIcon(
                           Icons.filter_alt_rounded,
                           color: AppColors.secondary,
                         ),
@@ -1472,7 +1473,7 @@ class _CashExpensesHistoryScreenState
                   IconButton.filledTonal(
                     tooltip: 'Actualizar',
                     onPressed: () => unawaited(_reloadExpenses()),
-                    icon: const Icon(Icons.refresh_rounded),
+                    icon: const MobileActionIcon(Icons.refresh_rounded),
                   ),
                 ],
               ),
@@ -1746,7 +1747,7 @@ class _CashTurnHistoryScreenState extends ConsumerState<CashTurnHistoryScreen> {
             filled: true,
             fillColor: Colors.white,
             isDense: true,
-            prefixIcon: const Icon(
+            prefixIcon: const MobileActionIcon(
               Icons.search_rounded,
               size: 18,
               color: Color(0xFF52667C),
@@ -1797,14 +1798,14 @@ class _CashTurnHistoryScreenState extends ConsumerState<CashTurnHistoryScreen> {
                           _selectedRange != null ||
                           _statusFilter != _ShiftStatusFilter.all,
                       smallSize: 8,
-                      child: const Icon(Icons.filter_alt_outlined),
+                      child: const MobileActionIcon(Icons.filter_alt_outlined),
                     ),
                   ),
                 if (!_searchOpen)
                   IconButton(
                     tooltip: 'Actualizar',
                     onPressed: () => unawaited(_reloadTurns()),
-                    icon: const Icon(Icons.refresh_rounded),
+                    icon: const MobileActionIcon(Icons.refresh_rounded),
                   ),
               ],
               trailing: const SizedBox.shrink(),
@@ -1891,7 +1892,7 @@ class _CashTurnHistoryScreenState extends ConsumerState<CashTurnHistoryScreen> {
                       IconButton.filledTonal(
                         tooltip: 'Actualizar',
                         onPressed: () => unawaited(_reloadTurns()),
-                        icon: const Icon(Icons.refresh_rounded),
+                        icon: const MobileActionIcon(Icons.refresh_rounded),
                       ),
                     ],
                   ),
@@ -2046,7 +2047,7 @@ class _ShiftHistoryFilterDrawerState extends State<_ShiftHistoryFilterDrawer> {
                         color: AppColors.secondarySoft,
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: const Icon(
+                      child: const MobileActionIcon(
                         Icons.filter_alt_outlined,
                         color: AppColors.primary,
                       ),

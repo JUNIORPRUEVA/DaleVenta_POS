@@ -1,3 +1,4 @@
+import 'package:daleventa_pos/core/widgets/mobile_page_app_bar.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -60,10 +61,10 @@ class _PriceListsScreenState extends ConsumerState<PriceListsScreen> {
     return Theme(
       data: _priceListTheme(context),
       child: Scaffold(
-        appBar: AppBar(
+        appBar: MobilePageAppBar(appBar: AppBar(
           leading: BackButton(onPressed: () => context.go(Routes.cotizaciones)),
           title: const Text('Listas de precios'),
-        ),
+        )),
         body: lists.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (error, _) => _ErrorState(

@@ -163,7 +163,22 @@ flutter:
 
   assets:
     - assets/image/
+    - assets/image/product_add.png
+    - assets/image/product_delete.png
+    - assets/image/product_filter.png
     - assets/image/billing/
+    - assets/image/billing/mobile_menu.png
+    - assets/image/billing/mobile_edit.png
+    - assets/image/billing/mobile_delete.png
+    - assets/image/billing/mobile_category.png
+    - assets/image/billing/mobile_client.png
+    - assets/image/billing/mobile_price_list.png
+    - assets/image/billing/mobile_search.png
+    - assets/image/mobile_navigation/
+    - assets/image/mobile_navigation/back.png
+    - assets/image/mobile_navigation/search.png
+    - assets/image/mobile_navigation/filter.png
+    - assets/image/mobile_navigation/refresh.png
     - assets/image/logo.png
     - assets/iconos/
     - assets/fonts/

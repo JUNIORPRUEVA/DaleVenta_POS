@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:daleventa_pos/core/auth/auth_provider.dart';
+import 'package:daleventa_pos/core/auth/token_storage.dart';
+import 'package:daleventa_pos/core/cache/local_json_cache.dart';
 import 'package:daleventa_pos/core/errors/api_exception.dart';
 import 'package:daleventa_pos/core/models/product_model.dart';
 import 'package:daleventa_pos/core/models/user_model.dart';
@@ -11,6 +13,27 @@ import 'package:dio/dio.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+// These two contract tests isolate HTTP mapping. Local queue/tenant decisions
+// are exercised with real persisted rows in product_lifecycle_repository_test.
+class _LifecycleStorage extends TokenStorage {
+  @override
+  Future<UserModel?> getUserSnapshot() async => UserModel(
+    id: 'contract-owner', companyId: 'contract-company', email: 'contract@example.test',
+    nombreCompleto: 'Contract fixture', telefono: '',
+  );
+}
+class _LifecycleCache extends LocalJsonCache {
+  @override
+  Future<Map<String, dynamic>?> readMap(String key, {Duration? maxAge}) async => null;
+  @override
+  Future<void> writeMap(String key, Map<String, dynamic> value) async {}
+}
+class _LifecycleContractRepository extends CatalogRepository {
+  _LifecycleContractRepository(Dio dio) : super(dio, _LifecycleStorage(), null, const Duration(minutes: 2), _LifecycleCache());
+  @override
+  Future<void> assertNoPendingProductReferences(String id, {String? ignoreActionId}) async {}
+}
 
 class _TaxFakeCatalogRepository extends CatalogRepository {
   _TaxFakeCatalogRepository(this.products) : super(Dio());
@@ -967,7 +990,7 @@ void main() {
             },
           );
         });
-      final repository = CatalogRepository(dio);
+      final repository = _LifecycleContractRepository(dio);
 
       await expectLater(
         repository.deleteProduct('p-1'),
@@ -1010,7 +1033,7 @@ void main() {
           },
         );
       });
-    final repository = CatalogRepository(dio);
+    final repository = _LifecycleContractRepository(dio);
 
     final archived = await repository.archiveProduct('p-1');
 

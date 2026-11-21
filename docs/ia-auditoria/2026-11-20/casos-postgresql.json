@@ -1,0 +1,8 @@
+{
+  "passed": true,
+  "realPostgreSql": true,
+  "ownReferencePersisted": true,
+  "foreignCompanyExcluded": true,
+  "notification": "simulated worker; not an external delivery",
+  "productionConnected": false
+}

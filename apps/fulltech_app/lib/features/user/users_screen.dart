@@ -1,3 +1,4 @@
+import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -279,7 +280,7 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
           IconButton(
             tooltip: 'Buscar',
             onPressed: () => setState(() => _searching = true),
-            icon: const Icon(Icons.search),
+            icon: const MobileActionIcon(Icons.search),
           ),
           PopupMenuButton<_UserStatusFilter>(
             tooltip: 'Filtrar',
@@ -299,7 +300,7 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
                 child: Text('Solo bloqueados'),
               ),
             ],
-            icon: const Icon(Icons.filter_list),
+            icon: const MobileActionIcon(Icons.filter_list),
           ),
         ],
       ),
@@ -2426,7 +2427,7 @@ class _UserPermissionsScreenState extends ConsumerState<UserPermissionsScreen> {
                 tooltip: 'Volver',
                 onPressed: () =>
                     AppNavigator.goBack(context, fallbackRoute: Routes.users),
-                icon: const Icon(Icons.arrow_back_rounded),
+                icon: const MobileActionIcon(Icons.arrow_back_rounded),
               ),
               trailing: currentUser == null
                   ? null

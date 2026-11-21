@@ -41,6 +41,7 @@ Map<String, dynamic> _response(
 }) {
   return {
     'status': status,
+    'matchesExpected': status == 'CONFIRMED',
     'clientRequestId': _requestId,
     'retryAllowed': false,
     'assertsPaymentReceived': false,
@@ -293,7 +294,12 @@ void main() {
         _attempt(id: 'c', idempotencyKey: 'req-c'),
       ],
       lookup: (String id, double? expected) async {
-        if (id == 'req-a') return _response('CONFIRMED');
+        if (id == 'req-a') {
+          return {
+            ..._response('CONFIRMED', sale: {'id': 'sale-a', 'totalSold': expected}),
+            'clientRequestId': id,
+          };
+        }
         if (id == 'req-b') return _response('NOT_FOUND');
         return null;
       },
@@ -310,7 +316,7 @@ void main() {
   test('guarda evidencia incluso cuando resuelve el aviso', () async {
     final reconciler = build(
       lookup: (String id, double? expected) async =>
-          _response('CONFIRMED', sale: {'id': 'sale-9'}),
+          _response('CONFIRMED', sale: {'id': 'sale-9', 'totalSold': expected}),
     );
 
     await reconciler.verify(_attempt());

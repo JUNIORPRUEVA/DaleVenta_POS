@@ -6,6 +6,13 @@ This document describes confirmed product behavior from repository evidence only
 
 ## Product Purpose
 
+Web access after registration (local correction, 2026-11-20): successful account
+creation opens the operational app through a one-use ticket. Updates cannot
+interrupt that preparation. Failed access preserves the created account and
+shows an explanation on login; it does not silently return to the public home
+or repeat registration. Publication state and evidence are recorded in
+`WEB_REGISTRO_ACCESO_AUDITORIA_2026-11-20.md`.
+
 FullPOS Cloud is a cloud-connected point-of-sale and business operations product for companies that need sales, inventory, clients, cash, purchasing, accounting/fiscal documents, staff, and operational workflows in one system.
 
 Evidence: `apps/fulltech_app/README.md`, `apps/fulltech_app/lib/core/routing/routes.dart`, `apps/api/src/app.module.ts`, and `apps/api/prisma/schema.prisma`.
@@ -87,6 +94,17 @@ Confirmed capabilities:
 - Offline/cache/sync behavior for some frontend flows.
 
 ## Multi-Company Behavior
+
+Recovery UI refinement (2026-11-20): the Center is ADMIN-only. Uncertain
+charges are checked automatically, with a bounded manual read-only check when
+needed. A missing record permits an audited human withdrawal or preparation
+of an independent editable ticket; neither action automatically charges money.
+Manual withdrawal archives original local evidence. Rejected cash operations
+cannot be marked not performed if a related server record exists. Declared
+money can be matched to an exact original sale or withdrawn administratively
+with a reason; existing financial records are never erased by these actions.
+New POS tickets have stable operation identities, so independent identical
+tickets can continue while the original uncertain ticket remains protected.
 
 The data model uses `Company` as the tenant root. Many backend services require a `companyId` from the authenticated user via `requireTenant`. Services and tests show tenant-specific querying and protection, especially products, clients, sales, tax, users, warehouses, and cotizaciones.
 

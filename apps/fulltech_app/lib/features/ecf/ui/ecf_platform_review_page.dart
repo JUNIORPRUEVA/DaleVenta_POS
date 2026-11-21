@@ -1,3 +1,5 @@
+import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
+import 'package:daleventa_pos/core/widgets/mobile_page_app_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -129,7 +131,7 @@ class _EcfPlatformReviewPageState extends ConsumerState<EcfPlatformReviewPage> {
   Widget build(BuildContext context) {
     final staff = ref.watch(ecfPlatformStaffProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Revisión de expedientes DGII')),
+      appBar: MobilePageAppBar(appBar: AppBar(title: const Text('Revisión de expedientes DGII'))),
       body: staff.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => _MessageCard(
@@ -186,7 +188,7 @@ class _EcfPlatformReviewPageState extends ConsumerState<EcfPlatformReviewPage> {
               IconButton(
                 tooltip: 'Actualizar',
                 onPressed: _refresh,
-                icon: const Icon(Icons.refresh),
+                icon: const MobileActionIcon(Icons.refresh),
               ),
             ],
           ),
@@ -552,7 +554,7 @@ class _EcfPlatformApplicationDetailPageState
   Widget build(BuildContext context) {
     final detail = ref.watch(ecfPlatformApplicationProvider(widget.companyId));
     return Scaffold(
-      appBar: AppBar(title: const Text('Expediente')),
+      appBar: MobilePageAppBar(appBar: AppBar(title: const Text('Expediente'))),
       body: detail.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => _MessageCard(

@@ -6,11 +6,12 @@ import { ProductSourceResolver } from './product-source.resolver';
 import { ProductsService } from './products.service';
 import { ProductsController } from './products.controller';
 import { StorageModule } from '../storage/storage.module';
+import { ProductLifecycleRealtimeInterceptor } from './product-lifecycle-realtime.interceptor';
 
 @Global()
 @Module({
   imports: [StorageModule],
-  providers: [ProductsService, CatalogProductsService, ProductSourceResolver, CatalogRealtimeRelayService],
+  providers: [ProductsService, CatalogProductsService, ProductSourceResolver, CatalogRealtimeRelayService, ProductLifecycleRealtimeInterceptor],
   controllers: [ProductsController, CatalogProductsController],
   exports: [ProductsService, CatalogProductsService, ProductSourceResolver, CatalogRealtimeRelayService],
 })

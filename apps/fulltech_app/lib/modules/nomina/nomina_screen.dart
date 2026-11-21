@@ -1,3 +1,5 @@
+import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
+import 'package:daleventa_pos/core/widgets/mobile_page_app_bar.dart';
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -463,7 +465,7 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
                   IconButton.filledTonal(
                     tooltip: state.loading ? 'Actualizando...' : 'Recargar',
                     onPressed: state.loading ? null : controller.load,
-                    icon: const Icon(Icons.refresh_rounded),
+                    icon: const MobileActionIcon(Icons.refresh_rounded),
                   ),
                   const SizedBox(width: 8),
                   FilledButton.icon(
@@ -482,7 +484,7 @@ class _NominaScreenState extends ConsumerState<NominaScreen> {
                   IconButton(
                     tooltip: 'Recargar',
                     onPressed: state.loading ? null : controller.load,
-                    icon: const Icon(Icons.refresh),
+                    icon: const MobileActionIcon(Icons.refresh),
                   ),
                   IconButton(
                     tooltip: 'Nueva quincena',
@@ -3218,7 +3220,7 @@ class _PayrollUserPickerDialogState
               },
               decoration: const InputDecoration(
                 hintText: 'Buscar usuario...',
-                prefixIcon: Icon(Icons.search),
+                prefixIcon: MobileActionIcon(Icons.search),
                 isDense: true,
               ),
             ),
@@ -3721,7 +3723,7 @@ class _EmployeeMovementsPanel extends StatelessWidget {
                   if (!loading)
                     GestureDetector(
                       onTap: onReload,
-                      child: Icon(
+                      child: MobileActionIcon(
                         Icons.refresh_rounded,
                         size: 14,
                         color: scheme.onSurfaceVariant,
@@ -4837,7 +4839,7 @@ class _PayrollHistoryFullScreenState
 
     return Scaffold(
       backgroundColor: const Color(0xFFF2F5F8),
-      appBar: AppBar(
+      appBar: MobilePageAppBar(appBar: AppBar(
         title: const Text('Historial de nóminas'),
         backgroundColor: theme.appBarTheme.backgroundColor,
         foregroundColor: Colors.white,
@@ -4852,7 +4854,7 @@ class _PayrollHistoryFullScreenState
               ),
             ),
         ],
-      ),
+      )),
       body: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -4907,7 +4909,7 @@ class _PayrollHistoryFullScreenState
                           hintStyle: theme.textTheme.bodySmall?.copyWith(
                             color: scheme.onSurfaceVariant,
                           ),
-                          prefixIcon: const Icon(
+                          prefixIcon: const MobileActionIcon(
                             Icons.search_rounded,
                             size: 16,
                           ),
@@ -5108,13 +5110,13 @@ class _PayrollHistoryFullScreenState
     ].length;
 
     return Scaffold(
-      appBar: AppBar(
+      appBar: MobilePageAppBar(appBar: AppBar(
         title: const Text('Historial de nominas'),
         actions: [
           if (activeFilters > 0)
             TextButton(onPressed: _resetFilters, child: const Text('Limpiar')),
         ],
-      ),
+      )),
       body: Column(
         children: [
           Padding(
@@ -5182,7 +5184,7 @@ class _PayrollHistoryFullScreenState
                     controller: _searchController,
                     decoration: InputDecoration(
                       hintText: 'Buscar por titulo de quincena',
-                      prefixIcon: const Icon(Icons.search_rounded),
+                      prefixIcon: const MobileActionIcon(Icons.search_rounded),
                       isDense: true,
                       filled: true,
                       fillColor: scheme.surface,
@@ -5651,7 +5653,7 @@ class _HistoryInlineDetail extends StatelessWidget {
                           hintStyle: theme.textTheme.bodySmall?.copyWith(
                             color: scheme.onSurfaceVariant,
                           ),
-                          prefixIcon: const Icon(
+                          prefixIcon: const MobileActionIcon(
                             Icons.search_rounded,
                             size: 15,
                           ),
@@ -5940,7 +5942,7 @@ class _PayrollPeriodDetailsScreenState
         '${DateFormat('dd/MM/yyyy').format(widget.period.startDate)} - ${DateFormat('dd/MM/yyyy').format(widget.period.endDate)}';
 
     return Scaffold(
-      appBar: AppBar(
+      appBar: MobilePageAppBar(appBar: AppBar(
         toolbarHeight: 58,
         titleSpacing: 0,
         title: Text(
@@ -5958,7 +5960,7 @@ class _PayrollPeriodDetailsScreenState
             icon: const Icon(Icons.picture_as_pdf_outlined),
           ),
         ],
-      ),
+      )),
       body: Column(
         children: [
           Padding(
@@ -6106,7 +6108,7 @@ class _PayrollPeriodDetailsScreenState
                     controller: _searchController,
                     decoration: InputDecoration(
                       hintText: 'Buscar por nombre del empleado',
-                      prefixIcon: const Icon(Icons.search_rounded),
+                      prefixIcon: const MobileActionIcon(Icons.search_rounded),
                       isDense: true,
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 12,

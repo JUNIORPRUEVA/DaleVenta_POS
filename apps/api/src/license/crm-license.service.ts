@@ -6,6 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { describeOrders } from './orders/license-order-insights';
 import { LicenseProvisionalService } from './orders/license-provisional.service';
 import { LicenseService } from './license.service';
+import { LicenseActivationService } from './orders/license-activation.service';
 
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const invalid = () => { throw new BadRequestException('invalid_crm_command'); };
@@ -16,13 +17,14 @@ export function parseCrmCommand(value: unknown) {
   if (typeof v.operationId !== 'string' || !UUID.test(v.operationId) || typeof v.serviceId !== 'string' || !UUID.test(v.serviceId) || typeof v.actorId !== 'string' || !/^usr_[a-f0-9]{24}$/.test(v.actorId)) return invalid();
   if (typeof v.expectedVersion !== 'string' || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(v.expectedVersion) || !Number.isFinite(Date.parse(v.expectedVersion))) return invalid();
   if (!['update', 'suspend', 'reactivate', 'revoke'].includes(String(v.action)) || typeof v.reason !== 'string' || v.reason.trim().length < 5 || v.reason.length > 500) return invalid();
-  const fields: Record<string, string | number> = {};
+  const fields: Record<string, string | number | boolean> = {};
   if (v.action === 'update') {
     if (!v.fields || typeof v.fields !== 'object' || Array.isArray(v.fields)) return invalid();
     for (const [k, x] of Object.entries(v.fields)) {
       if (k === 'name' && typeof x === 'string' && x.trim().length >= 2 && x.trim().length <= 160) fields[k] = x.trim();
       else if (k === 'notes' && typeof x === 'string' && x.length <= 2000) fields[k] = x.trim();
       else if (['maxUsers', 'maxProducts', 'maxWarehouses'].includes(k) && typeof x === 'number' && Number.isSafeInteger(x) && x >= 1 && x <= 1000000) fields[k] = x;
+      else if (['allowEcf', 'allowTaxes', 'allowWholesale', 'allowUom', 'allowMultiWarehouse'].includes(k) && typeof x === 'boolean') fields[k] = x;
       else return invalid();
     }
   } else if (v.fields !== undefined) return invalid();
@@ -62,15 +64,28 @@ export function crmStatusWhere(status: string, now: Date): Prisma.CompanyWhereIn
 
 @Injectable()
 export class CrmLicenseService {
-  constructor(private readonly prisma: PrismaService, private readonly licenses: LicenseService, private readonly config: ConfigService, private readonly provisional: LicenseProvisionalService) {}
+  constructor(private readonly prisma: PrismaService, private readonly licenses: LicenseService, private readonly config: ConfigService,
+    private readonly provisional: LicenseProvisionalService = new LicenseProvisionalService(),
+    private readonly activation: LicenseActivationService = new LicenseActivationService(prisma)) {}
 
   enabled() { return String(this.config.get('CRM_LICENSE_MANAGEMENT_ENABLED') ?? '') === 'true'; }
 
-  private async projection(id: string, tx: Prisma.TransactionClient) {
+  private async projection(id: string, tx: Prisma.TransactionClient, includeCommercial = false) {
     const row = await this.licenses.getCompanyLicenseStatus(id, tx);
+    const commercial = includeCommercial ? {
+      plan: row.planCode ? await tx.licensePlan.findUnique({ where: { code: row.planCode }, select: {
+        code: true, name: true, maxUsers: true, maxProducts: true, maxWarehouses: true,
+        ecf: true, taxes: true, wholesale: true, uom: true, multiWarehouse: true,
+      } }) : null,
+      override: await tx.licenseCompanyOverride.findUnique({ where: { companyId: id }, select: {
+        extraUsers: true, extraProducts: true, extraWarehouses: true, allowEcf: true,
+        allowTaxes: true, allowWholesale: true, allowUom: true, allowMultiWarehouse: true, expiresAt: true,
+      } }),
+    } : null;
+    const result = { ...row, commercial };
     // An expired TRIAL still has its original trial period. Leave legacy DTOs unchanged.
-    if (row.rawStatus !== 'TRIAL') return row;
-    return { ...row, periodStartedAt: row.trialStartedAt, periodEndsAt: row.trialEndsAt,
+    if (row.rawStatus !== 'TRIAL') return result;
+    return { ...result, periodStartedAt: row.trialStartedAt, periodEndsAt: row.trialEndsAt,
       daysRemaining: row.trialEndsAt ? Math.ceil((row.trialEndsAt.getTime() - Date.now()) / 86400000) : null };
   }
 
@@ -78,7 +93,7 @@ export class CrmLicenseService {
     if (!UUID.test(id)) throw new BadRequestException('invalid_company_id');
     return this.prisma.$transaction(async tx => {
       if (!await tx.company.findUnique({ where: { id }, select: { id: true } })) throw new NotFoundException('company_not_found');
-      const license = await this.projection(id, tx);
+      const license = await this.projection(id, tx, true);
       const auditLogs = await tx.companyLicenseAuditLog.findMany({ where: { companyId: id }, take: 25, orderBy: [{ createdAt: 'desc' }, { id: 'asc' }], select: { action: true, reason: true, createdAt: true } });
       return { ...license, auditLogs };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead, timeout: 15000 });
@@ -115,10 +130,10 @@ export class CrmLicenseService {
         if (receipt) {
           const meta = (receipt.after as any)?._crmCommand;
           if (receipt.companyId !== company.id || meta?.requestHash !== requestHash) throw new ConflictException('operation_id_reused');
-          return { license: await this.projection(companyId, tx), operationId: command.operationId, deduplicated: true };
+          return { license: await this.projection(companyId, tx, true), operationId: command.operationId, deduplicated: true };
         }
         if (company.updatedAt.toISOString() !== command.expectedVersion) throw new ConflictException('license_changed_reload');
-        const before = await this.projection(companyId, tx);
+        const before = await this.projection(companyId, tx, true);
         const data: Prisma.CompanyUpdateInput = { updatedAt: new Date(Math.max(Date.now(), company.updatedAt.getTime() + 1)) };
         if (command.action === 'update') {
           for (const key of ['maxUsers', 'maxProducts'] as const) {
@@ -133,6 +148,27 @@ export class CrmLicenseService {
             if (Number(command.fields.maxWarehouses) < activeWarehouses) throw new ConflictException('limit_below_current_usage');
             data.maxWarehouses = Number(command.fields.maxWarehouses);
           }
+          const plan = before.commercial?.plan;
+          const additions: Prisma.LicenseCompanyOverrideUncheckedUpdateInput = {};
+          if (plan) {
+            for (const [field, extra] of [['maxUsers', 'extraUsers'], ['maxProducts', 'extraProducts'], ['maxWarehouses', 'extraWarehouses']] as const) {
+              if (command.fields[field] === undefined) continue;
+              const desired = Number(command.fields[field]);
+              if (desired < plan[field]) throw new ConflictException('limit_below_plan');
+              additions[extra] = desired - plan[field];
+            }
+          }
+          for (const field of ['allowEcf', 'allowTaxes', 'allowWholesale', 'allowUom', 'allowMultiWarehouse'] as const) {
+            if (command.fields[field] !== undefined) additions[field] = Boolean(command.fields[field]);
+          }
+          if (Object.keys(additions).length) {
+            const previous = before.commercial?.override;
+            if (previous?.expiresAt && previous.expiresAt <= new Date()) throw new ConflictException('override_expired');
+            await tx.licenseCompanyOverride.upsert({ where: { companyId },
+              create: { ...additions, companyId, grantedBy: command.actorId } as Prisma.LicenseCompanyOverrideUncheckedCreateInput,
+              update: { ...additions, grantedBy: command.actorId, grantedAt: new Date() },
+            });
+          }
         } else if (command.action === 'reactivate') {
           if (company.licenseStatus !== 'BLOCKED' || !company.licenseKey || !company.licenseExpiresAt || company.licenseExpiresAt <= new Date()) throw new ConflictException('paid_period_required');
           Object.assign(data, { status: 'ACTIVE', licenseStatus: 'ACTIVE', licenseBlockedAt: null });
@@ -146,8 +182,13 @@ export class CrmLicenseService {
         await tx.company.update({ where: { id: companyId }, data });
         if (command.fields.name !== undefined) await this.licenses.syncAppConfigCompanyName(tx, companyId, String(command.fields.name));
         if (command.paymentOrderId && command.paymentStatus) {
-          const order = await tx.licensePaymentOrder.findFirst({ where: { id: command.paymentOrderId, companyId }, select: { id: true, status: true, reference: true } });
+          await tx.$queryRaw`SELECT id FROM license_payment_orders WHERE id=${command.paymentOrderId}::uuid AND company_id=${companyId}::uuid FOR UPDATE`;
+          const order = await tx.licensePaymentOrder.findFirst({ where: { id: command.paymentOrderId, companyId },
+            include: { evidences: { select: { id: true } } } });
           if (!order) throw new NotFoundException('payment_order_not_found');
+          if (!['EVIDENCE_RECEIVED', 'UNCONFIRMED'].includes(order.status) || order.evidences.length === 0) {
+            throw new ConflictException('payment_not_reviewable');
+          }
           const reviewed = command.paymentStatus === 'SETTLED' || command.paymentStatus === 'REJECTED';
           await tx.licensePaymentOrder.update({ where: { id: order.id }, data: {
             status: command.paymentStatus,
@@ -161,13 +202,21 @@ export class CrmLicenseService {
           // meses). «Pago no acreditado» devuelve la licencia a su estado
           // legitimo anterior, solo si nadie la movio despues.
           if (command.paymentStatus === 'SETTLED') {
+            if (order.activationState === 'NONE') {
+              const applied = await this.activation.applyPlan({ companyId, planCode: order.planCode, months: order.months, tx });
+              await tx.licensePaymentOrder.update({ where: { id: order.id }, data: {
+                periodStart: applied.periodStart, periodEnd: applied.periodEnd,
+              } });
+            } else if (order.activationState !== 'PROVISIONAL' && order.activationState !== 'CONFIRMED') {
+              throw new ConflictException('payment_not_reviewable');
+            }
             await this.provisional.confirm(tx, order.id);
           } else if (command.paymentStatus === 'REJECTED') {
             await this.provisional.revert(tx, { orderId: order.id });
           }
         }
-        const after = await this.projection(companyId, tx);
-        const snapshot = (v: typeof after) => ({ name: v.companyName, status: v.status, rawStatus: v.rawStatus, expiresAt: v.licenseExpiresAt?.toISOString() ?? null, maxUsers: v.limits.maxUsers, maxProducts: v.limits.maxProducts, maxWarehouses: v.limits.maxWarehouses, notes: v.notes, version: v.updatedAt.toISOString() });
+        const after = await this.projection(companyId, tx, true);
+        const snapshot = (v: typeof after) => ({ name: v.companyName, status: v.status, rawStatus: v.rawStatus, expiresAt: v.licenseExpiresAt?.toISOString() ?? null, maxUsers: v.limits.maxUsers, maxProducts: v.limits.maxProducts, maxWarehouses: v.limits.maxWarehouses, notes: v.notes, version: v.updatedAt.toISOString(), commercial: JSON.parse(JSON.stringify(v.commercial ?? null)) });
         // Mandatory receipt and audit in the SAME transaction. No raw keys or payment data.
         await tx.companyLicenseAuditLog.create({ data: {
           id: command.operationId, companyId, actorEmail: `crm:${command.actorId}`,
@@ -186,19 +235,28 @@ export class CrmLicenseService {
 
   /** Ordenes de pago con su comprobante, para revisar desde el CRM. */
   async orders(q: Record<string, unknown>) {
-    if (Object.keys(q).some(k => !['status', 'companyId', 'limit'].includes(k))) throw new BadRequestException('unsupported_filter');
+    if (Object.keys(q).some(k => !['status', 'companyId', 'orderId', 'limit', 'offset', 'paymentState'].includes(k))) throw new BadRequestException('unsupported_filter');
     const where: Prisma.LicensePaymentOrderWhereInput = {};
     if (q.companyId !== undefined) { if (typeof q.companyId !== 'string' || !UUID.test(q.companyId)) throw new BadRequestException('invalid_company_id'); where.companyId = q.companyId.toLowerCase(); }
+    if (q.orderId !== undefined) { if (typeof q.orderId !== 'string' || !UUID.test(q.orderId)) throw new BadRequestException('invalid_order_id'); where.id = q.orderId.toLowerCase(); }
     if (q.status !== undefined) { const status = String(q.status).toUpperCase(); if (!['CREATED', 'AWAITING_TRANSFER', 'EVIDENCE_RECEIVED', 'UNCONFIRMED', 'SETTLED', 'REJECTED', 'CANCELLED', 'EXPIRED'].includes(status)) throw new BadRequestException('invalid_status'); where.status = status as any; }
+    if (q.paymentState !== undefined) {
+      if (q.status !== undefined || !['pending', 'review', 'confirmed', 'rejected'].includes(String(q.paymentState))) throw new BadRequestException('invalid_status');
+      where.status = q.paymentState === 'pending' ? { in: ['CREATED', 'AWAITING_TRANSFER', 'EVIDENCE_RECEIVED', 'UNCONFIRMED'] }
+        : q.paymentState === 'review' ? { in: ['EVIDENCE_RECEIVED', 'UNCONFIRMED'] }
+        : q.paymentState === 'confirmed' ? 'SETTLED' : 'REJECTED';
+    }
     const limit = Number(q.limit ?? 50);
-    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 200) throw new BadRequestException('invalid_pagination');
-    const rows = await this.prisma.licensePaymentOrder.findMany({ where, orderBy: [{ createdAt: 'desc' }, { id: 'asc' }], take: limit,
+    const offset = Number(q.offset ?? 0);
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 200 || !Number.isSafeInteger(offset) || offset < 0 || offset > 1000000) throw new BadRequestException('invalid_pagination');
+    const total = await this.prisma.licensePaymentOrder.count({ where });
+    const rows = await this.prisma.licensePaymentOrder.findMany({ where, orderBy: [{ createdAt: 'desc' }, { id: 'asc' }], take: limit, skip: offset,
       include: { company: { select: { id: true, name: true, slug: true, planCode: true } }, evidences: { select: { id: true, orderId: true, mime: true, sizeBytes: true, status: true, createdAt: true, originalName: true, extracted: true, extractedAt: true, extractedSource: true }, orderBy: { createdAt: 'desc' } } } });    // El agente sabe de un golpe si es renovacion o mejora, y cuanto saldo se aplico.
     const operations = await describeOrders(this.prisma, rows);
-    return { items: rows.map(row => ({ id: row.id, companyId: row.companyId, companyName: row.company?.name ?? null, companySlug: row.company?.slug ?? null,
+    return { total, limit, offset, items: rows.map(row => ({ id: row.id, companyId: row.companyId, companyName: row.company?.name ?? null, companySlug: row.company?.slug ?? null,
       ...(operations.get(row.id) ?? {}),
       planCode: row.planCode, catalogVersion: row.catalogVersion, amount: row.amount.toNumber(), currency: row.currency, months: row.months,
-      status: row.status, reference: row.reference, expiresAt: row.expiresAt, periodStart: row.periodStart, periodEnd: row.periodEnd, createdAt: row.createdAt,
+      status: row.status, reference: row.reference, expiresAt: row.expiresAt, periodStart: row.periodStart, periodEnd: row.periodEnd, createdAt: row.createdAt, reviewedAt: row.reviewedAt,
       activationState: row.activationState, provisionalUntil: row.provisionalUntil,
       evidences: row.evidences })) };
   }

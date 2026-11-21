@@ -1,0 +1,18 @@
+{
+  "passed": true,
+  "realPostgreSql": true,
+  "readOnlyCheck": true,
+  "productionConnected": false,
+  "results": [
+    {
+      "viewport": "desktop",
+      "persistedTurns": 1,
+      "foreignCompanyMatches": 0
+    },
+    {
+      "viewport": "mobile",
+      "persistedTurns": 1,
+      "foreignCompanyMatches": 0
+    }
+  ]
+}

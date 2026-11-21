@@ -46,6 +46,38 @@ const OK_BODY = {
 };
 
 describe('AppyraIaClient', () => {
+  const resourceId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const agentId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  it('passes only validated resource metadata, discarding model URLs and invalid media', async () => {
+    const resource = { id: resourceId, title: 'Captura', kind: 'IMAGE', mimeType: 'image/png', fileName: 'captura.png', sizeBytes: 12, version: 1 };
+    global.fetch = jest.fn().mockResolvedValue(buildResponse({ ...OK_BODY, reply: { ...OK_BODY.reply, resources: [
+      { ...resource, url: 'https://invalid.example/internal' }, { ...resource, id: '../other' }, { ...resource, kind: 'VIDEO' },
+    ] } })) as unknown as typeof fetch;
+    const result = await buildClient().chat({ message: 'ayuda', context: {} });
+    expect(result.resources).toEqual([resource]);
+    expect(toFullPosChatResponse(result, 'ventas').resources).toEqual([resource]);
+  });
+
+  it('resolves the product agent server-side before downloading approved bytes', async () => {
+    const fake = jest.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: agentId }), { headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(Buffer.from('image-bytes'), { headers: { 'Content-Type': 'image/png' } }));
+    global.fetch = fake as unknown as typeof fetch;
+    const file = await buildClient().libraryResource(resourceId);
+    expect(file.bytes.toString()).toBe('image-bytes');
+    expect(fake.mock.calls[0][0]).toBe('http://127.0.0.1:4400/v1/agent-runtime/agent?productKey=fullpos');
+    expect(fake.mock.calls[1][0]).toBe(`http://127.0.0.1:4400/v1/agent-runtime/library/${agentId}/resources/${resourceId}/file`);
+    expect(fake.mock.calls[1][1]).toEqual(expect.objectContaining({ redirect: 'error', headers: { Authorization: `Bearer ${TEST_TOKEN}` } }));
+  });
+
+  it('denies withdrawn resources, active content and oversized files', async () => {
+    for (const reply of [new Response('', { status: 404 }), new Response('<script/>', { headers: { 'Content-Type': 'text/html' } }),
+      new Response('x', { headers: { 'Content-Type': 'video/mp4', 'Content-Length': String(33 * 1024 * 1024) } })]) {
+      global.fetch = jest.fn().mockResolvedValueOnce(new Response(JSON.stringify({ id: agentId }))).mockResolvedValueOnce(reply) as unknown as typeof fetch;
+      await expect(buildClient().libraryResource(resourceId)).rejects.toBeInstanceOf(AppyraIaError);
+    }
+  });
+
   const originalFetch = global.fetch;
 
   afterEach(() => {
@@ -54,6 +86,20 @@ describe('AppyraIaClient', () => {
   });
 
   describe('activación', () => {
+    it('sin tiempo configurado espera los 60 segundos previstos', async () => {
+      const timer = jest.spyOn(global, 'setTimeout');
+      global.fetch = jest.fn().mockResolvedValue(buildResponse(OK_BODY)) as unknown as typeof fetch;
+      await buildClient({ APPYRA_IA_TIMEOUT_MS: '' }).chat({message: 'ayuda', context: {}});
+      expect(timer).toHaveBeenCalledWith(expect.any(Function), 60_000);
+    });
+    it('conserva la referencia confirmada del caso y rechaza objetos inválidos', async () => {
+      const incident = { reference: 'FPS-2026-000001', status: 'OPEN', duplicate: false };
+      global.fetch = jest.fn().mockResolvedValue(buildResponse({...OK_BODY, incident})) as unknown as typeof fetch;
+      const result = await buildClient().chat({ message: 'reportar', context: {} });
+      expect(toFullPosChatResponse(result, 'general').incident).toEqual(incident);
+      global.fetch = jest.fn().mockResolvedValue(buildResponse({...OK_BODY, incident: {reference: 'inventado'}})) as unknown as typeof fetch;
+      expect((await buildClient().chat({message: 'hola', context:{}})).incident).toBeUndefined();
+    });
     it('está desactivado si la bandera está apagada', () => {
       const client = buildClient({ APPYRA_IA_ENABLED: 'false' });
       expect(client.isEnabled()).toBe(false);

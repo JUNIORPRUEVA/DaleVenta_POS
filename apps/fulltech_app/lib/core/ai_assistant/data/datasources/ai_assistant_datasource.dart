@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../auth/auth_repository.dart';
@@ -14,6 +15,50 @@ class AiAssistantDataSource {
   AiAssistantDataSource(this._dio);
 
   final Dio _dio;
+
+  Future<Map<String, dynamic>> supportCase(String id, {String? message, String? requestId}) async {
+    final path = '/ai/support/${Uri.encodeComponent(id)}';
+    try {
+      final options = Options(extra: const {'skipLoader': true, 'disableRetry': true, 'disableCache': true},
+        headers: const {'Cache-Control': 'no-store'});
+      final response = message == null
+          ? await _dio.get(path, options: options)
+          : await _dio.post('$path/messages', data: {'message': message, 'requestId': requestId}, options: options);
+      return (response.data as Map).cast<String, dynamic>();
+    } on DioException catch (error) {
+      throw ApiException(_extractMessage(error.response?.data, 'No se pudo consultar soporte. Reintenta.'), error.response?.statusCode);
+    }
+  }
+
+  Future<Uint8List> resourceBytes(String id) async {
+    try {
+      final response = await _dio.get<List<int>>(
+        ApiRoutes.aiResourceFile(id),
+        options: Options(
+          responseType: ResponseType.bytes,
+          receiveTimeout: const Duration(seconds: 90),
+          headers: const {'Cache-Control': 'no-store'},
+          extra: const {
+            'skipLoader': true,
+            'disableRetry': true,
+            'disableCache': true,
+          },
+        ),
+      );
+      final bytes = response.data;
+      if (bytes == null || bytes.isEmpty || bytes.length > 32 * 1024 * 1024) {
+        throw ApiException('El recurso no es válido.');
+      }
+      return Uint8List.fromList(bytes);
+    } on DioException catch (error) {
+      throw ApiException(
+        error.response?.statusCode == 404
+            ? 'Este recurso ya no está disponible.'
+            : 'No se pudo abrir el recurso. Inténtalo de nuevo.',
+        error.response?.statusCode,
+      );
+    }
+  }
 
   Future<Map<String, dynamic>> chat({
     required AiChatContext context,
@@ -84,7 +129,10 @@ class AiAssistantDataSource {
       final response = await _dio.post(
         path,
         data: data,
-        options: Options(extra: const {'skipLoader': true}),
+        options: Options(
+          receiveTimeout: const Duration(seconds: 130),
+          extra: const {'skipLoader': true, 'disableRetry': true},
+        ),
       );
       if (response.data is Map<String, dynamic>) {
         return response.data as Map<String, dynamic>;
@@ -96,7 +144,7 @@ class AiAssistantDataSource {
     } on DioException catch (error) {
       final message = _extractMessage(
         error.response?.data,
-        'No se pudo consultar el asistente IA.',
+        'No pude confirmar la respuesta. Revisa la conexión y vuelve a intentarlo.',
       );
       throw ApiException(message, error.response?.statusCode);
     }

@@ -1,3 +1,4 @@
+import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -223,7 +224,7 @@ class _AiChatSheetState extends ConsumerState<AiChatSheet> {
                               onPressed: aiState.loadingRules
                                   ? null
                                   : controller.refreshRules,
-                              icon: const Icon(Icons.refresh_rounded),
+                              icon: const MobileActionIcon(Icons.refresh_rounded),
                             ),
                           ],
                         ),

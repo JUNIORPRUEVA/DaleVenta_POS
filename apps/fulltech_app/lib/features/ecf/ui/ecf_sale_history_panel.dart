@@ -1,3 +1,4 @@
+import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -246,7 +247,7 @@ class _EcfSaleHistoryPanelState extends ConsumerState<EcfSaleHistoryPanel> {
               IconButton(
                 onPressed: _busy ? null : _refresh,
                 tooltip: 'Actualizar estado fiscal',
-                icon: const Icon(Icons.refresh, size: 20),
+                icon: const MobileActionIcon(Icons.refresh, size: 20),
               ),
             ],
           ),

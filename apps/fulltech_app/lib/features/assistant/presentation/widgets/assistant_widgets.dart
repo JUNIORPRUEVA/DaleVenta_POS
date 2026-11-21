@@ -1,3 +1,4 @@
+import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
@@ -339,7 +340,7 @@ class _AssistantSearchFieldState extends State<AssistantSearchField> {
             fontWeight: FontWeight.w500,
             letterSpacing: 0,
           ),
-          prefixIcon: const Icon(
+          prefixIcon: const MobileActionIcon(
             Icons.search_rounded,
             size: 18,
             color: AppColors.secondary,

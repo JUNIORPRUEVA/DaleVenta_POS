@@ -219,6 +219,12 @@ Future<void> _pump(
         context,
       );
     }
+    for (final name in ['back', 'search', 'filter', 'refresh']) {
+      await precacheImage(
+        AssetImage('assets/image/mobile_navigation/$name.png'),
+        context,
+      );
+    }
   });
   await tester.pumpAndSettle();
 }
@@ -318,7 +324,10 @@ void main() {
       await _pump(tester, 'recommendations', const Size(1024, 600));
       await tester.tap(find.text('Agregar'));
       await tester.pumpAndSettle();
-      expect(find.text('Producto agregado a Nueva compra.'), findsOneWidget);
+      expect(
+        find.textContaining('Producto agregado a Nueva compra.', findRichText: true),
+        findsOneWidget,
+      );
       expect(find.byType(SnackBar), findsNothing);
       final saved = (await SharedPreferences.getInstance()).getKeys().where(
         (key) => key.contains('purchase'),
@@ -362,7 +371,10 @@ void main() {
       await tester.tap(find.text('Guardar factura'));
       await tester.pumpAndSettle();
       expect(repository.uploads, 1);
-      expect(find.text('Factura de compra guardada.'), findsOneWidget);
+      expect(
+        find.textContaining('Factura de compra guardada.', findRichText: true),
+        findsOneWidget,
+      );
       expect(find.byType(SnackBar), findsNothing);
       AppFeedback.clearToasts();
       await tester.pumpWidget(const SizedBox.shrink());

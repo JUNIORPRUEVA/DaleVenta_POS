@@ -110,6 +110,8 @@ describe('proteccion de una licencia ACTIVA', () => {
       },
     };
     const activation = new LicenseActivationService(prisma as never);
+    // The catalog is read through the same transaction as the renewal.
+    Object.assign(tx, { licensePlan: prisma.licensePlan });
 
     const result = await activation.applyPlan({
       companyId: 'company-1',

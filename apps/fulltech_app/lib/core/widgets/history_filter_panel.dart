@@ -1,3 +1,4 @@
+import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
@@ -51,7 +52,7 @@ class HistoryFilterPanel extends StatelessWidget {
                       color: AppColors.primarySoft,
                       borderRadius: BorderRadius.circular(6),
                     ),
-                    child: const Icon(
+                    child: const MobileActionIcon(
                       Icons.filter_alt_rounded,
                       color: AppColors.primary,
                     ),

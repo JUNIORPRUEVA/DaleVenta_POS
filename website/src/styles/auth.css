@@ -58,7 +58,7 @@ html[data-auth-motion='enter'] .auth-panel {
   min-height: 36px;
   padding: 0 13px 0 11px;
   border: 1px solid rgba(255, 255, 255, 0.26);
-  border-radius: 10px;
+  border-radius: var(--button-radius);
   background: rgba(255, 255, 255, 0.14);
   color: #fff;
   font-size: 0.815rem;
@@ -397,7 +397,7 @@ body.reg-modal-open .auth-back-top:hover {
   height: 38px;
   padding: 0;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--button-radius);
   background: none;
   color: var(--ink-3);
   cursor: pointer;
@@ -477,7 +477,7 @@ body.reg-modal-open .auth-back-top:hover {
 .auth-panel .btn.btn-block {
   min-height: 44px;
   margin-top: 4px;
-  border-radius: 10px;
+  border-radius: var(--button-radius);
   font-size: 0.95rem;
   font-weight: 600;
   letter-spacing: -0.014em;
@@ -707,7 +707,7 @@ body.reg-modal-open .auth-back-top:hover {
 }
 
 .prepare-actions .btn {
-  border-radius: 10px;
+  border-radius: var(--button-radius);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -839,7 +839,7 @@ body.reg-modal-open {
   height: 32px;
   padding: 0;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--button-radius);
   background: none;
   color: var(--ink-3);
   cursor: pointer;
@@ -939,7 +939,7 @@ body.reg-modal-open {
 .reg-modal-card .btn.btn-block {
   min-height: 50px;
   margin-top: 4px;
-  border-radius: 10px;
+  border-radius: var(--button-radius);
   font-size: 0.95rem;
   font-weight: 600;
   letter-spacing: -0.014em;
@@ -1081,7 +1081,7 @@ body.reg-modal-open {
 /* Business selection uses the top layer, so it stays centered over every layout. */
 .auth-step-progress { display: flex; align-items: center; gap: 10px; margin: 0 0 24px; color: var(--ink-3); font-size: .78rem; font-weight: 600; }
 .auth-step-done { color: var(--teal); }
-.niche-trigger { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 10px 14px; border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--white); color: var(--ink-3); text-align: left; font: inherit; font-size: .9rem; cursor: pointer; transition: border-color var(--fast) var(--ease), box-shadow var(--fast) var(--ease); }
+.niche-trigger { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 10px 14px; border: 1px solid var(--line-strong); border-radius: var(--button-radius); background: var(--white); color: var(--ink-3); text-align: left; font: inherit; font-size: .9rem; cursor: pointer; transition: border-color var(--fast) var(--ease), box-shadow var(--fast) var(--ease); }
 .niche-trigger:hover, .niche-trigger:focus-visible { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); outline: none; }
 .niche-trigger.has-selection { color: var(--ink); }
 .niche-trigger-icon { display: grid; place-items: center; width: 32px; height: 32px; flex-shrink: 0; border-radius: var(--r-sm); background: var(--blue-soft); color: var(--blue); }
@@ -1095,7 +1095,7 @@ body.reg-modal-open {
 .niche-picker-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .niche-picker-header .auth-step-label { margin-bottom: 8px; }
 .niche-picker h2 { margin: 0; font-size: clamp(1.2rem, 3vw, 1.5rem); line-height: 1.2; letter-spacing: -.03em; }
-.niche-close { display: grid; place-items: center; width: 36px; height: 36px; flex-shrink: 0; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--white); color: var(--ink-2); font: inherit; font-size: 24px; cursor: pointer; }
+.niche-close { display: grid; place-items: center; width: 36px; height: 36px; flex-shrink: 0; border: 1px solid var(--line); border-radius: var(--button-radius); background: var(--white); color: var(--ink-2); font: inherit; font-size: 24px; cursor: pointer; }
 .niche-close:hover { background: var(--blue-soft); color: var(--blue); }
 #niche-description { margin: 12px 0 24px; color: var(--ink-2); font-size: .9rem; }
 .niche-search-label { display: block; margin-bottom: 8px; font-size: .8rem; font-weight: 600; }
@@ -1104,7 +1104,7 @@ body.reg-modal-open {
 .niche-results { margin: 12px 0; font-size: .75rem; color: var(--ink-3); }
 .niche-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; max-height: 320px; overflow: auto; overscroll-behavior: contain; list-style: none; margin: 0; padding: 3px; }
 .niche-grid [hidden] { display: none; }
-.niche-option { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 48px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--white); color: var(--ink-2); text-align: left; font: inherit; font-size: .84rem; cursor: pointer; }
+.niche-option { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 48px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--button-radius); background: var(--white); color: var(--ink-2); text-align: left; font: inherit; font-size: .84rem; cursor: pointer; }
 .niche-option svg { width: 18px; height: 18px; flex-shrink: 0; stroke-width: 1.7; color: var(--ink-3); }
 .niche-option:hover, .niche-option:focus-visible, .niche-option[aria-pressed='true'] { border-color: var(--blue-line); background: var(--blue-soft); color: var(--blue-700); outline: none; }
 .niche-option:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }

@@ -8,6 +8,31 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('useful validation details are kept, including numeric product references', () {
+    for (final message in ['El producto 429 no existe.', 'La cantidad máxima es 422.']) {
+      expect(userSafeErrorMessage(ApiException(message, 422), fallback: 'Revisa los datos.'), message);
+    }
+  });
+  for (final code in [401, 403, 422, 429, 500]) {
+    test(
+      'HTTP $code fallback stays brief without changing retry classification',
+      () {
+        final error = ApiException(
+          'DioException status code $code /cash/movements',
+          code,
+        );
+        final retryable = error.retryable;
+        final result = userSafeErrorMessage(
+          error,
+          fallback: 'Consulta al encargado.',
+        );
+        expect(result.length, lessThan(120));
+        expect(result, isNot(contains('DioException')));
+        expect(result, isNot(contains('/cash/')));
+        expect(error.retryable, retryable);
+      },
+    );
+  }
   test(
     'ordinary authentication and permission errors retain their explanation',
     () {
@@ -48,7 +73,8 @@ void main() {
         final message = customerOperationErrorMessage(data, statusCode: 409)!;
         expect(message, contains('«Tela de prueba»'));
         expect(message, contains('Cantidad solicitada: 5. Disponible: 2.'));
-        expect(message, contains('solo si recibiste mercancía'));
+        expect(message, contains('Revisa la cantidad antes de cobrar'));
+        expect(message, isNot(contains('Registra una entrada')));
         expect(message, isNot(contains('sin conexión')));
         expect(message, isNot(contains('000000')));
       }

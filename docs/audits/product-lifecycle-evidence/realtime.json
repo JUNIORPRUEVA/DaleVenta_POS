@@ -1,0 +1,7 @@
+{
+  "result": "PASS",
+  "sameTenantDevices": 2,
+  "events": 3,
+  "foreignTenantEvents": 0,
+  "minimalPayload": true
+}

@@ -28,6 +28,7 @@ import { ReconcileSaleAttemptQueryDto } from "./dto/reconcile-sale-attempt.query
 import {
   CreateSaleAttemptDeclarationDto,
   ListReconciliationObligationsQueryDto,
+  ResolveReconciliationObligationDto,
 } from "./dto/sale-attempt-declaration.dto";
 import { SalesRangeQueryDto } from "./dto/sales-range-query.dto";
 import { SaleAttemptReconciliationService } from "./sale-attempt-reconciliation.service";
@@ -122,6 +123,7 @@ export class SalesController {
   }
 
   /** Obligaciones de conciliación de la empresa del token. */
+  @Roles(Role.ADMIN)
   @Get("reconciliation-obligations")
   listReconciliationObligations(
     @Req() req: Request,
@@ -132,6 +134,14 @@ export class SalesController {
   }
 
   /** Historial de declaraciones de una obligación (solo lectura). */
+  @Roles(Role.ADMIN)
+  @Post('reconciliation-obligations/:id/resolve')
+  resolveReconciliationObligation(@Req() req: Request, @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ResolveReconciliationObligationDto) {
+    return this.saleObligations.resolve(req.user as TenantUser, id, dto);
+  }
+
+  @Roles(Role.ADMIN)
   @Get("reconciliation-obligations/:id/events")
   listReconciliationObligationEvents(
     @Req() req: Request,
@@ -169,7 +179,6 @@ export class SalesController {
     return this.sales.createInvoicePdfShareLink(user, dto, requestBaseUrl);
   }
 
-  @Delete("debug/purge")
   @Roles(Role.ADMIN)
   purgeAllForDebug(@Req() req: Request) {
     const user = req.user as TenantUser;

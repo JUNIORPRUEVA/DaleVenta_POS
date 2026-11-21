@@ -10,6 +10,7 @@ import {
   Matches,
   MaxLength,
   Min,
+  MinLength,
 } from "class-validator";
 
 /**
@@ -82,4 +83,16 @@ export class ListReconciliationObligationsQueryDto {
   @IsOptional()
   @IsBoolean()
   includeResolved?: boolean;
+}
+
+export class ResolveReconciliationObligationDto {
+  @IsIn(['CHECK', 'DISMISS'])
+  decision!: 'CHECK' | 'DISMISS';
+  @IsInt()
+  @Min(1)
+  expectedVersion!: number;
+  @IsString()
+  @MinLength(10)
+  @MaxLength(500)
+  note!: string;
 }

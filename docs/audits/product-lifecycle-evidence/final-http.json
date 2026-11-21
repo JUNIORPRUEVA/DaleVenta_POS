@@ -1,0 +1,9 @@
+{
+  "result": "PASS",
+  "scenarios": [
+    "new reference wins delete race: product, stock and quote item retained",
+    "delete wins race: stale reference rejected and durable deletion evidence retained",
+    "same command targeting two products: one success, one conflict, no extra compensation",
+    "all five lifecycle routes reject foreign company and missing authentication without changing stock or product"
+  ]
+}

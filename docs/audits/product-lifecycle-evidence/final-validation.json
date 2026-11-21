@@ -1,0 +1,36 @@
+{
+  "reviewedBase": "5545d07c",
+  "reviewDate": "2026-11-21",
+  "decision": "GO_WITH_ISSUES_LOCAL_SCOPE",
+  "newClientFailuresReproducedAndFixed": 5,
+  "backend": {"suitesPassed": 11, "testsPassed": 121, "build": "PASS"},
+  "flutter": {
+    "broadTestsPassed": 278,
+    "newNoticeTestsPassed": 2,
+    "additionalAuthAndScopeTestsPassed": 6,
+    "distinctTestsPassed": 286,
+    "historicalPhase11TestsSkipped": 2,
+    "focusedRegressionRerunPassed": 104,
+    "analysis": "PASS"
+  },
+  "httpPostgresScenariosPassed": 25,
+  "realRoleChecks": "PASS",
+  "tenantIsolatedRealtime": "PASS",
+  "native": {
+    "windowsRunId": "02954331-d145-4305-a941-401f551179c0",
+    "androidEmulatorRunId": "1f2adab9-f136-408a-bb6f-abe443708aca",
+    "sqlVerification": "PASS",
+    "previousRunPersistenceChecked": true,
+    "rejectedPendingRetained": true,
+    "validReplayExactlyOnce": true
+  },
+  "web": {"cases": 39, "screenshots": 78, "apiRequests": 0, "result": "PASS"},
+  "isolatedBackupRestore": "PASS",
+  "reviewedSourceHashes": 11,
+  "visualOwnerApproval": true,
+  "physicalIosValidated": false,
+  "existingOutOfScopeLicenseAuditWarningsRemain": true,
+  "productionModified": false,
+  "pushedOrDeployed": false,
+  "zeroRiskCertification": false
+}

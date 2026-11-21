@@ -13,7 +13,7 @@ suite('CRM management with isolated PostgreSQL', () => {
   const future = new Date(Date.now() + 86400000 * 45);
   beforeAll(async () => {
     const url = new URL(fixtureUrl!);
-    if (url.hostname !== '127.0.0.1' || !['55519', '56701'].includes(url.port) || url.pathname !== '/crm_license_fixture' || url.search || url.hash) throw Error('unsafe_fixture_target');
+    if (url.hostname !== '127.0.0.1' || !['55519', '56701', '56711'].includes(url.port) || url.pathname !== '/crm_license_fixture' || url.search || url.hash) throw Error('unsafe_fixture_target');
     db = new PrismaClient({ datasources: { db: { url: fixtureUrl } } });
     licenses = new LicenseService(db as any, {} as any, { emitCompany: jest.fn() } as any);
     service = new CrmLicenseService(db as any, licenses, { get: () => 'true' } as any);
@@ -56,6 +56,39 @@ suite('CRM management with isolated PostgreSQL', () => {
     const detail = await service.detail(company.id);
     expect(detail.status).toBe('EXPIRED'); expect(detail.periodEndsAt).toEqual(end); expect(detail.daysRemaining).toBeLessThanOrEqual(-3);
     expect((await service.list({ status: 'VENCIDA' })).items[0].periodEndsAt).toEqual(end);
+  });
+  it('edits effective catalog quotas through audited extras without changing paid dates or keys', async () => {
+    await db.licensePlan.upsert({ where: { code: 'fixture-admin' }, update: {}, create: {
+      code: 'fixture-admin', name: 'Plan sintético', monthlyPrice: '1', currency: 'DOP', version: 1,
+      maxUsers: 2, maxProducts: 100, maxWarehouses: 1, multiWarehouse: false,
+      ecf: false, taxes: false, wholesale: false, uom: true, active: true,
+    } });
+    company = await db.company.update({ where: { id: company.id }, data: { planCode: 'fixture-admin' } });
+    const command = cmd('update', { fields: { maxUsers: 3, maxProducts: 140, maxWarehouses: 2, allowWholesale: true } });
+    const result = await service.command(company.id, command);
+    expect(result.license.limits.maxProducts).toBe(140);
+    expect(result.license.limits.maxUsers).toBe(3);
+    expect(result.license.commercial?.override?.allowWholesale).toBe(true);
+    const grant = await db.licenseCompanyOverride.findUniqueOrThrow({ where: { companyId: company.id } });
+    expect(grant.extraProducts).toBe(40); expect(grant.extraUsers).toBe(1); expect(grant.extraWarehouses).toBe(1);
+    await service.command(company.id, command);
+    const saved = await db.company.findUniqueOrThrow({ where: { id: company.id } });
+    expect(saved.licenseExpiresAt).toEqual(company.licenseExpiresAt); expect(saved.licenseKey).toBe(company.licenseKey);
+    expect((await db.licenseCompanyOverride.findUniqueOrThrow({ where: { companyId: company.id } })).extraProducts).toBe(40);
+    expect(await db.companyLicenseAuditLog.count()).toBe(1);
+    const logs = await db.companyLicenseAuditLog.findFirstOrThrow();
+    expect((logs.after as any).commercial.override.extraProducts).toBe(40);
+  });
+  it('rejects quotas below the catalog and does not revive expired commercial grants implicitly', async () => {
+    await db.licensePlan.upsert({ where: { code: 'fixture-admin' }, update: {}, create: {
+      code: 'fixture-admin', name: 'Plan sintético', monthlyPrice: '1', maxUsers: 2, maxProducts: 100, maxWarehouses: 1,
+    } });
+    company = await db.company.update({ where: { id: company.id }, data: { planCode: 'fixture-admin' } });
+    await expect(service.command(company.id, cmd('update', { fields: { maxProducts: 99 } }))).rejects.toThrow('limit_below_plan');
+    await db.licenseCompanyOverride.create({ data: { companyId: company.id, extraProducts: 40, allowWholesale: true, expiresAt: new Date(2000, 0, 1) } });
+    await expect(service.command(company.id, cmd('update', { fields: { maxProducts: 150 } }))).rejects.toThrow('override_expired');
+    expect((await db.licenseCompanyOverride.findUniqueOrThrow({ where: { companyId: company.id } })).extraProducts).toBe(40);
+    expect(await db.companyLicenseAuditLog.count()).toBe(0);
   });
   it('deduplicates simultaneous same UUID requests and rejects UUID reuse with changed payload', async () => {
     const command = cmd('suspend');

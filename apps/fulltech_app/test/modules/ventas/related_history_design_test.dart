@@ -193,6 +193,13 @@ Future<void> _pump(
   } else {
     await tester.pumpAndSettle();
   }
+  await tester.runAsync(() async {
+    final context = tester.element(find.byType(credit ? SalesCreditScreen : CotizacionesHistorialScreen));
+    for (final name in ['back', 'search', 'filter', 'refresh']) {
+      await precacheImage(AssetImage('assets/image/mobile_navigation/$name.png'), context);
+    }
+  });
+  await tester.pump();
 }
 
 void main() {

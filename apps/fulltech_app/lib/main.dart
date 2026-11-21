@@ -11,6 +11,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'core/app_update/app_update_controller.dart';
 import 'core/ai_assistant/presentation/widgets/global_ai_assistant_entry_point.dart';
+import 'core/widgets/mobile_presentation_theme.dart';
 import 'features/onboarding/presentation/widgets/activation_entry_point.dart';
 import 'core/config/uat_identity.dart';
 import 'core/api/env.dart';
@@ -105,7 +106,11 @@ Future<void> main([List<String> args = const []]) async {
       // Handoff del sitio web: canjea `?handoff=` ANTES de que Riverpod
       // inicialice la sesión, para no pedir la contraseña una segunda vez.
       // Es no-op fuera de Web y nunca lanza.
-      await SessionHandoffBootstrap.consumeFromUrl();
+      final accessReady = await SessionHandoffBootstrap.consumeFromUrl();
+      if (!accessReady) {
+        SessionHandoffBootstrap.openRecoveryLogin();
+        return;
+      }
 
       FlutterError.onError = (details) {
         FlutterError.presentError(details);
@@ -437,7 +442,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
                 data: MediaQuery.of(
                   context,
                 ).copyWith(alwaysUse24HourFormat: false),
-                child: child,
+                child: MobilePresentationTheme(child: child),
               );
 
         return UsageActivityBoundary(

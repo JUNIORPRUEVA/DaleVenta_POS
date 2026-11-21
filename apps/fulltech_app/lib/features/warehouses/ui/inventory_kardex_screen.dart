@@ -1,3 +1,4 @@
+import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -52,7 +53,7 @@ class _InventoryKardexScreenState extends ConsumerState<InventoryKardexScreen> {
               IconButton(
                 tooltip: 'Filtros',
                 onPressed: () => _openMobileFilters(context),
-                icon: const Icon(Icons.filter_alt_outlined),
+                icon: const MobileActionIcon(Icons.filter_alt_outlined),
               ),
             IconButton(
               tooltip: 'Actualizar',
@@ -61,7 +62,7 @@ class _InventoryKardexScreenState extends ConsumerState<InventoryKardexScreen> {
                 ref.invalidate(inventoryStockReportProvider);
                 ref.invalidate(inventoryReconciliationProvider);
               },
-              icon: const Icon(Icons.refresh_rounded),
+              icon: const MobileActionIcon(Icons.refresh_rounded),
             ),
             const SizedBox(width: 4),
           ],
@@ -263,7 +264,7 @@ class _KardexFiltersPanelState extends ConsumerState<_KardexFiltersPanel> {
             controller: _productSearchCtrl,
             decoration: _inputDecoration(
               'Buscar producto',
-            ).copyWith(prefixIcon: const Icon(Icons.search_rounded)),
+            ).copyWith(prefixIcon: const MobileActionIcon(Icons.search_rounded)),
           ),
           const SizedBox(height: 8),
           DropdownButtonFormField<String>(

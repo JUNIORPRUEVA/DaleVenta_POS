@@ -1,3 +1,4 @@
+import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
 import 'package:flutter/material.dart';
 
 import '../sales_models.dart';
@@ -144,7 +145,7 @@ class _RecentSalesPanelState extends State<RecentSalesPanel> {
                     IconButton(
                       tooltip: 'Actualizar',
                       onPressed: _reload,
-                      icon: const Icon(Icons.refresh_rounded),
+                      icon: const MobileActionIcon(Icons.refresh_rounded),
                     ),
                     IconButton(
                       tooltip: 'Cerrar',
@@ -213,7 +214,7 @@ class _RecentSalesPanelState extends State<RecentSalesPanel> {
                 const SizedBox(height: 12),
                 OutlinedButton.icon(
                   onPressed: _reload,
-                  icon: const Icon(Icons.refresh_rounded),
+                  icon: const MobileActionIcon(Icons.refresh_rounded),
                   label: const Text('Reintentar'),
                 ),
               ],

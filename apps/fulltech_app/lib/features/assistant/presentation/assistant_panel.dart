@@ -1,3 +1,4 @@
+import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -233,7 +234,7 @@ class _PanelHeader extends StatelessWidget {
             IconButton(
               tooltip: 'Volver',
               onPressed: onBack,
-              icon: const Icon(Icons.arrow_back_rounded, size: 18),
+              icon: const MobileActionIcon(Icons.arrow_back_rounded, size: 18),
               color: AppColors.textSecondary,
               visualDensity: VisualDensity.compact,
               constraints: const BoxConstraints.tightFor(width: 32, height: 32),

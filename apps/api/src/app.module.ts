@@ -36,6 +36,7 @@ import { AppUpdatesModule } from './app-updates/app-updates.module';
 import { PriceListsModule } from './price-lists/price-lists.module';
 import { GuardianModule } from './guardian/guardian.module';
 import { EcfModule } from './ecf/ecf.module';
+import { RecoveryReviewModule } from './recovery/recovery-review.module';
 
 @Module({
   imports: [
@@ -82,6 +83,7 @@ import { EcfModule } from './ecf/ecf.module';
     PriceListsModule,
     GuardianModule,
     EcfModule,
+    RecoveryReviewModule,
   ],
 })
 export class AppModule {}

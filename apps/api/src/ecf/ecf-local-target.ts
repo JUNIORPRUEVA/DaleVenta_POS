@@ -28,6 +28,8 @@ export const ECF_LOCAL_TARGETS: readonly EcfLocalTarget[] = [
   // permissions`). Sigue siendo una regla EXACTA (loopback + nombre + puerto),
   // así que no relaja ninguna comprobación: la base es la misma y desechable.
   { name: "fullpos_ecf_ephemeral_test", port: "55500", kind: "EPHEMERAL_TEST" },
+  // Isolated consolidation lab; exact loopback database/port only.
+  { name: "fullpos_ecf_ephemeral_test", port: "56711", kind: "EPHEMERAL_TEST" },
 ];
 
 export function matchEcfLocalTarget(value = process.env.DATABASE_URL ?? ""): EcfLocalTarget | null {

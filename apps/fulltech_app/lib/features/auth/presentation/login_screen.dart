@@ -316,6 +316,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isNativeMobile =
+        !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS);
     final loading = ref.watch(authStateProvider).loading;
     final mediaQuery = MediaQuery.of(context);
     final size = mediaQuery.size;
@@ -429,11 +433,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ? Alignment.centerLeft
                 : Alignment.center,
             child: SingleChildScrollView(
+              keyboardDismissBehavior: isNativeMobile
+                  ? ScrollViewKeyboardDismissBehavior.onDrag
+                  : ScrollViewKeyboardDismissBehavior.manual,
               padding: EdgeInsets.fromLTRB(
                 horizontalPadding,
                 24,
                 horizontalPadding,
-                24 + viewInsets.bottom,
+                24 + (isNativeMobile ? 0 : viewInsets.bottom),
               ),
               child: ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: cardWidth),
@@ -514,6 +521,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                         : null,
                                   ),
                                   keyboardType: TextInputType.emailAddress,
+                                  autofillHints: isNativeMobile
+                                      ? const [AutofillHints.username]
+                                      : null,
+                                  autocorrect: !isNativeMobile,
+                                  enableSuggestions: !isNativeMobile,
+                                  keyboardAppearance: isNativeMobile
+                                      ? Brightness.light
+                                      : null,
                                   textInputAction: TextInputAction.next,
                                   onFieldSubmitted: (_) =>
                                       FocusScope.of(context).nextFocus(),
@@ -542,6 +557,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                     ),
                                   ),
                                   obscureText: _obscurePassword,
+                                  autofillHints: isNativeMobile
+                                      ? const [AutofillHints.password]
+                                      : null,
+                                  autocorrect: !isNativeMobile,
+                                  enableSuggestions: !isNativeMobile,
+                                  keyboardAppearance: isNativeMobile
+                                      ? Brightness.light
+                                      : null,
                                   textInputAction: TextInputAction.done,
                                   onFieldSubmitted: (_) {
                                     if (!loading) unawaited(_submit());
@@ -584,31 +607,43 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   ),
                                 ),
                                 const SizedBox(height: 14),
-                                Wrap(
-                                  alignment: WrapAlignment.center,
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  children: [
-                                    Text(
-                                      '¿No tienes una cuenta?',
-                                      style: theme.textTheme.bodySmall
-                                          ?.copyWith(
-                                            color: AppColors.textSecondary,
-                                          ),
+                                if (isNativeMobile)
+                                  Text(
+                                    'Para usar la app, necesitas una cuenta de FullPOS Cloud previamente creada.',
+                                    textAlign: TextAlign.center,
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: AppColors.textSecondary,
                                     ),
-                                    TextButton(
-                                      onPressed: loading
-                                          ? null
-                                          : () => openWebRegistration(context),
-                                      style: TextButton.styleFrom(
-                                        textStyle: theme.textTheme.labelMedium,
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 6,
-                                        ),
+                                  )
+                                else
+                                  Wrap(
+                                    alignment: WrapAlignment.center,
+                                    crossAxisAlignment:
+                                        WrapCrossAlignment.center,
+                                    children: [
+                                      Text(
+                                        '¿No tienes una cuenta?',
+                                        style: theme.textTheme.bodySmall
+                                            ?.copyWith(
+                                              color: AppColors.textSecondary,
+                                            ),
                                       ),
-                                      child: const Text('Crear cuenta'),
-                                    ),
-                                  ],
-                                ),
+                                      TextButton(
+                                        onPressed: loading
+                                            ? null
+                                            : () =>
+                                                  openWebRegistration(context),
+                                        style: TextButton.styleFrom(
+                                          textStyle:
+                                              theme.textTheme.labelMedium,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 6,
+                                          ),
+                                        ),
+                                        child: const Text('Crear cuenta'),
+                                      ),
+                                    ],
+                                  ),
                               ],
                             ),
                           ),

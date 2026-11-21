@@ -6,6 +6,7 @@ import {
 import { CompanyPlan, LicenseStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { buildEntitlements } from '../plans/license-entitlements.service';
+import { createLicenseKey } from '../license-key';
 
 export type ActivationResult = {
   planCode: string;
@@ -46,7 +47,7 @@ export class LicenseActivationService {
   }): Promise<ActivationResult> {
     const now = input.now ?? new Date();
     const months = clampMonths(input.months ?? 1);
-    const plan = await this.prisma.licensePlan.findUnique({
+    const plan = await (input.tx ?? this.prisma).licensePlan.findUnique({
       where: { code: input.planCode.trim().toLowerCase() },
     });
     if (!plan || !plan.active) {
@@ -78,6 +79,7 @@ export class LicenseActivationService {
         where: { id: companyId },
         select: {
           licenseStatus: true,
+          licenseKey: true,
           licenseActivatedAt: true,
           licenseExpiresAt: true,
           ncfEnabled: true,
@@ -138,6 +140,7 @@ export class LicenseActivationService {
           maxProducts: plan.maxProducts,
           maxWarehouses: plan.maxWarehouses,
           licenseStatus: LicenseStatus.ACTIVE,
+          licenseKey: company.licenseKey ?? createLicenseKey(),
           status: 'ACTIVE',
           licenseActivatedAt: company.licenseActivatedAt ?? now,
           licenseExpiresAt: periodEnd,

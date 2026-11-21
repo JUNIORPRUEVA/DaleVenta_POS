@@ -17,16 +17,21 @@ import 'package:daleventa_pos/core/company/company_settings_model.dart';
 import 'package:daleventa_pos/core/company/company_settings_repository.dart';
 import 'package:daleventa_pos/core/models/user_model.dart';
 import 'package:daleventa_pos/core/theme/app_theme.dart';
+import 'package:daleventa_pos/core/widgets/branded_menu_button.dart';
 import 'package:daleventa_pos/core/usage/client_telemetry_headers.dart';
 import 'package:daleventa_pos/features/ecf/data/ecf_repository.dart';
 import 'package:daleventa_pos/features/ecf/ecf_models.dart';
 import 'package:daleventa_pos/features/price_lists/data/price_lists_repository.dart';
 import 'package:daleventa_pos/modules/cotizaciones/cotizacion_models.dart';
+import 'package:daleventa_pos/modules/cash/cash_models.dart';
+import 'package:daleventa_pos/modules/cash/cash_repository.dart';
 import 'package:daleventa_pos/modules/cotizaciones/cotizaciones_screen.dart';
 import 'package:daleventa_pos/modules/cotizaciones/presentation/widgets/sales_catalog_command_bar.dart';
 import 'package:daleventa_pos/modules/cotizaciones/presentation/widgets/sales_client_selector.dart';
 import 'package:daleventa_pos/modules/cotizaciones/presentation/widgets/sales_detail_header.dart';
 import 'package:daleventa_pos/modules/cotizaciones/presentation/widgets/sales_detail_shortcut.dart';
+import 'package:daleventa_pos/modules/cotizaciones/presentation/widgets/mobile_sales_controls.dart';
+import 'package:daleventa_pos/core/ai_assistant/presentation/widgets/ai_assistant_sheet.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -71,6 +76,8 @@ class _Auth extends AuthController {
 }
 
 class _Catalog implements HttpClientAdapter {
+  _Catalog({this.productCount = 1});
+  final int productCount;
   @override
   Future<ResponseBody> fetch(
     RequestOptions request,
@@ -79,17 +86,18 @@ class _Catalog implements HttpClientAdapter {
   ) async {
     return ResponseBody.fromString(
       jsonEncode({
-        'items': [
-          {
-            'id': _productId,
+        'items': List.generate(
+          productCount,
+          (index) => {
+            'id': index == 0 ? _productId : 'product-$index',
             'nombre': 'Cable de prueba',
             'precio': 900,
             'costo': 400,
             'categoria': 'Prueba',
             'trackInventory': false,
           },
-        ],
-        'total': 1,
+        ),
+        'total': productCount,
         'page': 1,
         'hasMore': false,
       }),
@@ -108,6 +116,21 @@ class _PriceLists extends PriceListsRepository {
   _PriceLists(super.dio);
   @override
   Future<List<PriceListModel>> fetchPriceLists() async => const [];
+}
+
+class _OpenCash implements CashRepository {
+  _OpenCash({this.open = true});
+  final bool open;
+  @override
+  Future<CashGateState> state() async => CashGateState(
+    businessDate: '2026-11-21', canOperate: true,
+    activeSession: !open ? null : ActiveCashSession(userId: 'selector-test-user',
+      shiftId: 'local-test-shift', openedAt: DateTime.utc(2026, 11, 21),
+      status: 'OPEN', userName: 'Prueba', businessDate: '2026-11-21'),
+  );
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 /// Capacidades con E31, E32 y la excepción de venta normal habilitada.
@@ -164,17 +187,21 @@ Future<void> _pumpScreen(
   WidgetTester tester, {
   bool ready = true,
   bool quotationEditor = true,
+  Size viewport = const Size(1280, 900),
+  int productCount = 1,
+  bool cashOpen = true,
 }) async {
-  tester.view.physicalSize = const Size(1280, 900);
+  tester.view.physicalSize = viewport;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
 
   final dio = Dio(BaseOptions(baseUrl: 'https://billing.example.test'));
-  dio.httpClientAdapter = _Catalog();
+  dio.httpClientAdapter = _Catalog(productCount: productCount);
   final container = ProviderContainer(
     overrides: [
       dioProvider.overrideWithValue(dio),
+      cashRepositoryProvider.overrideWithValue(_OpenCash(open: cashOpen)),
       tokenStorageProvider.overrideWithValue(_MemoryStorage()),
       authSessionEventsProvider.overrideWith((_) => AuthSessionEvents()),
       authStateProvider.overrideWith(_Auth.new),
@@ -215,6 +242,21 @@ Future<void> _pumpScreen(
   });
 }
 
+Future<void> _savePhonePreview(WidgetTester tester, String name) async {
+  final output = Platform.environment['FULLPOS_MOBILE_VISUAL_QA'];
+  if (output == null) return;
+  await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
+  await tester.pump();
+  final boundary = _capture.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+  await tester.runAsync(() async {
+    final picture = await boundary.toImage();
+    final bytes = await picture.toByteData(format: ui.ImageByteFormat.png);
+    await Directory(output).create(recursive: true);
+    await File('$output/$name-${defaultTargetPlatform.name}.png').writeAsBytes(bytes!.buffer.asUint8List());
+    picture.dispose();
+  });
+}
+
 void main() {
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
@@ -241,6 +283,273 @@ void main() {
     expect(caps.posReady, isFalse);
     expect(caps.posAvailableTypes, isEmpty);
   });
+
+  testWidgets(
+    'native phone header, actions and tickets preserve separate carts',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await _pumpScreen(
+        tester,
+        viewport: const Size(390, 844),
+        quotationEditor: false,
+      );
+      expect(find.byKey(const ValueKey('phone-sales-header')), findsNothing);
+      expect(find.text('Comprobante'), findsNothing);
+      expect(find.byType(MobileSalesProductCard), findsOneWidget);
+      Future<void> openTickets() async {
+        await tester.tap(find.byTooltip('Acciones'));
+        for (var i = 0; i < 6; i++) {
+          await tester.pump(const Duration(milliseconds: 100));
+        }
+        await tester.tap(find.text('Tickets'));
+        await tester.pumpAndSettle();
+      }
+      expect(find.byType(BrandedMenuButton), findsOneWidget);
+      expect(find.text('Turno abierto'), findsOneWidget);
+      expect(find.byTooltip('Escanear producto'), findsNothing);
+      await tester.tap(find.byTooltip('Estado del turno'));
+      await tester.pumpAndSettle();
+      expect(find.text('Cerrar turno'), findsOneWidget);
+      expect(find.text('Registrar entrada'), findsOneWidget);
+      expect(find.text('Abrir turno'), findsNothing);
+      await tester.tapAt(const Offset(4, 400));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Abrir menú principal'));
+      await tester.pumpAndSettle();
+      final drawerRect = tester.getRect(find.byType(Drawer));
+      expect(drawerRect.width, closeTo(390 * 0.75, 1));
+      final footerRect = tester.getRect(find.byKey(const ValueKey('phone-drawer-account-footer')));
+      expect(footerRect.left, drawerRect.left);
+      expect(footerRect.right, drawerRect.right);
+      expect(find.text('Turno'), findsNothing);
+      await tester.tapAt(const Offset(389, 400));
+      await tester.pumpAndSettle();
+      await _savePhonePreview(tester, 'half-main');
+      expect(find.byTooltip('Tickets'), findsNothing);
+      final search = find.byKey(const ValueKey('phone-catalog-search'));
+      final category = find.byKey(const ValueKey('phone-catalog-category'));
+      expect(tester.getSize(search).height, 36);
+      expect(tester.getSize(category).height, 36);
+      final searchIcon = find.descendant(of: search, matching: find.byType(ImageIcon));
+      expect(tester.getSize(searchIcon), const Size(16, 16));
+      expect(find.descendant(of: search, matching: category), findsNothing);
+      expect(tester.getCenter(search).dy, closeTo(tester.getCenter(category).dy, 2));
+      expect(tester.getSize(category).height, 36);
+      await openTickets();
+      await tester.pumpAndSettle();
+      expect(find.text('Ticket 1'), findsOneWidget);
+      expect(find.textContaining('1 artículos'), findsOneWidget);
+      await tester.tap(find.text('Nuevo ticket'));
+      await tester.pumpAndSettle();
+      await openTickets();
+      await tester.pumpAndSettle();
+      expect(find.text('Ticket 2'), findsOneWidget);
+      expect(find.textContaining('0 artículos ·'), findsOneWidget);
+      await tester.tap(find.text('Ticket 1'));
+      await tester.pumpAndSettle();
+      await openTickets();
+      await tester.pumpAndSettle();
+      expect(find.textContaining('1 artículos'), findsOneWidget);
+      await tester.tap(find.byTooltip('Cerrar tickets'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Acciones'));
+      // The existing calculator access continuously animates while this panel
+      // is open; wait for its entrance rather than for all animations to stop.
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(find.byType(MobileSalesActionRow), findsNWidgets(5));
+      expect(find.text('Escanear producto'), findsOneWidget);
+      expect(find.byKey(const ValueKey('phone-sale-details')), findsOneWidget);
+      final panel = tester.getRect(find.byKey(const ValueKey('phone-sale-details')));
+      expect(panel.width, closeTo(390 * 0.60 - 32, 1));
+      await _savePhonePreview(tester, 'half-actions');
+      expect(find.text('Datos de la venta'), findsNothing);
+      expect(find.text('Herramientas'), findsNothing);
+      expect(find.text('Cliente general'), findsOneWidget);
+      expect(find.text('Comprobante'), findsOneWidget);
+      expect(find.text('Lista de precios'), findsNothing);
+      await tester.tap(find.text('Normal'));
+      await tester.pump(const Duration(milliseconds: 250));
+      await tester.tap(find.text(EcfPosFiscalMode.e32.label));
+      await tester.pump(const Duration(milliseconds: 250));
+      await tester.pump(const Duration(milliseconds: 350));
+      expect(find.text(EcfPosFiscalMode.e32.label), findsOneWidget,
+        reason: tester.widgetList<Text>(find.byType(Text)).map((text) => text.data).join(' | '));
+      await tester.tap(find.byTooltip('Cerrar'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Acciones'));
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(find.text(EcfPosFiscalMode.e32.label), findsOneWidget);
+      expect(find.text('Nuevo ticket'), findsNothing);
+      expect(find.byTooltip('Asistente IA'), findsOneWidget);
+      expect(find.text('Cobro rápido'), findsNothing);
+      final tools = find.byType(MobileSalesFloatingTools);
+      final assistant = tester.getSize(find.byTooltip('Asistente IA'));
+      final calculator = tester.getSize(find.byTooltip('Abrir calculadora'));
+      expect(tools, findsOneWidget);
+      expect(assistant, calculator);
+      expect(assistant.width, 64);
+      await tester.tap(find.byTooltip('Asistente IA'));
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(find.byType(GlobalAiChatSheet), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+    variant: TargetPlatformVariant({
+      TargetPlatform.android,
+      TargetPlatform.iOS,
+    }),
+  );
+
+  testWidgets(
+    'phone catalog keeps search visible without sale selectors while scrolling',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await _pumpScreen(
+        tester,
+        viewport: const Size(390, 844),
+        productCount: 24,
+      );
+      final header = find.byKey(const ValueKey('phone-sales-header'));
+      final footer = find.byKey(const ValueKey('phone-checkout-footer'));
+      expect(header, findsNothing);
+      expect(find.text('Comprobante'), findsNothing);
+      expect(find.byType(MobileSalesEdgeHint), findsOneWidget);
+      tester.view.systemGestureInsets = const FakeViewPadding(right: 24);
+      addTearDown(tester.view.resetSystemGestureInsets);
+      await tester.pump();
+      final hintRect = tester.getRect(find.byType(MobileSalesEdgeHint));
+      expect(hintRect.right, 390);
+      expect(find.byTooltip('Editar'), findsNothing);
+      expect(tester.getTopLeft(find.byKey(const ValueKey('phone-cart-count'))).dx, 8);
+      expect(tester.getCenter(find.byKey(const ValueKey('phone-cart-drag-indicator'))).dx, 195);
+      final footerRect = tester.getRect(footer);
+      expect(footerRect.left, 0);
+      expect(footerRect.right, 390);
+      await tester.drag(find.byType(GridView), const Offset(0, -300));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('phone-sales-header-collapsed')),
+        findsNothing,
+      );
+      expect(find.byType(GridView), findsOneWidget);
+      expect(
+        find.widgetWithText(TextField, 'Buscar productos...'),
+        findsOneWidget,
+      );
+      expect(tester.getRect(footer), footerRect);
+      await tester.drag(find.byType(GridView), const Offset(0, 180));
+      await tester.pumpAndSettle();
+      expect(header, findsNothing);
+      expect(find.text('Comprobante'), findsNothing);
+      expect(tester.getRect(footer), footerRect);
+      expect(tester.takeException(), isNull);
+    },
+    variant: TargetPlatformVariant({
+      TargetPlatform.android,
+      TargetPlatform.iOS,
+    }),
+  );
+
+  testWidgets(
+    'phone quick checkout shows general customer without requiring selection',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await _pumpScreen(tester, viewport: const Size(390, 844), quotationEditor: false);
+      await tester.tap(find.text('Cobrar'));
+      for (var i = 0; i < 12; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(find.byKey(const ValueKey('phone-checkout-sale-summary')), findsOneWidget,
+        reason: tester.widgetList<Text>(find.byType(Text)).map((text) => text.data).join(' | '));
+      expect(find.text('Cliente general'), findsOneWidget);
+      expect(find.text('Comprobante'), findsOneWidget);
+      final confirm = find.widgetWithText(FilledButton, 'Cobrar y facturar');
+      expect(tester.widget<FilledButton>(confirm).onPressed, isNotNull);
+      final selector = tester.widget<EcfPosFiscalSelector>(find.byType(EcfPosFiscalSelector));
+      expect(selector.selected, EcfPosFiscalMode.normal);
+      selector.onSelected(EcfPosFiscalMode.e31);
+      await tester.pump();
+      expect(find.text('E31 exige un cliente con RNC/Cédula y nombre.'), findsOneWidget);
+      expect(tester.widget<FilledButton>(confirm).onPressed, isNull);
+      selector.onSelected(EcfPosFiscalMode.normal);
+      await tester.pump();
+      expect(tester.widget<FilledButton>(confirm).onPressed, isNotNull);
+      expect(tester.takeException(), isNull);
+      // Cancel only: this test never confirms or posts a sale.
+      await tester.tap(find.text('Cancelar'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('phone-checkout-sale-summary')), findsNothing);
+    },
+    variant: TargetPlatformVariant({TargetPlatform.android, TargetPlatform.iOS}),
+  );
+
+  testWidgets(
+    'phone turn menu reuses open and close options without duplicate drawer group',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await _pumpScreen(tester, viewport: const Size(390, 844), cashOpen: false);
+      expect(find.text('Turno cerrado'), findsOneWidget);
+      await tester.tap(find.byTooltip('Estado del turno'));
+      await tester.pumpAndSettle();
+      expect(find.text('Abrir turno'), findsOneWidget);
+      expect(find.text('Cerrar turno'), findsNothing);
+      // Dismiss: never execute a cash operation in this layout test.
+      await tester.tapAt(const Offset(4, 800));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Abrir menú principal'));
+      await tester.pumpAndSettle();
+      expect(find.text('Turno'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+    variant: TargetPlatformVariant({TargetPlatform.android, TargetPlatform.iOS}),
+  );
+
+  testWidgets(
+    'narrow Windows keeps the original controls',
+    (tester) async {
+      await _pumpScreen(tester, viewport: const Size(390, 844));
+      expect(find.byKey(const ValueKey('phone-sales-header')), findsNothing);
+      expect(find.byTooltip('Tickets'), findsNothing);
+      expect(find.byType(MobileSalesProductCard), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.windows),
+  );
+
+  testWidgets('phone line editor remains usable with keyboard and square controls', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await _pumpScreen(tester, viewport: const Size(390, 844));
+    final lineName = find.text('Cable de prueba').last;
+    await tester.ensureVisible(lineName);
+    await tester.pumpAndSettle();
+    await tester.tap(lineName);
+    // The row supports both tap and double-tap; let the gesture recognizer
+    // resolve its double-tap window before expecting the editor route.
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+    final dialog = find.byType(Dialog);
+    expect(dialog, findsOneWidget, reason: tester.allWidgets.map((w) => w.runtimeType.toString())
+      .where((name) => name.contains('Dialog') || name.contains('Entry') || name.contains('Edit')).toSet().join(', '));
+    final shape = tester.widget<Dialog>(dialog).shape! as RoundedRectangleBorder;
+    expect(shape.borderRadius, BorderRadius.circular(4));
+    final fields = find.descendant(of: dialog, matching: find.byType(TextField));
+    await tester.tap(fields.first);
+    tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+    addTearDown(tester.view.resetViewInsets);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(fields.first);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.byType(MobileSalesLineEditorContent), findsOneWidget);
+    await tester.tap(find.descendant(of: dialog, matching: find.byTooltip('Cerrar')));
+    await tester.pumpAndSettle();
+    expect(dialog, findsNothing);
+  }, variant: TargetPlatformVariant({TargetPlatform.android, TargetPlatform.iOS}));
 
   testWidgets(
     'una empresa nueva no muestra el selector ni el aviso de numeración',
@@ -272,8 +581,12 @@ void main() {
       findsOneWidget,
       reason: 'el selector debe estar visible en el carrito',
     );
-    expect(tester.widget<EcfPosFiscalSelector>(find.byType(EcfPosFiscalSelector)).modes,
-      containsAll([EcfPosFiscalMode.e31, EcfPosFiscalMode.e32]));
+    expect(
+      tester
+          .widget<EcfPosFiscalSelector>(find.byType(EcfPosFiscalSelector))
+          .modes,
+      containsAll([EcfPosFiscalMode.e31, EcfPosFiscalMode.e32]),
+    );
     expect(
       find.textContaining('Comprobante electrónico no disponible'),
       findsNothing,
