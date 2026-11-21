@@ -49,5 +49,21 @@ void main() {
         expect(source, contains('PdfPanelIcons.download'), reason: path);
       }
     });
+
+    test('la factura de ventas recientes también abre el panel compartido', () {
+      final source = File(
+        'lib/modules/cotizaciones/cotizaciones_screen.dart',
+      ).readAsStringSync();
+      final start = source.indexOf('Future<void> _openRecentSalePdf(');
+      final end = source.indexOf('Future<void> _reprintRecentSaleTicket(', start);
+      final preview = source.substring(start, end);
+      expect(preview, contains('showPdfPreviewPanel<void>'));
+      expect(preview, contains('PdfPreviewPanelHeader'));
+      expect(preview, contains('PdfPreviewStage'));
+      expect(preview, contains('PdfPanelIcons.share'));
+      expect(preview, contains('PdfPanelIcons.download'));
+      expect(preview, isNot(contains('showDialog<void>')));
+      expect(preview, isNot(contains('child: PdfPreview(')));
+    });
   });
 }

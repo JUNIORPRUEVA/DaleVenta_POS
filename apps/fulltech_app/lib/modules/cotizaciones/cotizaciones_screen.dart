@@ -12,7 +12,6 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:permission_handler/permission_handler.dart' as permissions;
-import 'package:printing/printing.dart';
 
 import '../../core/auth/admin_authorization.dart';
 import '../../core/auth/admin_authorization_session.dart';
@@ -70,6 +69,8 @@ import '../../core/widgets/fulltech_page_header.dart';
 import '../../core/widgets/pdf_action_menu.dart';
 import '../../core/widgets/pdf_preview_panel.dart';
 import '../../core/utils/pdf_share.dart';
+import '../../core/utils/pdf_document_file_name.dart';
+import '../../core/utils/pdf_file_actions.dart';
 import '../../core/widgets/responsive_shell.dart';
 import '../../core/widgets/product_network_image.dart';
 import '../../core/widgets/user_avatar.dart';
@@ -7141,85 +7142,61 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     );
     if (!mounted) return;
     final filename = 'factura_${_saleShortId(sale).replaceAll('...', '')}.pdf';
+    final downloadFileName = buildPdfDocumentFileName(
+      documentKind: 'Factura',
+      customerName: sale.customerName,
+      fallbackCode: _saleShortId(sale),
+    );
 
-    await showDialog<void>(
+    await showPdfPreviewPanel<void>(
       context: context,
-      barrierDismissible: true,
-      barrierColor: const Color(0x990B1720),
+      barrierLabel: 'Vista previa de la factura',
       builder: (dialogContext) {
-        final media = MediaQuery.sizeOf(dialogContext);
-        final compact = media.width < 720;
-        return Dialog(
-          insetPadding: EdgeInsets.symmetric(
-            horizontal: compact ? 10 : 28,
-            vertical: compact ? 10 : 24,
-          ),
-          backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(compact ? 8 : 12),
-          ),
-          child: SizedBox(
-            width: compact ? media.width - 20 : 980,
-            height: compact ? media.height - 20 : media.height * 0.88,
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 10, 12),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.picture_as_pdf_outlined,
-                        color: Color(0xFF0F7C92),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'PDF factura · ${sale.customerName ?? 'Consumidor Final'}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w900,
-                            color: Color(0xFF111827),
-                          ),
-                        ),
-                      ),
-                      PdfActionMenu(
-                        bytes: bytes,
-                        fileName: filename,
-                        compact: compact,
-                        onShareWithClient: (menuContext) =>
-                            _shareRecentSaleInvoiceWithClient(
-                              launchContext: menuContext,
-                              sale: sale,
-                              bytes: bytes,
-                              filename: filename,
-                            ),
-                      ),
-                      const SizedBox(width: 6),
-                      IconButton(
-                        tooltip: 'Cerrar',
-                        onPressed: () => Navigator.of(dialogContext).pop(),
-                        icon: const Icon(Icons.close_rounded),
-                      ),
-                    ],
-                  ),
-                ),
-                const Divider(height: 1),
-                Expanded(
-                  child: PdfPreview(
-                    canChangePageFormat: false,
-                    canChangeOrientation: false,
-                    canDebug: false,
-                    allowPrinting: true,
-                    allowSharing: false,
-                    maxPageWidth: compact ? 640 : 900,
-                    pdfFileName: filename,
-                    build: (_) async => bytes,
-                  ),
-                ),
-              ],
+        return Column(
+          children: [
+            PdfPreviewPanelHeader(
+              title: 'PDF factura · ${sale.customerName ?? 'Consumidor Final'}',
+              onClose: () => Navigator.of(dialogContext).pop(),
             ),
-          ),
+            Expanded(
+              child: PdfPreviewStage(
+                bytes: bytes,
+                actions: [
+                  PdfActionMenu(
+                    bytes: bytes,
+                    fileName: filename,
+                    circular: true,
+                    iconAsset: PdfPanelIcons.share,
+                    onShareWithClient: (menuContext) =>
+                        _shareRecentSaleInvoiceWithClient(
+                          launchContext: menuContext,
+                          sale: sale,
+                          bytes: bytes,
+                          filename: filename,
+                        ),
+                  ),
+                  PdfPanelActionButton(
+                    iconAsset: PdfPanelIcons.download,
+                    label: 'Descargar la factura',
+                    onPressed: () async {
+                      final saved = await savePdfBytes(
+                        bytes: bytes,
+                        fileName: downloadFileName,
+                      );
+                      if (!dialogContext.mounted) return;
+                      AppFeedback.showToast(
+                        dialogContext,
+                        title: 'Factura',
+                        body: saved
+                            ? 'Factura guardada en Descargas como «$downloadFileName».'
+                            : 'No se pudo guardar la factura en Descargas.',
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ],
         );
       },
     );
