@@ -1,5 +1,22 @@
 # Execution State
 
+## Seguimiento de bloqueos de consolidación — 2026-11-21
+
+Trabajo exclusivo en candidatos locales. Las dos causas originales de CRM se
+corrigieron con pruebas; checkpoint c86af6a. La batería completa acotada tiene
+2583 PASS, un fallo y tres omisiones; el fallo de clasificación del cliente se
+reprodujo también en baseline. No existe un PASS completo final de CRM.
+La copia independiente C:/t/bridge-saneado-20261121, HEAD d47759a, pasa 95 pruebas,
+análisis de secretos de historia y fsck. Preserva exactamente el árbol actual;
+451 commits originales se verificaron individualmente y se restauró el respaldo.
+El puente original dd80d7f y su remoto no fueron reescritos. La copia saneada
+tiene push deshabilitado y no debe fusionarse con la historia original.
+Conservación revalidada: 21 worktrees originales, 1189 pendientes y 12 fuentes
+ignoradas, sin diferencias. Detalles y límites en
+docs/audits/CONSOLIDACION_CIERRE_BLOQUEOS_20261121.md.
+NO-GO para publicación/producción: estrategia de historia sensible y claves,
+controles remotos y preparación de migraciones aún separados. Sin push/deploy.
+
 ## Consolidación local de ambos chats — 2026-11-21
 
 Worktree exclusivo C:/t/fp-integ-20261121; rama

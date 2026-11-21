@@ -1,5 +1,9 @@
 # Consolidación de ambos chats — 21 de noviembre de 2026
 
+Seguimiento posterior: [cierre de bloqueos locales](CONSOLIDACION_CIERRE_BLOQUEOS_20261121.md).
+Este informe conserva la evidencia de su checkpoint; los resultados posteriores
+de CRM y el ensayo privado de saneamiento se registran en ese seguimiento.
+
 ## Alcance y resultado
 
 HECHO: se pausó el rediseño móvil y se prepararon candidatos **locales** de
