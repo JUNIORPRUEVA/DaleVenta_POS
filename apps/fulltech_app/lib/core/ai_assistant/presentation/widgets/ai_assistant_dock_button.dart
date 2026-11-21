@@ -18,14 +18,17 @@ class AiAssistantDockButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final size = compact ? 64.0 : 72.0;
+    final size = compact ? 60.0 : 68.0;
     final label = isActive
         ? 'Asistente de IA, abierto. Cerrar el asistente'
         : 'Abrir el asistente de IA';
 
     return Semantics(
+      container: true,
+      excludeSemantics: true,
       button: true,
       label: label,
+      onTap: onPressed,
       // SIN `Tooltip` a propósito, igual que en `LicensePurchaseOverlay` y en el
       // banner de errores: este botón vive en el `Stack` del `builder` de
       // MaterialApp, POR ENCIMA del Navigator, donde no existe ningún `Overlay`.
@@ -42,7 +45,7 @@ class AiAssistantDockButton extends StatelessWidget {
           boxShadow: [
             BoxShadow(
               color: AppColors.primaryDark.withValues(alpha: 0.18),
-              blurRadius: 16,
+              blurRadius: 12,
               offset: const Offset(0, 4),
             ),
           ],

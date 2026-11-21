@@ -1,0 +1,29 @@
+{
+  "passed": true,
+  "checks": {
+    "chat_human": true,
+    "chat_incident": true,
+    "crmInbox": true,
+    "privateNotesHidden": true,
+    "crmReplyReturnedToFullpos": true,
+    "foreignCompanyBlocked": true,
+    "internalNotificationPersisted": true
+  },
+  "caseReferences": [
+    "TK-1F3EC0",
+    "TK-577779"
+  ],
+  "realComponents": [
+    "FullPOS HTTP API",
+    "JWT login",
+    "PostgreSQL isolated local fixture",
+    "CRM HTTP API",
+    "SQLite isolated local fixture"
+  ],
+  "simulated": [
+    "fictitious companies",
+    "local integration credential"
+  ],
+  "productionTouched": false,
+  "externalMessagesSent": false
+}

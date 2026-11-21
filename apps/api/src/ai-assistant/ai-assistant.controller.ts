@@ -2,8 +2,13 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
   Post,
   Req,
+  StreamableFile,
+  Header,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -17,11 +22,35 @@ import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { ChatAiAssistantDto } from './dto/chat-ai-assistant.dto';
 import { AiAssistantService } from './ai-assistant.service';
+import { SupportReplyDto } from './dto/support-reply.dto';
 
 @UseGuards(AuthGuard('jwt'), RolesGuard)
 @Controller('ai')
 export class AiAssistantController {
   constructor(private readonly ai: AiAssistantService) {}
+
+  @Get('support/:ticketId')
+  @Roles(Role.ADMIN, Role.ASISTENTE, Role.VENDEDOR, Role.MARKETING, Role.TECNICO)
+  @Header('Cache-Control', 'private, no-store')
+  supportCase(@Req() req: Request, @Param('ticketId') ticketId: string) {
+    return this.ai.supportCase(req.user as { id: string; role: Role; companyId?: string | null }, ticketId);
+  }
+
+  @Post('support/:ticketId/messages')
+  @Roles(Role.ADMIN, Role.ASISTENTE, Role.VENDEDOR, Role.MARKETING, Role.TECNICO)
+  supportReply(@Req() req: Request, @Param('ticketId') ticketId: string, @Body() dto: SupportReplyDto) {
+    return this.ai.supportCase(req.user as { id: string; role: Role; companyId?: string | null }, ticketId, dto);
+  }
+
+  @Get('resources/:resourceId')
+  @Roles(Role.ADMIN, Role.ASISTENTE, Role.VENDEDOR, Role.MARKETING, Role.TECNICO)
+  @Header('Cache-Control', 'private, no-store')
+  @Header('Vary', 'Authorization')
+  @Header('X-Content-Type-Options', 'nosniff')
+  async resource(@Req() req: Request, @Param('resourceId', new ParseUUIDPipe()) resourceId: string) {
+    const file = await this.ai.libraryResource(req.user as { id: string; role: Role; companyId?: string | null }, resourceId);
+    return new StreamableFile(file.bytes, { type: file.mimeType, disposition: 'attachment', length: file.bytes.length });
+  }
 
   @Post('chat')
   @Roles(Role.ADMIN, Role.ASISTENTE, Role.VENDEDOR, Role.MARKETING, Role.TECNICO)

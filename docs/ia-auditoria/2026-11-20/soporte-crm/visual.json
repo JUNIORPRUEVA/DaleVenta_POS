@@ -1,0 +1,22 @@
+{
+  "passed": true,
+  "results": [
+    {
+      "width": 1280,
+      "realSupportCase": true,
+      "crmReplyVisible": true,
+      "noExternalWindow": true,
+      "noWhatsapp": true,
+      "pageErrors": []
+    },
+    {
+      "width": 390,
+      "realSupportCase": true,
+      "crmReplyVisible": true,
+      "noExternalWindow": true,
+      "noWhatsapp": true,
+      "pageErrors": []
+    }
+  ],
+  "productionTouched": false
+}

@@ -1,15 +1,20 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:typed_data';
 
 import '../../../errors/api_exception.dart';
 import '../../data/datasources/ai_assistant_datasource.dart';
 import '../models/ai_chat_context.dart';
 import '../models/ai_assistant_citation.dart';
+import '../models/ai_assistant_message.dart';
+import '../models/ai_assistant_resource.dart';
+import '../models/ai_support_case.dart';
 
 final aiAssistantServiceProvider = Provider<AiAssistantService>((ref) {
   return AiAssistantService(ref.watch(aiAssistantDataSourceProvider));
 });
 
 class AiAssistantChatResult {
+  final List<AiAssistantResource> resources;
   final String content;
   final bool denied;
   final List<AiAssistantCitation> citations;
@@ -19,13 +24,20 @@ class AiAssistantChatResult {
 
   /// La respuesta exige revisión humana (derivación o validación fallida).
   final bool requiresHumanReview;
+  final AiSupportIncident? incident;
+  final AiSupportCase? supportCase;
+  final bool resetConversation;
 
   const AiAssistantChatResult({
+    this.resources = const [],
     required this.content,
     required this.denied,
     required this.citations,
     this.conversationId,
     this.requiresHumanReview = false,
+    this.incident,
+    this.supportCase,
+    this.resetConversation = false,
   });
 }
 
@@ -69,6 +81,13 @@ class AiAssistantService {
     }
 
     return AiAssistantChatResult(
+      resources: res['resources'] is List
+          ? (res['resources'] as List)
+                .take(3)
+                .map(AiAssistantResource.fromMap)
+                .whereType<AiAssistantResource>()
+                .toList(growable: false)
+          : const [],
       content: content.trim().isEmpty
           ? 'No pude generar una respuesta válida. Inténtalo de nuevo.'
           : content,
@@ -79,8 +98,15 @@ class AiAssistantService {
           ? rawConversationId.trim()
           : null,
       requiresHumanReview: requiresHumanReview,
+      incident: AiSupportIncident.fromMap(res['incident']),
+      supportCase: AiSupportCase.fromMap(res['supportCase']),
+      resetConversation: res['resetConversation'] == true,
     );
   }
+
+  /// Sube un archivo y devuelve el identificador del trabajo multimedia.
+  Future<Uint8List> resourceBytes(AiAssistantResource resource) =>
+      _dataSource.resourceBytes(resource.id);
 
   /// Sube un archivo y devuelve el identificador del trabajo multimedia.
   ///

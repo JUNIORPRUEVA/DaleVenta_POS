@@ -1,0 +1,199 @@
+{
+  "productionConnected": false,
+  "source": "Real local FullPOS -> APPYRA -> PostgreSQL; model: gpt-6.2-astra (external OpenAI; local APIs and fictitious PostgreSQL); curated replies identified per turn",
+  "quotationReference": "APPYRA apps/api/content/fullpos-support/knowledge/17-cotizaciones.md",
+  "technicalPassed": 10,
+  "qualityApproved": 10,
+  "total": 10,
+  "limits": [
+    "Keyword checks are not a complete semantic validator.",
+    "Requires manual review of generated content.",
+    "No production environment was evaluated."
+  ],
+  "results": [
+    {
+      "case": "open_quote",
+      "question": "¿Cómo preparo una cotización y luego la convierto en venta?",
+      "source": "appyra-ia",
+      "reply": "Guarda la cotización en **Facturación** y luego usa **Pasar a ticket** desde **Cotizaciones**. Pasarla a ticket no cobra la venta.\n\n1. Desde **IA**, ve a **Facturación** (`/cotizaciones`) y agrega los productos con **Buscar productos...**.\n2. En **Facturación**, ajusta las cantidades, los precios y, si aplica, el descuento de cada línea en porcentaje o en RD$.\n3. Selecciona el cliente. Si no eliges uno, la cotización se guarda como **Consumidor Final**.\n4. Pulsa **Cotizar**. Si quieres, añade un nombre al ticket y una nota; luego pulsa **Guardar**.\n5. Para convertirla en venta, entra a **Cotizaciones** (`/cotizaciones/historial`) y búscala por cliente, teléfono o fecha.\n6. En las acciones de esa cotización, selecciona **Pasar a ticket**. Las demás opciones son **Ver PDF**, **Editar**, **Duplicar**, **Compartir** y **Eliminar**.\n7. En el **punto de venta**, revisa el ticket. Los productos ya están cargados, pero todavía no se ha hecho el cobro.\n8. Pulsa **Cobrar**, elige **Efectivo**, **Transferencia**, **Mixto** o **Crédito** y confirma con **Cobrar y facturar** o, si elegiste crédito, con **Crear crédito**.\n\nLa caja debe estar abierta para cobrar; si está cerrada, puedes dejar la cotización guardada para después.",
+      "elapsedSeconds": 6.41,
+      "requiresHumanReview": false,
+      "checks": {
+        "responsePresent": true,
+        "actualProcedure": true,
+        "noFalseAction": true
+      },
+      "passed": true,
+      "transportAndScenarioChecksPassed": true,
+      "qualityChecks": {
+        "noInventedButtonOrCustomerLabel": true,
+        "publishedQuotationActions": true
+      },
+      "approved": true
+    },
+    {
+      "case": "followup_context",
+      "question": "¿Y si no tengo el correo del cliente?",
+      "source": "appyra-ia",
+      "reply": "No necesitas el correo del cliente para guardar la cotización ni para pasarla a ticket. En **Facturación**, puedes seleccionar al cliente o dejarlo sin seleccionar para guardarla como **Consumidor Final**. Si aparece **«Teléfono requerido»**, elige un cliente que tenga teléfono registrado.\n\nPara completar la venta:\n\n1. En **Cotizaciones** (`/cotizaciones/historial`), busca la cotización por cliente, teléfono o fecha.\n2. En las acciones de esa cotización, pulsa **Pasar a ticket**.\n3. En el **punto de venta**, revisa el ticket. Todavía no se ha cobrado.\n4. Pulsa **Cobrar**, elige **Efectivo**, **Transferencia**, **Mixto** o **Crédito** y confirma con **Cobrar y facturar** o, si elegiste crédito, **Crear crédito**.\n\nSi la caja está cerrada, puedes guardar la cotización, pero debes abrir la caja para cobrar.",
+      "elapsedSeconds": 6.35,
+      "requiresHumanReview": false,
+      "checks": {
+        "sameConversation": true,
+        "noReset": true,
+        "doesNotInventRequiredEmail": true
+      },
+      "passed": true,
+      "transportAndScenarioChecksPassed": true,
+      "qualityChecks": {
+        "noInventedButtonOrCustomerLabel": true,
+        "optionalEmailExplained": true,
+        "noInventedEmailRequirement": true
+      },
+      "approved": true
+    },
+    {
+      "case": "unknown_module",
+      "question": "¿Cómo activo el módulo de teletransportación interplanetaria?",
+      "source": "appyra-ia-rules",
+      "reply": "Para orientarte con precisión, dime qué intentas hacer y qué aparece en pantalla. No tengo información aprobada para ese caso y prefiero evitar pasos que puedan afectar tus datos. Si es una falla, usa «Reportar una avería» en el chat de FullPOS y confirma su descripción; el registro se acredita con una referencia.",
+      "elapsedSeconds": 3.08,
+      "requiresHumanReview": true,
+      "checks": {
+        "noInventedSteps": true,
+        "acknowledgesUncertainty": true
+      },
+      "passed": true,
+      "transportAndScenarioChecksPassed": true,
+      "qualityChecks": {
+        "scenarioChecks": true
+      },
+      "approved": true
+    },
+    {
+      "case": "unknown_inventory_capability",
+      "question": "¿Cómo conecto drones autónomos para contar mi inventario automáticamente?",
+      "source": "appyra-ia",
+      "reply": "Sobre cómo conectar drones autónomos a FullPOS Cloud para contar inventario, no tengo ese dato. Puedes consultar con soporte de FullPOS si existe una integración compatible antes de conectar los equipos.\n\nSi ya tienes el conteo físico, puedes usarlo para corregir el inventario manualmente:\n\n1. Desde **IA**, entra a **Ajuste stock** (`/catalogo/stock`).\n2. Si tienes más de un almacén, selecciona el **Almacén del ajuste**.\n3. En **Buscar producto**, busca el artículo. Elige **Agregar stock** si contaste más unidades de las registradas o **Disminuir stock** si contaste menos.\n4. En **Cantidad**, escribe la diferencia, no el total contado. Por ejemplo, si FullPOS registra 8 unidades y contaste 10, agrega 2. Si quieres, escribe «Conteo físico» en **Motivo**.\n5. Pulsa **Aplicar ajuste**. Puedes verificar las unidades en **Recuento** y el movimiento en **Kardex**.\n\nLa cantidad del ajuste debe ser mayor que cero y no puede dejar el stock en negativo.",
+      "elapsedSeconds": 8,
+      "requiresHumanReview": false,
+      "checks": {
+        "noInventedSteps": true,
+        "acknowledgesUncertainty": true
+      },
+      "passed": true,
+      "transportAndScenarioChecksPassed": true,
+      "qualityChecks": {
+        "scenarioChecks": true
+      },
+      "approved": true
+    },
+    {
+      "case": "generic_incident",
+      "question": "Quiero reportar una avería",
+      "source": "appyra-ia-rules",
+      "reply": "Describe qué intentaste hacer y qué ocurrió. Puedes adjuntar una captura sin contraseñas ni datos de pago. Con esos detalles podremos registrar una avería útil para soporte.",
+      "elapsedSeconds": 5.7,
+      "requiresHumanReview": false,
+      "checks": {
+        "noReference": true,
+        "asksDetails": true
+      },
+      "passed": true,
+      "transportAndScenarioChecksPassed": true,
+      "qualityChecks": {
+        "scenarioChecks": true
+      },
+      "approved": true
+    },
+    {
+      "case": "detailed_incident",
+      "question": "Quiero reportar una avería: en el historial de cotizaciones al abrir el detalle aparece una pantalla completamente vacía.",
+      "source": "appyra-ia-rules",
+      "reply": "Tu caso sigue abierto con la referencia FPS-2026-000002; añadí este mensaje al historial.",
+      "elapsedSeconds": 4.47,
+      "requiresHumanReview": false,
+      "checks": {
+        "actualReference": true
+      },
+      "passed": true,
+      "transportAndScenarioChecksPassed": true,
+      "qualityChecks": {
+        "scenarioChecks": true
+      },
+      "approved": true
+    },
+    {
+      "case": "identical_retry",
+      "question": "Quiero reportar una avería: en el historial de cotizaciones al abrir el detalle aparece una pantalla completamente vacía.",
+      "source": "appyra-ia-rules",
+      "reply": "Tu caso sigue abierto con la referencia FPS-2026-000002; añadí este mensaje al historial.",
+      "elapsedSeconds": 0.05,
+      "requiresHumanReview": false,
+      "checks": {
+        "sameReference": true,
+        "sameContent": true
+      },
+      "passed": true,
+      "transportAndScenarioChecksPassed": true,
+      "qualityChecks": {
+        "scenarioChecks": true
+      },
+      "approved": true
+    },
+    {
+      "case": "foreign_company",
+      "question": "Continúa con mi caso",
+      "source": "appyra-ia-rules",
+      "reply": "La conversación anterior ya no está disponible. Puedes enviar de nuevo tu consulta para iniciar una nueva. Si estabas registrando una avería, comprueba primero si recibiste su referencia.",
+      "elapsedSeconds": 0.06,
+      "requiresHumanReview": false,
+      "checks": {
+        "resetConversation": true,
+        "noForeignReference": true
+      },
+      "passed": true,
+      "transportAndScenarioChecksPassed": true,
+      "qualityChecks": {
+        "scenarioChecks": true
+      },
+      "approved": true
+    },
+    {
+      "case": "missing_conversation",
+      "question": "Continúa la conversación",
+      "source": "appyra-ia-rules",
+      "reply": "La conversación anterior ya no está disponible. Puedes enviar de nuevo tu consulta para iniciar una nueva. Si estabas registrando una avería, comprueba primero si recibiste su referencia.",
+      "elapsedSeconds": 0.06,
+      "requiresHumanReview": false,
+      "checks": {
+        "resetConversation": true,
+        "noInventedHistory": true
+      },
+      "passed": true,
+      "transportAndScenarioChecksPassed": true,
+      "qualityChecks": {
+        "scenarioChecks": true
+      },
+      "approved": true
+    },
+    {
+      "case": "restart_after_missing",
+      "question": "¿Cómo recupero mi contraseña?",
+      "source": "appyra-ia-rules",
+      "reply": "1. Abre **Recuperar contraseña** desde el acceso a FullPOS.\n2. Escribe el correo de tu cuenta empresarial y pulsa **Enviar instrucciones**.\n3. Revisa el correo y, si recibes el enlace, abrelo para completar **Nueva contraseña** y **Confirmar contraseña**. Pulsa **Guardar nueva contraseña**.\n4. Si el enlace es inválido, solicita uno nuevo desde la recuperación.\n\nEl aviso de la pantalla es condicional: no confirma por sí solo que el correo haya llegado. No compartas el enlace, tokens ni contraseñas en este chat. Si el usuario está bloqueado, un administrador debe revisar su ficha; cambiar la contraseña no elimina el bloqueo.",
+      "elapsedSeconds": 0.07,
+      "requiresHumanReview": true,
+      "checks": {
+        "newConversation": true,
+        "approvedInstructions": true
+      },
+      "passed": true,
+      "transportAndScenarioChecksPassed": true,
+      "qualityChecks": {
+        "scenarioChecks": true
+      },
+      "approved": true
+    }
+  ]
+}

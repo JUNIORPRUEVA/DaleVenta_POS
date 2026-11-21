@@ -62,7 +62,23 @@ export interface AppyraIaSource {
   readonly source?: string;
 }
 
+export interface AppyraIaResource {
+  readonly id: string;
+  readonly title: string;
+  readonly kind: 'IMAGE' | 'VIDEO' | 'DOCUMENT';
+  readonly mimeType: string;
+  readonly fileName: string;
+  readonly sizeBytes: number;
+  readonly version: number;
+}
+
+const RESOURCE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const RESOURCE_MIMES = new Set(['image/png', 'image/jpeg', 'image/webp', 'video/mp4', 'video/webm', 'application/pdf', 'text/plain']);
+const MAX_RESOURCE_BYTES = 32 * 1024 * 1024;
+
 export interface AppyraIaChatResult {
+  readonly resources?: readonly AppyraIaResource[];
+  readonly incident?: { reference: string; status: string; duplicate: boolean };
   readonly conversationId: string | null;
   readonly agentName: string | null;
   readonly agentVersion: number | null;
@@ -80,6 +96,8 @@ export type AppyraIaErrorKind = 'disabled' | 'configuration' | 'timeout' | 'http
 
 /** Contrato de respuesta que ya consume el panel flotante de FullPOS. */
 export interface AppyraIaChatResponse {
+  readonly resources?: readonly AppyraIaResource[];
+  readonly incident?: { reference: string; status: string; duplicate: boolean };
   readonly source: 'appyra-ia' | 'appyra-ia-rules';
   readonly content: string;
   readonly citations: Array<{
@@ -113,11 +131,13 @@ export function toFullPosChatResponse(
   }));
 
   return {
-    source: result.mode === 'simulated' ? 'appyra-ia-rules' : 'appyra-ia',
+    source: result.mode.toLowerCase() === 'simulated' ? 'appyra-ia-rules' : 'appyra-ia',
     content: result.text,
     citations,
+    ...(result.resources?.length ? { resources: result.resources } : {}),
     denied: false,
     requiresHumanReview: result.escalated || result.requiresHumanReview,
+    ...(result.incident === undefined ? {} : { incident: result.incident }),
     ...(result.conversationId === null ? {} : { conversationId: result.conversationId }),
     ...(result.agentName === null ? {} : { agentName: result.agentName }),
     ...(result.agentVersion === null ? {} : { agentVersion: result.agentVersion }),
@@ -236,6 +256,43 @@ export class AppyraIaClient {
     return this.mapResponse(payload);
   }
 
+  /** Product agent is resolved server-side. Clients supply neither URLs nor agent IDs. */
+  async libraryResource(resourceId: string): Promise<{ bytes: Buffer; mimeType: string }> {
+    if (!RESOURCE_ID.test(resourceId)) throw new AppyraIaError('payload', 'Identificador de recurso inválido.');
+    const runtime = this.readConfig();
+    if (!runtime.enabled || !runtime.baseUrl || !runtime.token) throw new AppyraIaError('disabled', 'Los recursos del asistente no están disponibles.');
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), runtime.mediaTimeoutMs);
+    const options = { headers: { Authorization: `Bearer ${runtime.token}` }, redirect: 'error' as const, signal: controller.signal };
+    try {
+      const agentResponse = await fetch(`${runtime.baseUrl}/agent-runtime/agent?productKey=${encodeURIComponent(runtime.productKey)}`, options);
+      if (!agentResponse.ok) throw new AppyraIaError('http', 'No se pudo verificar el agente.', agentResponse.status);
+      const agent = await agentResponse.json() as { id?: unknown };
+      if (typeof agent.id !== 'string' || !RESOURCE_ID.test(agent.id)) throw new AppyraIaError('payload', 'Agente inválido.');
+      const response = await fetch(`${runtime.baseUrl}/agent-runtime/library/${agent.id}/resources/${resourceId}/file`, options);
+      if (!response.ok) throw new AppyraIaError('http', 'El recurso no está disponible.', response.status);
+      const mimeType = (response.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase();
+      if (!RESOURCE_MIMES.has(mimeType)) throw new AppyraIaError('payload', 'Formato de recurso no permitido.');
+      const declaredSize = Number(response.headers.get('content-length') ?? 0);
+      if (declaredSize > MAX_RESOURCE_BYTES) throw new AppyraIaError('payload', 'El recurso supera el límite permitido.');
+      if (!response.body) throw new AppyraIaError('payload', 'El recurso está vacío.');
+      const reader = response.body.getReader();
+      const chunks: Buffer[] = []; let size = 0;
+      for (;;) {
+        const chunk = await reader.read(); if (chunk.done) break;
+        size += chunk.value.byteLength;
+        if (size > MAX_RESOURCE_BYTES) { await reader.cancel(); throw new AppyraIaError('payload', 'El recurso supera el límite permitido.'); }
+        chunks.push(Buffer.from(chunk.value));
+      }
+      if (!size) throw new AppyraIaError('payload', 'El recurso está vacío.');
+      return { bytes: Buffer.concat(chunks, size), mimeType };
+    } catch (error) {
+      if (error instanceof AppyraIaError) throw error;
+      this.logger.warn('No se pudo descargar el recurso autorizado de APPYRA IA.');
+      throw new AppyraIaError(error instanceof Error && error.name === 'AbortError' ? 'timeout' : 'http', 'No se pudo descargar el recurso.');
+    } finally { clearTimeout(timer); }
+  }
+
   /**
    * Sube un archivo al motor multimedia de APPYRA IA y espera a que termine.
    *
@@ -351,11 +408,11 @@ export class AppyraIaClient {
     const mediaToken = (this.config.get<string>('APPYRA_IA_MEDIA_TOKEN') ?? '').trim();
     const productKey =
       (this.config.get<string>('APPYRA_IA_PRODUCT_KEY') ?? '').trim() || DEFAULT_PRODUCT_KEY;
-    const rawTimeout = Number(this.config.get<string>('APPYRA_IA_TIMEOUT_MS') ?? '');
+    const rawTimeout = Number(this.config.get<string>('APPYRA_IA_TIMEOUT_MS')?.trim() || Number.NaN);
     const timeoutMs = Number.isFinite(rawTimeout)
       ? Math.min(Math.max(Math.trunc(rawTimeout), MIN_TIMEOUT_MS), MAX_TIMEOUT_MS)
       : DEFAULT_TIMEOUT_MS;
-    const rawMediaTimeout = Number(this.config.get<string>('APPYRA_IA_MEDIA_TIMEOUT_MS') ?? '');
+    const rawMediaTimeout = Number(this.config.get<string>('APPYRA_IA_MEDIA_TIMEOUT_MS')?.trim() || Number.NaN);
     const mediaTimeoutMs = Number.isFinite(rawMediaTimeout)
       ? Math.min(Math.max(Math.trunc(rawMediaTimeout), MIN_MEDIA_TIMEOUT_MS), MAX_MEDIA_TIMEOUT_MS)
       : DEFAULT_MEDIA_TIMEOUT_MS;
@@ -453,16 +510,25 @@ export class AppyraIaClient {
     const agent = root['agent'];
     const agentRecord =
       typeof agent === 'object' && agent !== null ? (agent as Record<string, unknown>) : null;
+    const incident = root['incident'];
+    const record = typeof incident === 'object' && incident !== null ? incident as Record<string, unknown> : null;
+    const confirmedIncident = record && typeof record.reference === 'string' &&
+      /^FPS-\d{4}-\d{6,}$/.test(record.reference) &&
+      ['OPEN', 'IN_PROGRESS', 'WAITING_CUSTOMER', 'RESOLVED', 'CLOSED'].includes(String(record.status))
+      ? { reference: record.reference, status: String(record.status), duplicate: record.duplicate === true } : undefined;
 
+    const resources = this.readResources(replyRecord['resources']);
     return {
       conversationId: this.readString(root['conversationId']),
+      ...(resources.length ? { resources } : {}),
+      ...(confirmedIncident === undefined ? {} : { incident: confirmedIncident }),
       agentName: agentRecord === null ? null : this.readString(agentRecord['name']),
       agentVersion:
         agentRecord !== null && typeof agentRecord['version'] === 'number'
           ? agentRecord['version']
           : null,
       text: text.trim(),
-      mode: this.readString(replyRecord['mode']) ?? 'local',
+      mode: replyRecord['usedSafeDraft'] === true ? 'simulated' : this.readString(replyRecord['mode']) ?? 'local',
       model: this.readString(replyRecord['model']),
       escalated: replyRecord['escalated'] === true,
       requiresHumanReview: replyRecord['requiresHumanReview'] === true,
@@ -474,6 +540,23 @@ export class AppyraIaClient {
 
   private readString(value: unknown): string | null {
     return typeof value === 'string' && value.trim() !== '' ? value.trim() : null;
+  }
+
+  private readResources(value: unknown): AppyraIaResource[] {
+    if (!Array.isArray(value)) return [];
+    return value.slice(0, 3).flatMap((item: unknown) => {
+      if (!item || typeof item !== 'object') return [];
+      const row = item as Record<string, unknown>;
+      if (typeof row.id !== 'string' || !RESOURCE_ID.test(row.id) || typeof row.title !== 'string' || !row.title.trim() ||
+          typeof row.mimeType !== 'string' || !RESOURCE_MIMES.has(row.mimeType) || typeof row.fileName !== 'string' ||
+          typeof row.sizeBytes !== 'number' || !Number.isInteger(row.sizeBytes) || row.sizeBytes <= 0 || row.sizeBytes > MAX_RESOURCE_BYTES ||
+          !['IMAGE', 'VIDEO', 'DOCUMENT'].includes(String(row.kind))) return [];
+      const kind = row.mimeType.startsWith('image/') ? 'IMAGE' : row.mimeType.startsWith('video/') ? 'VIDEO' : 'DOCUMENT';
+      if (kind !== row.kind) return [];
+      return [{ id: row.id, title: row.title.trim().slice(0, 200), kind, mimeType: row.mimeType,
+        fileName: row.fileName.replace(/[\r\n\\/]/g, '_').slice(0, 180), sizeBytes: row.sizeBytes,
+        version: typeof row.version === 'number' && Number.isInteger(row.version) && row.version > 0 ? row.version : 1 }];
+    });
   }
 
   private readStringList(value: unknown): string[] {

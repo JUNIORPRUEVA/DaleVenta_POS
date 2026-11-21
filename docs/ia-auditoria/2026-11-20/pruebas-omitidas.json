@@ -1,0 +1,3241 @@
+{
+  "passed": 3065,
+  "pending": 597,
+  "completelyPendingSuites": 57,
+  "filesWithPendingTests": 59,
+  "aiPending": 0,
+  "allDefaultSkipsAreConditional": true,
+  "summary": [
+    {
+      "group": "fiscal",
+      "label": "Fiscal / ventas e-CF",
+      "files": 39,
+      "tests": 454,
+      "execution": "Suite PostgreSQL fiscal aislada requerida para release del área; sin ejecución en esta tarea de IA."
+    },
+    {
+      "group": "licenses",
+      "label": "Licencias / pagos / actividad",
+      "files": 5,
+      "tests": 42,
+      "execution": "Fixtures PostgreSQL dedicadas requeridas para release del área; sin ejecución ni modificación de licencias en esta tarea."
+    },
+    {
+      "group": "guardian",
+      "label": "Guardian / diagnóstico",
+      "files": 13,
+      "tests": 89,
+      "execution": "PostgreSQL y rol lector dedicados; ejecución pendiente fuera del chat de IA. No confundir Guardian con APPYRA runtime."
+    },
+    {
+      "group": "notifications",
+      "label": "Outbox de notificaciones",
+      "files": 1,
+      "tests": 4,
+      "execution": "PostgreSQL y transporte simulado; ejecución pendiente. Nunca activar envíos externos para contar estas pruebas."
+    },
+    {
+      "group": "legacy",
+      "label": "Importación legacy",
+      "files": 1,
+      "tests": 8,
+      "execution": "Ensayo de importación/rollback con SQLite y PostgreSQL desechables; fuera del alcance actual."
+    }
+  ],
+  "files": [
+    {
+      "path": "src/ecf/integration/multi-company-e2e.integration-spec.ts",
+      "group": "fiscal",
+      "count": 12,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "ECF_POSTGRES_UAT",
+        "DATABASE_URL",
+        "ALANUBE_ENABLE_REAL_CALLS",
+        "JWT_SECRET"
+      ],
+      "execution": "Suite PostgreSQL fiscal aislada requerida para release del área; sin ejecución en esta tarea de IA.",
+      "tests": [
+        {
+          "name": "Validación integral multiempresa — cinco empresas ficticias A: venta del POS → E31 con e-NCF propio → despacho simulado → estado final",
+          "status": "pending"
+        },
+        {
+          "name": "Validación integral multiempresa — cinco empresas ficticias B: sin e-CF habilitado no prepara, pero la venta normal del POS funciona",
+          "status": "pending"
+        },
+        {
+          "name": "Validación integral multiempresa — cinco empresas ficticias B no puede preparar la venta de A (aislamiento por empresa)",
+          "status": "pending"
+        },
+        {
+          "name": "Validación integral multiempresa — cinco empresas ficticias C: credenciales TEST y PRODUCCIÓN separadas; en TEST se usa la clave de TEST",
+          "status": "pending"
+        },
+        {
+          "name": "Validación integral multiempresa — cinco empresas ficticias C: PRODUCCIÓN sin autorización explícita no llega a usar la clave de producción",
+          "status": "pending"
+        },
+        {
+          "name": "Validación integral multiempresa — cinco empresas ficticias las claves de una empresa no se usan para otra",
+          "status": "pending"
+        },
+        {
+          "name": "Validación integral multiempresa — cinco empresas ficticias un reintento con la misma clave de idempotencia no produce un segundo envío",
+          "status": "pending"
+        },
+        {
+          "name": "Validación integral multiempresa — cinco empresas ficticias D: RNC repetido en dos empresas deja el resolutor ambiguo y no elige ninguna",
+          "status": "pending"
+        },
+        {
+          "name": "Validación integral multiempresa — cinco empresas ficticias E: sin credencial activa el proveedor no recibe nada",
+          "status": "pending"
+        },
+        {
+          "name": "Validación integral multiempresa — cinco empresas ficticias un RNC ajeno en el cuerpo se rechaza antes de cualquier envío",
+          "status": "pending"
+        },
+        {
+          "name": "Validación integral multiempresa — cinco empresas ficticias el estado sobrevive a un reinicio del backend",
+          "status": "pending"
+        },
+        {
+          "name": "Validación integral multiempresa — cinco empresas ficticias dos empresas preparan y despachan a la vez sin interferirse",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/license/orders/license-orders.integration-spec.ts",
+      "group": "licenses",
+      "count": 19,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "LICENSE_PAYMENTS_FIXTURE_URL"
+      ],
+      "execution": "Fixtures PostgreSQL dedicadas requeridas para release del área; sin ejecución ni modificación de licencias en esta tarea.",
+      "tests": [
+        {
+          "name": "Pago de planes con PostgreSQL aislado crea una orden con referencia unica, importe del catalogo y vida de renovacion",
+          "status": "pending"
+        },
+        {
+          "name": "Pago de planes con PostgreSQL aislado al subir el comprobante activa al instante y deja el pago por verificar",
+          "status": "pending"
+        },
+        {
+          "name": "Pago de planes con PostgreSQL aislado rechaza el mismo comprobante dos veces sin activar de nuevo",
+          "status": "pending"
+        },
+        {
+          "name": "Pago de planes con PostgreSQL aislado conserva la descarga privada de archivos locales para la empresa y el puente administrativo",
+          "status": "pending"
+        },
+        {
+          "name": "Pago de planes con PostgreSQL aislado una caida de R2 no registra evidencia ni activa o modifica la licencia",
+          "status": "pending"
+        },
+        {
+          "name": "Pago de planes con PostgreSQL aislado persiste claves R2 sin cambiar el contrato y bloquea la descarga desde otra empresa",
+          "status": "pending"
+        },
+        {
+          "name": "Pago de planes con PostgreSQL aislado renueva sumando al vencimiento existente",
+          "status": "pending"
+        },
+        {
+          "name": "Pago de planes con PostgreSQL aislado apaga lo que el plan no incluye al activar un plan inferior",
+          "status": "pending"
+        },
+        {
+          "name": "Pago de planes con PostgreSQL aislado dos subidas simultaneas a la misma orden activan una sola vez",
+          "status": "pending"
+        },
+        {
+          "name": "Pago de planes con PostgreSQL aislado el mismo archivo en dos ordenes a la vez responde 409, no 500",
+          "status": "pending"
+        },
+        {
+          "name": "Pago de planes con PostgreSQL aislado una orden ya cerrada no admite otro comprobante",
+          "status": "pending"
+        },
+        {
+          "name": "Pago de planes con PostgreSQL aislado una referencia usada por otra empresa no vuelve a activar (A4)",
+          "status": "pending"
+        },
+        {
+          "name": "Pago de planes con PostgreSQL aislado un comprobante con fecha futura no activa (A2)",
+          "status": "pending"
+        },
+        {
+          "name": "Pago de planes con PostgreSQL aislado una cuenta de cobro mal configurada no activa (A3)",
+          "status": "pending"
+        },
+        {
+          "name": "Pago de planes con PostgreSQL aislado rechazar el pago devuelve la licencia al estado anterior (reversion)",
+          "status": "pending"
+        },
+        {
+          "name": "Pago de planes con PostgreSQL aislado cinco subidas simultaneas del mismo archivo: una sola evidencia y un solo periodo",
+          "status": "pending"
+        },
+        {
+          "name": "Pago de planes con PostgreSQL aislado cinco subidas simultaneas de archivos distintos a la misma orden: una sola activacion",
+          "status": "pending"
+        },
+        {
+          "name": "Pago de planes con PostgreSQL aislado la misma referencia en dos comprobantes distintos de la misma empresa no activa dos veces",
+          "status": "pending"
+        },
+        {
+          "name": "Pago de planes con PostgreSQL aislado tras un comprobante rechazado, uno valido activa una sola vez",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/ecf/provider/dosa/dosa-sale-to-json-postgres.integration-spec.ts",
+      "group": "fiscal",
+      "count": 6,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "ECF_POSTGRES_UAT",
+        "DATABASE_URL",
+        "ALANUBE_ENABLE_REAL_CALLS",
+        "JWT_SECRET"
+      ],
+      "execution": "Suite PostgreSQL fiscal aislada requerida para release del área; sin ejecución en esta tarea de IA.",
+      "tests": [
+        {
+          "name": "Venta real del POS → JSON de DOSA (sin transmitir) E31: venta con un bien por unidad llega a JSON de DOSA válido",
+          "status": "pending"
+        },
+        {
+          "name": "Venta real del POS → JSON de DOSA (sin transmitir) E32: venta de consumidor final por yardas conserva cantidad y unidad",
+          "status": "pending"
+        },
+        {
+          "name": "Venta real del POS → JSON de DOSA (sin transmitir) venta mixta (bien + servicio) declara la naturaleza de cada línea",
+          "status": "pending"
+        },
+        {
+          "name": "Venta real del POS → JSON de DOSA (sin transmitir) unidad sin equivalencia documentada: se bloquea y NUNCA llega a la barrera",
+          "status": "pending"
+        },
+        {
+          "name": "Venta real del POS → JSON de DOSA (sin transmitir) una venta cancelada no produce documento fiscal",
+          "status": "pending"
+        },
+        {
+          "name": "Venta real del POS → JSON de DOSA (sin transmitir) la nota de crédito no se prepara desde una venta, y nunca sin código",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/sales/sales-return-ecf-credit-postgres.integration-spec.ts",
+      "group": "fiscal",
+      "count": 15,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "ECF_POSTGRES_UAT",
+        "ALANUBE_ENABLE_REAL_CALLS"
+      ],
+      "execution": "Suite PostgreSQL fiscal aislada requerida para release del área; sin ejecución en esta tarea de IA.",
+      "tests": [
+        {
+          "name": "devolución de venta con comprobante aceptado E31/E32 (E34) on PostgreSQL una devolución parcial prepara su nota E34 con e-NCF autorizado",
+          "status": "pending"
+        },
+        {
+          "name": "devolución de venta con comprobante aceptado E31/E32 (E34) on PostgreSQL dos devoluciones parciales dejan su propia nota y suman reserva",
+          "status": "pending"
+        },
+        {
+          "name": "devolución de venta con comprobante aceptado E31/E32 (E34) on PostgreSQL devolver todo el comprobante genera una sola nota TOTAL",
+          "status": "pending"
+        },
+        {
+          "name": "devolución de venta con comprobante aceptado E31/E32 (E34) on PostgreSQL una devolución de un comprobante E32 de consumo también prepara su E34",
+          "status": "pending"
+        },
+        {
+          "name": "devolución de venta con comprobante aceptado E31/E32 (E34) on PostgreSQL reintentar la misma devolución reutiliza la nota, no la duplica",
+          "status": "pending"
+        },
+        {
+          "name": "devolución de venta con comprobante aceptado E31/E32 (E34) on PostgreSQL una venta sin comprobante electrónico no genera nota alguna",
+          "status": "pending"
+        },
+        {
+          "name": "devolución de venta con comprobante aceptado E31/E32 (E34) on PostgreSQL no permite devolver más cantidad de la facturada ni sobre-acreditar",
+          "status": "pending"
+        },
+        {
+          "name": "devolución de venta con comprobante aceptado E31/E32 (E34) on PostgreSQL dos devoluciones simultáneas no duplican e-NCF ni sobrepasan el crédito",
+          "status": "pending"
+        },
+        {
+          "name": "devolución de venta con comprobante aceptado E31/E32 (E34) on PostgreSQL partial then remaining refund each prepare their own exact E34 and replay the earlier note",
+          "status": "pending"
+        },
+        {
+          "name": "devolución de venta con comprobante aceptado E31/E32 (E34) on PostgreSQL accepted electronic invoices cannot be cancelled through the ordinary delete route",
+          "status": "pending"
+        },
+        {
+          "name": "devolución de venta con comprobante aceptado E31/E32 (E34) on PostgreSQL refund idempotency rejects another original sale instead of returning its financial result",
+          "status": "pending"
+        },
+        {
+          "name": "devolución de venta con comprobante aceptado E31/E32 (E34) on PostgreSQL failed E34 preparation is visible and recovers without another financial refund",
+          "status": "pending"
+        },
+        {
+          "name": "devolución de venta con comprobante aceptado E31/E32 (E34) on PostgreSQL fiscal history projects original and notes with company and cashier boundaries",
+          "status": "pending"
+        },
+        {
+          "name": "devolución de venta con comprobante aceptado E31/E32 (E34) on PostgreSQL a return beyond the automatic tax window remains explicit and never creates an unreviewed E34",
+          "status": "pending"
+        },
+        {
+          "name": "devolución de venta con comprobante aceptado E31/E32 (E34) on PostgreSQL ambiguous legacy originals are displayed for review and never credited blindly",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/ecf/pos/ecf-sale-fiscal.adapter-postgres.integration-spec.ts",
+      "group": "fiscal",
+      "count": 22,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "ECF_POSTGRES_UAT",
+        "ALANUBE_ENABLE_REAL_CALLS"
+      ],
+      "execution": "Suite PostgreSQL fiscal aislada requerida para release del área; sin ejecución en esta tarea de IA.",
+      "tests": [
+        {
+          "name": "EcfSaleFiscalAdapter (venta → snapshot fiscal) on PostgreSQL builds an E31 snapshot for an ITBIS sale from persisted data",
+          "status": "pending"
+        },
+        {
+          "name": "EcfSaleFiscalAdapter (venta → snapshot fiscal) on PostgreSQL marks exempt lines as EXEMPT and keeps them out of the taxable base",
+          "status": "pending"
+        },
+        {
+          "name": "EcfSaleFiscalAdapter (venta → snapshot fiscal) on PostgreSQL handles a mixed sale (ITBIS + exempt) with both categories",
+          "status": "pending"
+        },
+        {
+          "name": "EcfSaleFiscalAdapter (venta → snapshot fiscal) on PostgreSQL preserves line discounts",
+          "status": "pending"
+        },
+        {
+          "name": "EcfSaleFiscalAdapter (venta → snapshot fiscal) on PostgreSQL classifies a service line from Product.itemType",
+          "status": "pending"
+        },
+        {
+          "name": "EcfSaleFiscalAdapter (venta → snapshot fiscal) on PostgreSQL keeps the fiscal classification frozen when the product type changes later",
+          "status": "pending"
+        },
+        {
+          "name": "EcfSaleFiscalAdapter (venta → snapshot fiscal) on PostgreSQL keeps the frozen classification when the product is archived afterwards",
+          "status": "pending"
+        },
+        {
+          "name": "EcfSaleFiscalAdapter (venta → snapshot fiscal) on PostgreSQL prepares an E32 for final consumer without identifying the buyer",
+          "status": "pending"
+        },
+        {
+          "name": "EcfSaleFiscalAdapter (venta → snapshot fiscal) on PostgreSQL refuses E31 without an identified buyer",
+          "status": "pending"
+        },
+        {
+          "name": "EcfSaleFiscalAdapter (venta → snapshot fiscal) on PostgreSQL refuses a sale that is not eligible with ECF_SALE_CANCELLED",
+          "status": "pending"
+        },
+        {
+          "name": "EcfSaleFiscalAdapter (venta → snapshot fiscal) on PostgreSQL refuses a sale that is not eligible with ECF_SALE_DELETED",
+          "status": "pending"
+        },
+        {
+          "name": "EcfSaleFiscalAdapter (venta → snapshot fiscal) on PostgreSQL refuses a refund sale: it belongs to E34, not to a new comprobante",
+          "status": "pending"
+        },
+        {
+          "name": "EcfSaleFiscalAdapter (venta → snapshot fiscal) on PostgreSQL never reads a sale from another company",
+          "status": "pending"
+        },
+        {
+          "name": "EcfSaleFiscalAdapter (venta → snapshot fiscal) on PostgreSQL blocks when the issuer fiscal data is incomplete",
+          "status": "pending"
+        },
+        {
+          "name": "EcfSaleFiscalAdapter (venta → snapshot fiscal) on PostgreSQL refuses a tax rate it cannot map instead of approximating it",
+          "status": "pending"
+        },
+        {
+          "name": "EcfSaleFiscalAdapter (venta → snapshot fiscal) on PostgreSQL blocks a line whose fiscal classification was never captured",
+          "status": "pending"
+        },
+        {
+          "name": "EcfSaleFiscalAdapter (venta → snapshot fiscal) on PostgreSQL blocks when the lines and the sale totals contradict each other",
+          "status": "pending"
+        },
+        {
+          "name": "EcfSaleFiscalAdapter (venta → snapshot fiscal) on PostgreSQL blocks a sale without items",
+          "status": "pending"
+        },
+        {
+          "name": "EcfSaleFiscalAdapter (venta → snapshot fiscal) on PostgreSQL reconciles amounts at the rounding limit",
+          "status": "pending"
+        },
+        {
+          "name": "EcfSaleFiscalAdapter (venta → snapshot fiscal) on PostgreSQL produces the same evidence fingerprint for the same persisted sale",
+          "status": "pending"
+        },
+        {
+          "name": "EcfSaleFiscalAdapter (venta → snapshot fiscal) on PostgreSQL keeps the sale's own unit when the product changes unit afterwards",
+          "status": "pending"
+        },
+        {
+          "name": "EcfSaleFiscalAdapter (venta → snapshot fiscal) on PostgreSQL carries the unit of each line in a mixed sale (good + service)",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/ecf/sandbox/e32-reconciliation-executor.integration-spec.ts",
+      "group": "fiscal",
+      "count": 14,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "ECF_POSTGRES_UAT",
+        "ALANUBE_ENABLE_REAL_CALLS",
+        "ECF_EMISSION_ENABLED",
+        "UAT_LOCAL_ONLY"
+      ],
+      "execution": "Suite PostgreSQL fiscal aislada requerida para release del área; sin ejecución en esta tarea de IA.",
+      "tests": [
+        {
+          "name": "E32 authorized reconciliation executor (synthetic UAT) 1: reconciles a synthetic Sandbox E32 into HUMAN_REVIEW_REQUIRED without fiscal acceptance",
+          "status": "pending"
+        },
+        {
+          "name": "E32 authorized reconciliation executor (synthetic UAT) 2: identical replay is a no-op",
+          "status": "pending"
+        },
+        {
+          "name": "E32 authorized reconciliation executor (synthetic UAT) 3: rejects a divergent reconciliation under the same key",
+          "status": "pending"
+        },
+        {
+          "name": "E32 authorized reconciliation executor (synthetic UAT) 4: refuses a wrong previous state and writes nothing",
+          "status": "pending"
+        },
+        {
+          "name": "E32 authorized reconciliation executor (synthetic UAT) 5: rejects a different remote identifier",
+          "status": "pending"
+        },
+        {
+          "name": "E32 authorized reconciliation executor (synthetic UAT) 6: rejects a mismatched e-NCF",
+          "status": "pending"
+        },
+        {
+          "name": "E32 authorized reconciliation executor (synthetic UAT) 7: rejects another company and a mismatched correlation company",
+          "status": "pending"
+        },
+        {
+          "name": "E32 authorized reconciliation executor (synthetic UAT) 8: rejects tampered evidence or forged fiscal authority",
+          "status": "pending"
+        },
+        {
+          "name": "E32 authorized reconciliation executor (synthetic UAT) 9: rolls back atomically when the transaction fails mid-way",
+          "status": "pending"
+        },
+        {
+          "name": "E32 authorized reconciliation executor (synthetic UAT) 10: serializes two concurrent executions to a single reconciliation",
+          "status": "pending"
+        },
+        {
+          "name": "E32 authorized reconciliation executor (synthetic UAT) 11: refuses to reconcile a different document/trial pair",
+          "status": "pending"
+        },
+        {
+          "name": "E32 authorized reconciliation executor (synthetic UAT) 12: refuses to run outside the isolated UAT target",
+          "status": "pending"
+        },
+        {
+          "name": "E32 authorized reconciliation executor (synthetic UAT) 13: records append-only, review-only audit evidence",
+          "status": "pending"
+        },
+        {
+          "name": "E32 authorized reconciliation executor (synthetic UAT) 14: preserves the reconciled historical E32 document and its terminal trial without fiscal authority",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/ecf/provider/dosa/dosa-phase-f-postgres.integration-spec.ts",
+      "group": "fiscal",
+      "count": 22,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "ECF_POSTGRES_UAT"
+      ],
+      "execution": "Suite PostgreSQL fiscal aislada requerida para release del área; sin ejecución en esta tarea de IA.",
+      "tests": [
+        {
+          "name": "Fase F — DOSA en PostgreSQL real enum ecf_provider el valor por defecto es DOSA y ALANUBE sigue existiendo en el enum",
+          "status": "pending"
+        },
+        {
+          "name": "Fase F — DOSA en PostgreSQL real enum ecf_provider una empresa puede seleccionar DOSA y volver a abrirla sin errores",
+          "status": "pending"
+        },
+        {
+          "name": "Fase F — DOSA en PostgreSQL real enum ecf_provider una empresa tradicional conserva ALANUBE aunque exista DOSA",
+          "status": "pending"
+        },
+        {
+          "name": "Fase F — DOSA en PostgreSQL real enum ecf_provider seleccionar DOSA no activa e-CF por sí solo",
+          "status": "pending"
+        },
+        {
+          "name": "Fase F — DOSA en PostgreSQL real autoridad de activación (evidencia persistida) sin nada persistido no hay evidencia",
+          "status": "pending"
+        },
+        {
+          "name": "Fase F — DOSA en PostgreSQL real autoridad de activación (evidencia persistida) una declaración manual del operador NO equivale a aprobación DGII",
+          "status": "pending"
+        },
+        {
+          "name": "Fase F — DOSA en PostgreSQL real autoridad de activación (evidencia persistida) el registro oficial de la DGII sí cuenta",
+          "status": "pending"
+        },
+        {
+          "name": "Fase F — DOSA en PostgreSQL real autoridad de activación (evidencia persistida) una autorización revocada invalida las anteriores",
+          "status": "pending"
+        },
+        {
+          "name": "Fase F — DOSA en PostgreSQL real autoridad de activación (evidencia persistida) una autorización sin actor real no cuenta",
+          "status": "pending"
+        },
+        {
+          "name": "Fase F — DOSA en PostgreSQL real autoridad de activación (evidencia persistida) con toda la evidencia persistida se activa y la credencial pasa a ACTIVE",
+          "status": "pending"
+        },
+        {
+          "name": "Fase F — DOSA en PostgreSQL real autoridad de activación (evidencia persistida) sin autorización administrativa no se activa aunque lo demás esté",
+          "status": "pending"
+        },
+        {
+          "name": "Fase F — DOSA en PostgreSQL real autoridad de activación (evidencia persistida) un evento con firma BLOCKED no confirma al proveedor",
+          "status": "pending"
+        },
+        {
+          "name": "Fase F — DOSA en PostgreSQL real autoridad de activación (evidencia persistida) un evento de OTRA postulación no confirma al proveedor",
+          "status": "pending"
+        },
+        {
+          "name": "Fase F — DOSA en PostgreSQL real autoridad de activación (evidencia persistida) un evento sin postulacion_id no confirma a nadie",
+          "status": "pending"
+        },
+        {
+          "name": "Fase F — DOSA en PostgreSQL real autoridad de activación (evidencia persistida) un intento sin postulación asignada bloquea con su propio código",
+          "status": "pending"
+        },
+        {
+          "name": "Fase F — DOSA en PostgreSQL real autoridad de activación (evidencia persistida) solo cuenta el intento vigente: el más alto manda, no el confirmado antes",
+          "status": "pending"
+        },
+        {
+          "name": "Fase F — DOSA en PostgreSQL real autoridad de activación (evidencia persistida) un evento de otra empresa no cuenta aunque comparta el postulacion_id",
+          "status": "pending"
+        },
+        {
+          "name": "Fase F — DOSA en PostgreSQL real autoridad de activación (evidencia persistida) la última decisión prevalece aunque haya más registros que revocaciones",
+          "status": "pending"
+        },
+        {
+          "name": "Fase F — DOSA en PostgreSQL real autoridad de activación (evidencia persistida) una revocación antigua seguida de un registro nuevo sí autoriza",
+          "status": "pending"
+        },
+        {
+          "name": "Fase F — DOSA en PostgreSQL real autoridad de activación (evidencia persistida) una decisión administrativa anterior al intento vigente no sirve",
+          "status": "pending"
+        },
+        {
+          "name": "Fase F — DOSA en PostgreSQL real autoridad de activación (evidencia persistida) una aprobación DGII anterior al intento vigente no sirve",
+          "status": "pending"
+        },
+        {
+          "name": "Fase F — DOSA en PostgreSQL real autoridad de activación (evidencia persistida) sin ninguno de los dos bloqueos se activa con la cadena completa",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/ecf/dgii/ecf-dgii-habilitation-postgres.integration-spec.ts",
+      "group": "fiscal",
+      "count": 17,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "ECF_POSTGRES_UAT"
+      ],
+      "execution": "Suite PostgreSQL fiscal aislada requerida para release del área; sin ejecución en esta tarea de IA.",
+      "tests": [
+        {
+          "name": "E-CF habilitación DGII por empresa — PostgreSQL crea el registro al consultar, sin conceder ninguna autorización",
+          "status": "pending"
+        },
+        {
+          "name": "E-CF habilitación DGII por empresa — PostgreSQL aísla los datos entre empresas: A no ve nada de B",
+          "status": "pending"
+        },
+        {
+          "name": "E-CF habilitación DGII por empresa — PostgreSQL no permite falsificar una aprobación oficial con una acción administrativa",
+          "status": "pending"
+        },
+        {
+          "name": "E-CF habilitación DGII por empresa — PostgreSQL una declaración manual del operador NO produce autorización",
+          "status": "pending"
+        },
+        {
+          "name": "E-CF habilitación DGII por empresa — PostgreSQL la fuente oficial exige evidencia e identificador externo",
+          "status": "pending"
+        },
+        {
+          "name": "E-CF habilitación DGII por empresa — PostgreSQL no permite vincular evidencia de otra empresa",
+          "status": "pending"
+        },
+        {
+          "name": "E-CF habilitación DGII por empresa — PostgreSQL con registro oficial la empresa queda aprobada, pero emisión real sigue bloqueada",
+          "status": "pending"
+        },
+        {
+          "name": "E-CF habilitación DGII por empresa — PostgreSQL revocar devuelve la empresa a corrección y retira la autorización",
+          "status": "pending"
+        },
+        {
+          "name": "E-CF habilitación DGII por empresa — PostgreSQL la evidencia distingue documento oficial de declaración manual",
+          "status": "pending"
+        },
+        {
+          "name": "E-CF habilitación DGII por empresa — PostgreSQL refleja el progreso real de los requisitos obligatorios",
+          "status": "pending"
+        },
+        {
+          "name": "E-CF habilitación DGII por empresa — PostgreSQL registra el historial de cambios y conserva el progreso tras reconectar",
+          "status": "pending"
+        },
+        {
+          "name": "E-CF habilitación DGII por empresa — PostgreSQL rechaza una transición no permitida y una actualización concurrente",
+          "status": "pending"
+        },
+        {
+          "name": "E-CF habilitación DGII por empresa — PostgreSQL revisar una evidencia no la convierte en autorización y queda auditado",
+          "status": "pending"
+        },
+        {
+          "name": "E-CF habilitación DGII por empresa — PostgreSQL rechazar exige motivo, no repite la misma decisión y no cruza empresas",
+          "status": "pending"
+        },
+        {
+          "name": "E-CF habilitación DGII por empresa — PostgreSQL una declaración manual revisada sigue sin sustentar la autorización oficial",
+          "status": "pending"
+        },
+        {
+          "name": "E-CF habilitación DGII por empresa — PostgreSQL un documento oficial sin revisar no autoriza; revisado, sí",
+          "status": "pending"
+        },
+        {
+          "name": "E-CF habilitación DGII por empresa — PostgreSQL guarda el seguimiento por requisito sin inventar requisitos nuevos",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/ecf/documents/ecf-e34-postgres.integration-spec.ts",
+      "group": "fiscal",
+      "count": 28,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "ECF_POSTGRES_UAT",
+        "ALANUBE_ENABLE_REAL_CALLS",
+        "ECF_EMISSION_ENABLED"
+      ],
+      "execution": "Suite PostgreSQL fiscal aislada requerida para release del área; sin ejecución en esta tarea de IA.",
+      "tests": [
+        {
+          "name": "E34 real PostgreSQL synthetic integrity (not DGII acceptance) 1 original valid: reserves locally without applying a fiscal credit",
+          "status": "pending"
+        },
+        {
+          "name": "E34 real PostgreSQL synthetic integrity (not DGII acceptance) 2 nonexistent original fails closed",
+          "status": "pending"
+        },
+        {
+          "name": "E34 real PostgreSQL synthetic integrity (not DGII acceptance) 3 original from another company is not exposed or credited",
+          "status": "pending"
+        },
+        {
+          "name": "E34 real PostgreSQL synthetic integrity (not DGII acceptance) 4 missing fiscal snapshot or matching evidence log is blocked",
+          "status": "pending"
+        },
+        {
+          "name": "E34 real PostgreSQL synthetic integrity (not DGII acceptance) 5 commercial/provider/invalidated originals are not accepted fiscal originals",
+          "status": "pending"
+        },
+        {
+          "name": "E34 real PostgreSQL synthetic integrity (not DGII acceptance) 6 partial applied credit requires matching synthetic outcome evidence",
+          "status": "pending"
+        },
+        {
+          "name": "E34 real PostgreSQL synthetic integrity (not DGII acceptance) 7 full credit holds the entire original amount",
+          "status": "pending"
+        },
+        {
+          "name": "E34 real PostgreSQL synthetic integrity (not DGII acceptance) 8 accumulated partial credits cannot exceed the original",
+          "status": "pending"
+        },
+        {
+          "name": "E34 real PostgreSQL synthetic integrity (not DGII acceptance) 9 an excessive requested credit is rejected atomically",
+          "status": "pending"
+        },
+        {
+          "name": "E34 real PostgreSQL synthetic integrity (not DGII acceptance) 10 concurrent incompatible reservations have exactly one winner",
+          "status": "pending"
+        },
+        {
+          "name": "E34 real PostgreSQL synthetic integrity (not DGII acceptance) 11 identical concurrent replays create one reservation and one event",
+          "status": "pending"
+        },
+        {
+          "name": "E34 real PostgreSQL synthetic integrity (not DGII acceptance) 12 divergent retry and mutation of a reserved payload are blocked",
+          "status": "pending"
+        },
+        {
+          "name": "E34 real PostgreSQL synthetic integrity (not DGII acceptance) 13 unknown results retain money and cannot be cancelled automatically",
+          "status": "pending"
+        },
+        {
+          "name": "E34 real PostgreSQL synthetic integrity (not DGII acceptance) 14 rejected outcome releases money only with matching evidence",
+          "status": "pending"
+        },
+        {
+          "name": "E34 real PostgreSQL synthetic integrity (not DGII acceptance) 15 recreating backend clients preserves reservations and unknown outcomes",
+          "status": "pending"
+        },
+        {
+          "name": "E34 real PostgreSQL synthetic integrity (not DGII acceptance) 16 history is atomic, idempotent and append only at PostgreSQL level",
+          "status": "pending"
+        },
+        {
+          "name": "E34 real PostgreSQL synthetic integrity (not DGII acceptance) 17 tenant-aware FKs reject a reference to another company even through direct SQL",
+          "status": "pending"
+        },
+        {
+          "name": "E34 real PostgreSQL synthetic integrity (not DGII acceptance) 18 fractional cents are rejected rather than rounded into a reservation",
+          "status": "pending"
+        },
+        {
+          "name": "E34 real PostgreSQL synthetic integrity (not DGII acceptance) 19 inconsistent reference/currency/date is rejected",
+          "status": "pending"
+        },
+        {
+          "name": "E34 real PostgreSQL synthetic integrity (not DGII acceptance) 20 missing required reference fields and draft notes cannot reserve or apply",
+          "status": "pending"
+        },
+        {
+          "name": "E34 real PostgreSQL synthetic integrity (not DGII acceptance) 21 distinct equal-amount notes coexist and local cancellation releases only unsent holds",
+          "status": "pending"
+        },
+        {
+          "name": "E34 real PostgreSQL synthetic integrity (not DGII acceptance) 22 database trigger prevents direct over-reservation and evidence-free application",
+          "status": "pending"
+        },
+        {
+          "name": "E34 real PostgreSQL synthetic integrity (not DGII acceptance) 23 accepted-but-untracked legacy credits block further reservations",
+          "status": "pending"
+        },
+        {
+          "name": "E34 real PostgreSQL synthetic integrity (not DGII acceptance) 24 fiscal snapshots and per-tenant fiscal reference identity are immutable/unique",
+          "status": "pending"
+        },
+        {
+          "name": "E34 real PostgreSQL synthetic integrity (not DGII acceptance) 25 E32 originals are supported; E34 originals fail the conservative reference policy",
+          "status": "pending"
+        },
+        {
+          "name": "E34 real PostgreSQL synthetic integrity (not DGII acceptance) 26 a submitted reservation cannot be cancelled without a verified final outcome",
+          "status": "pending"
+        },
+        {
+          "name": "E34 real PostgreSQL synthetic integrity (not DGII acceptance) 27 PostgreSQL itself serializes concurrent direct inserts below the same fiscal budget",
+          "status": "pending"
+        },
+        {
+          "name": "E34 real PostgreSQL synthetic integrity (not DGII acceptance) 28 unauthenticated calls cannot supply a tenant identity through document IDs",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/ecf/provider/dosa/dosa-multi-company-postgres.integration-spec.ts",
+      "group": "fiscal",
+      "count": 15,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "ECF_POSTGRES_UAT"
+      ],
+      "execution": "Suite PostgreSQL fiscal aislada requerida para release del área; sin ejecución en esta tarea de IA.",
+      "tests": [
+        {
+          "name": "Webhook DOSA — ciclo multiempresa en PostgreSQL real A recibe sus dos ambientes y las demás empresas quedan intactas",
+          "status": "pending"
+        },
+        {
+          "name": "Webhook DOSA — ciclo multiempresa en PostgreSQL real el reintento idéntico es duplicado y no crea otra fila",
+          "status": "pending"
+        },
+        {
+          "name": "Webhook DOSA — ciclo multiempresa en PostgreSQL real mismo identificador con cuerpo distinto se registra como evento nuevo",
+          "status": "pending"
+        },
+        {
+          "name": "Webhook DOSA — ciclo multiempresa en PostgreSQL real un webhook no rota una credencial activa: queda en revisión",
+          "status": "pending"
+        },
+        {
+          "name": "Webhook DOSA — ciclo multiempresa en PostgreSQL real un RNC sin sesión de certificación se detiene sin escribir",
+          "status": "pending"
+        },
+        {
+          "name": "Webhook DOSA — ciclo multiempresa en PostgreSQL real un RNC repetido en dos empresas es ambiguo: no se elige ninguna",
+          "status": "pending"
+        },
+        {
+          "name": "Webhook DOSA — ciclo multiempresa en PostgreSQL real ninguna empresa puede leer las credenciales de otra",
+          "status": "pending"
+        },
+        {
+          "name": "Webhook DOSA — ciclo multiempresa en PostgreSQL real entregas concurrentes del mismo evento dejan una sola fila",
+          "status": "pending"
+        },
+        {
+          "name": "Webhook DOSA — ciclo multiempresa en PostgreSQL real una empresa sin postulación abierta no recibe credenciales",
+          "status": "pending"
+        },
+        {
+          "name": "Webhook DOSA — ciclo multiempresa en PostgreSQL real un cuerpo que no es un evento válido se rechaza sin escribir",
+          "status": "pending"
+        },
+        {
+          "name": "Webhook DOSA — ciclo multiempresa en PostgreSQL real una firma inválida no procesa nada",
+          "status": "pending"
+        },
+        {
+          "name": "Webhook DOSA — ciclo multiempresa en PostgreSQL real un timestamp fuera de la ventana se rechaza (anti-replay)",
+          "status": "pending"
+        },
+        {
+          "name": "Webhook DOSA — ciclo multiempresa en PostgreSQL real un evento fuera de orden se registra pero no altera lo vigente",
+          "status": "pending"
+        },
+        {
+          "name": "Webhook DOSA — ciclo multiempresa en PostgreSQL real consultar una empresa sin credenciales devuelve vacío, no las de otra",
+          "status": "pending"
+        },
+        {
+          "name": "Webhook DOSA — ciclo multiempresa en PostgreSQL real si el guardado falla, el evento queda pendiente y el reenvío lo completa",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/ecf/documents/ecf-evidence-postgres.integration-spec.ts",
+      "group": "fiscal",
+      "count": 28,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "ECF_POSTGRES_UAT",
+        "ALANUBE_ENABLE_REAL_CALLS",
+        "ECF_EMISSION_ENABLED"
+      ],
+      "execution": "Suite PostgreSQL fiscal aislada requerida para release del área; sin ejecución en esta tarea de IA.",
+      "tests": [
+        {
+          "name": "Evidence quarantine real PostgreSQL, synthetic data only synthetic evidence is permanently synthetic and cannot accept a document",
+          "status": "pending"
+        },
+        {
+          "name": "Evidence quarantine real PostgreSQL, synthetic data only provider-declared response is unauthenticated despite a schema and id",
+          "status": "pending"
+        },
+        {
+          "name": "Evidence quarantine real PostgreSQL, synthetic data only test-authenticated evidence cannot become real evidence in storage",
+          "status": "pending"
+        },
+        {
+          "name": "Evidence quarantine real PostgreSQL, synthetic data only rejects unknown document/attempt correlation",
+          "status": "pending"
+        },
+        {
+          "name": "Evidence quarantine real PostgreSQL, synthetic data only rejects unknown/contradictory remote identifiers",
+          "status": "pending"
+        },
+        {
+          "name": "Evidence quarantine real PostgreSQL, synthetic data only rejects another tenant without changing either document",
+          "status": "pending"
+        },
+        {
+          "name": "Evidence quarantine real PostgreSQL, synthetic data only same key has exact idempotent replay, including concurrent requests",
+          "status": "pending"
+        },
+        {
+          "name": "Evidence quarantine real PostgreSQL, synthetic data only rejects incompatible duplicates and replay on a different document",
+          "status": "pending"
+        },
+        {
+          "name": "Evidence quarantine real PostgreSQL, synthetic data only retains out-of-order and contradictory observations without fiscal transitions",
+          "status": "pending"
+        },
+        {
+          "name": "Evidence quarantine real PostgreSQL, synthetic data only concurrent event replay across documents has one winner",
+          "status": "pending"
+        },
+        {
+          "name": "Evidence quarantine real PostgreSQL, synthetic data only does not bind a remote identifier to a previously unassociated document",
+          "status": "pending"
+        },
+        {
+          "name": "Evidence quarantine real PostgreSQL, synthetic data only TIMEOUT does not infer rejection or retry POST",
+          "status": "pending"
+        },
+        {
+          "name": "Evidence quarantine real PostgreSQL, synthetic data only NETWORK_ERROR does not infer rejection or retry POST",
+          "status": "pending"
+        },
+        {
+          "name": "Evidence quarantine real PostgreSQL, synthetic data only PROCESS_RESTART does not infer rejection or retry POST",
+          "status": "pending"
+        },
+        {
+          "name": "Evidence quarantine real PostgreSQL, synthetic data only survives recreation of Prisma client and service",
+          "status": "pending"
+        },
+        {
+          "name": "Evidence quarantine real PostgreSQL, synthetic data only detects corruption/hash mismatch before database writes",
+          "status": "pending"
+        },
+        {
+          "name": "Evidence quarantine real PostgreSQL, synthetic data only quarantines invalid schemas and unexpected HTTP without storing payload",
+          "status": "pending"
+        },
+        {
+          "name": "Evidence quarantine real PostgreSQL, synthetic data only rejects divergent operation and fingerprints",
+          "status": "pending"
+        },
+        {
+          "name": "Evidence quarantine real PostgreSQL, synthetic data only webhook without verifiable authentication remains quarantined with replay protection",
+          "status": "pending"
+        },
+        {
+          "name": "Evidence quarantine real PostgreSQL, synthetic data only rejects malformed webhook or an event without remote correlation",
+          "status": "pending"
+        },
+        {
+          "name": "Evidence quarantine real PostgreSQL, synthetic data only rejects fiscal reference contradictions and external tenant claims",
+          "status": "pending"
+        },
+        {
+          "name": "Evidence quarantine real PostgreSQL, synthetic data only database prevents trust promotion, overwrites and deletions",
+          "status": "pending"
+        },
+        {
+          "name": "Evidence quarantine real PostgreSQL, synthetic data only database prevents cross-tenant association and false fiscal trust on insert",
+          "status": "pending"
+        },
+        {
+          "name": "Evidence quarantine real PostgreSQL, synthetic data only database protects correlation after a receipt exists",
+          "status": "pending"
+        },
+        {
+          "name": "Evidence quarantine real PostgreSQL, synthetic data only same external event key can coexist for two tenants",
+          "status": "pending"
+        },
+        {
+          "name": "Evidence quarantine real PostgreSQL, synthetic data only no identity means no DB operation",
+          "status": "pending"
+        },
+        {
+          "name": "Evidence quarantine real PostgreSQL, synthetic data only rejects an ambiguous remote association instead of choosing a document",
+          "status": "pending"
+        },
+        {
+          "name": "Evidence quarantine real PostgreSQL, synthetic data only E34 unknown reservation remains held during evidence intake/reconciliation",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/ecf/documents/ecf-e32-trial-postgres.integration-spec.ts",
+      "group": "fiscal",
+      "count": 27,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "ECF_POSTGRES_UAT",
+        "ALANUBE_ENABLE_REAL_CALLS"
+      ],
+      "execution": "Suite PostgreSQL fiscal aislada requerida para release del área; sin ejecución en esta tarea de IA.",
+      "tests": [
+        {
+          "name": "E32 first trial PostgreSQL with MOCK_ONLY wire, no real emission preparation is stable and divergent metadata conflicts",
+          "status": "pending"
+        },
+        {
+          "name": "E32 first trial PostgreSQL with MOCK_ONLY wire, no real emission rejects synthetic-address selection on another tenant even with forged ready facts",
+          "status": "pending"
+        },
+        {
+          "name": "E32 first trial PostgreSQL with MOCK_ONLY wire, no real emission one mock POST plus official company-scoped GET, never fiscal acceptance",
+          "status": "pending"
+        },
+        {
+          "name": "E32 first trial PostgreSQL with MOCK_ONLY wire, no real emission simultaneous operators have only one POST winner",
+          "status": "pending"
+        },
+        {
+          "name": "E32 first trial PostgreSQL with MOCK_ONLY wire, no real emission primary company without response RNC uses GET by id and requires fiscal review",
+          "status": "pending"
+        },
+        {
+          "name": "E32 first trial PostgreSQL with MOCK_ONLY wire, no real emission timeout consumes latch and restart cannot issue again",
+          "status": "pending"
+        },
+        {
+          "name": "E32 first trial PostgreSQL with MOCK_ONLY wire, no real emission HTTP 200 never accepts or retries and does not query without correlated 201",
+          "status": "pending"
+        },
+        {
+          "name": "E32 first trial PostgreSQL with MOCK_ONLY wire, no real emission HTTP 400 never accepts or retries and does not query without correlated 201",
+          "status": "pending"
+        },
+        {
+          "name": "E32 first trial PostgreSQL with MOCK_ONLY wire, no real emission HTTP 401 never accepts or retries and does not query without correlated 201",
+          "status": "pending"
+        },
+        {
+          "name": "E32 first trial PostgreSQL with MOCK_ONLY wire, no real emission HTTP 422 never accepts or retries and does not query without correlated 201",
+          "status": "pending"
+        },
+        {
+          "name": "E32 first trial PostgreSQL with MOCK_ONLY wire, no real emission HTTP 500 never accepts or retries and does not query without correlated 201",
+          "status": "pending"
+        },
+        {
+          "name": "E32 first trial PostgreSQL with MOCK_ONLY wire, no real emission unknown remote id or wrong company does not bind/query",
+          "status": "pending"
+        },
+        {
+          "name": "E32 first trial PostgreSQL with MOCK_ONLY wire, no real emission GET 404 preserves unknown and records quarantine observation",
+          "status": "pending"
+        },
+        {
+          "name": "E32 first trial PostgreSQL with MOCK_ONLY wire, no real emission another tenant or nonadmin cannot use a trial",
+          "status": "pending"
+        },
+        {
+          "name": "E32 first trial PostgreSQL with MOCK_ONLY wire, no real emission tampered/expired consent or incomplete readiness cannot call the wire",
+          "status": "pending"
+        },
+        {
+          "name": "E32 first trial PostgreSQL with MOCK_ONLY wire, no real emission mock operation cannot be sent with a real-mode wire",
+          "status": "pending"
+        },
+        {
+          "name": "E32 first trial PostgreSQL with MOCK_ONLY wire, no real emission claim and history cannot be reset, altered or deleted",
+          "status": "pending"
+        },
+        {
+          "name": "E32 first trial PostgreSQL with MOCK_ONLY wire, no real emission global slot collisions roll back test rows while preserving any historical trial",
+          "status": "pending"
+        },
+        {
+          "name": "E32 first trial PostgreSQL with MOCK_ONLY wire, no real emission recovers a crash after claim without restoring permission to POST",
+          "status": "pending"
+        },
+        {
+          "name": "E32 first trial PostgreSQL with MOCK_ONLY wire, no real emission database rejects a trial/document cross-tenant reference",
+          "status": "pending"
+        },
+        {
+          "name": "E32 first trial PostgreSQL with MOCK_ONLY wire, no real emission does not bind a response id already associated with another local document",
+          "status": "pending"
+        },
+        {
+          "name": "E32 first trial PostgreSQL with MOCK_ONLY wire, no real emission REGISTERED plus ACCEPTED persists an explicit provider observation, not UNKNOWN or DGII acceptance",
+          "status": "pending"
+        },
+        {
+          "name": "E32 first trial PostgreSQL with MOCK_ONLY wire, no real emission invalid, incomplete or contradictory response stays unknown with diagnostic evidence {\"sequenceConsumed\":false}",
+          "status": "pending"
+        },
+        {
+          "name": "E32 first trial PostgreSQL with MOCK_ONLY wire, no real emission invalid, incomplete or contradictory response stays unknown with diagnostic evidence {}",
+          "status": "pending"
+        },
+        {
+          "name": "E32 first trial PostgreSQL with MOCK_ONLY wire, no real emission invalid, incomplete or contradictory response stays unknown with diagnostic evidence {\"documentNumber\":\"E320000000002\"}",
+          "status": "pending"
+        },
+        {
+          "name": "E32 first trial PostgreSQL with MOCK_ONLY wire, no real emission invalid, incomplete or contradictory response stays unknown with diagnostic evidence {\"stampDate\":null}",
+          "status": "pending"
+        },
+        {
+          "name": "E32 first trial PostgreSQL with MOCK_ONLY wire, no real emission records an explicit provider rejection for human review, never as fiscal acceptance or a released sequence",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/ecf/documents/ecf-e32-consumo-postgres.integration-spec.ts",
+      "group": "fiscal",
+      "count": 13,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "ECF_POSTGRES_UAT",
+        "ALANUBE_ENABLE_REAL_CALLS"
+      ],
+      "execution": "Suite PostgreSQL fiscal aislada requerida para release del área; sin ejecución en esta tarea de IA.",
+      "tests": [
+        {
+          "name": "E32 consumo (venta → borrador local numerado) on PostgreSQL prepares a numbered E32 draft from a consumo sale",
+          "status": "pending"
+        },
+        {
+          "name": "E32 consumo (venta → borrador local numerado) on PostgreSQL consumes exactly one E32 number and never touches the E31/E34 ranges",
+          "status": "pending"
+        },
+        {
+          "name": "E32 consumo (venta → borrador local numerado) on PostgreSQL refuses consumo when E32 has no DGII authorization declared",
+          "status": "pending"
+        },
+        {
+          "name": "E32 consumo (venta → borrador local numerado) on PostgreSQL is idempotent per sale: a retry reuses the same document AND the same e-NCF",
+          "status": "pending"
+        },
+        {
+          "name": "E32 consumo (venta → borrador local numerado) on PostgreSQL the one-document-per-sale rule holds in BOTH directions",
+          "status": "pending"
+        },
+        {
+          "name": "E32 consumo (venta → borrador local numerado) on PostgreSQL refuses E32 over a sale that already has another fiscal document",
+          "status": "pending"
+        },
+        {
+          "name": "E32 consumo (venta → borrador local numerado) on PostgreSQL refuses when the company has e-CF disabled",
+          "status": "pending"
+        },
+        {
+          "name": "E32 consumo (venta → borrador local numerado) on PostgreSQL refuses when E32 is not enabled for the company",
+          "status": "pending"
+        },
+        {
+          "name": "E32 consumo (venta → borrador local numerado) on PostgreSQL refuses a non-E32 type through the consumo path",
+          "status": "pending"
+        },
+        {
+          "name": "E32 consumo (venta → borrador local numerado) on PostgreSQL never reads another company's sale",
+          "status": "pending"
+        },
+        {
+          "name": "E32 consumo (venta → borrador local numerado) on PostgreSQL preparing consumo does not touch inventory, cash or the sale",
+          "status": "pending"
+        },
+        {
+          "name": "E32 consumo (venta → borrador local numerado) on PostgreSQL is not emitting: the e-NCF is reserved but nothing was sent",
+          "status": "pending"
+        },
+        {
+          "name": "E32 consumo (venta → borrador local numerado) on PostgreSQL the draft shows up in the company tray WITH its e-NCF",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/ecf/documents/ecf-e34-emission-postgres.integration-spec.ts",
+      "group": "fiscal",
+      "count": 13,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "ECF_POSTGRES_UAT",
+        "ALANUBE_ENABLE_REAL_CALLS",
+        "ECF_EMISSION_ENABLED"
+      ],
+      "execution": "Suite PostgreSQL fiscal aislada requerida para release del área; sin ejecución en esta tarea de IA.",
+      "tests": [
+        {
+          "name": "E34 credit-note emission orchestrator (simulated transport) refuses to dispatch an E34 that has no credit reservation",
+          "status": "pending"
+        },
+        {
+          "name": "E34 credit-note emission orchestrator (simulated transport) prepares, reserves and dispatches an accepted partial note into human review",
+          "status": "pending"
+        },
+        {
+          "name": "E34 credit-note emission orchestrator (simulated transport) supports a total note up to the original balance",
+          "status": "pending"
+        },
+        {
+          "name": "E34 credit-note emission orchestrator (simulated transport) allows several partial notes while the remaining balance is sufficient",
+          "status": "pending"
+        },
+        {
+          "name": "E34 credit-note emission orchestrator (simulated transport) refuses a credit that exceeds the available balance",
+          "status": "pending"
+        },
+        {
+          "name": "E34 credit-note emission orchestrator (simulated transport) refuses a note whose original is not fiscally accepted",
+          "status": "pending"
+        },
+        {
+          "name": "E34 credit-note emission orchestrator (simulated transport) refuses an original that belongs to another company",
+          "status": "pending"
+        },
+        {
+          "name": "E34 credit-note emission orchestrator (simulated transport) is idempotent per operation and refuses a divergent retry",
+          "status": "pending"
+        },
+        {
+          "name": "E34 credit-note emission orchestrator (simulated transport) keeps a rejection for human review without releasing the reservation",
+          "status": "pending"
+        },
+        {
+          "name": "E34 credit-note emission orchestrator (simulated transport) keeps a timeout unknown without releasing the reservation and without retry",
+          "status": "pending"
+        },
+        {
+          "name": "E34 credit-note emission orchestrator (simulated transport) does not bind a contradictory response",
+          "status": "pending"
+        },
+        {
+          "name": "E34 credit-note emission orchestrator (simulated transport) allows only one effective dispatch under concurrency",
+          "status": "pending"
+        },
+        {
+          "name": "E34 credit-note emission orchestrator (simulated transport) refuses cross-tenant dispatch of a reserved note",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/ecf/documents/ecf-credit-note-postgres.integration-spec.ts",
+      "group": "fiscal",
+      "count": 10,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "ECF_POSTGRES_UAT",
+        "ALANUBE_ENABLE_REAL_CALLS"
+      ],
+      "execution": "Suite PostgreSQL fiscal aislada requerida para release del área; sin ejecución en esta tarea de IA.",
+      "tests": [
+        {
+          "name": "E34 desde una venta original (nota de crédito) on PostgreSQL prepares a TOTAL credit note and reserves the fiscal credit",
+          "status": "pending"
+        },
+        {
+          "name": "E34 desde una venta original (nota de crédito) on PostgreSQL prepares a PARTIAL note for a fraction of one line",
+          "status": "pending"
+        },
+        {
+          "name": "E34 desde una venta original (nota de crédito) on PostgreSQL allows several partial notes on the same original",
+          "status": "pending"
+        },
+        {
+          "name": "E34 desde una venta original (nota de crédito) on PostgreSQL is idempotent for the same operation and does not consume a second e-NCF",
+          "status": "pending"
+        },
+        {
+          "name": "E34 desde una venta original (nota de crédito) on PostgreSQL refuses credit beyond the available balance",
+          "status": "pending"
+        },
+        {
+          "name": "E34 desde una venta original (nota de crédito) on PostgreSQL never touches inventory, cash or the original sale",
+          "status": "pending"
+        },
+        {
+          "name": "E34 desde una venta original (nota de crédito) on PostgreSQL refuses an original that is not fiscally accepted",
+          "status": "pending"
+        },
+        {
+          "name": "E34 desde una venta original (nota de crédito) on PostgreSQL never credits another company's original",
+          "status": "pending"
+        },
+        {
+          "name": "E34 desde una venta original (nota de crédito) on PostgreSQL refuses when e-CF is switched off for the company",
+          "status": "pending"
+        },
+        {
+          "name": "E34 desde una venta original (nota de crédito) on PostgreSQL keeps the original's fiscal classification on the note",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/ecf/documents/ecf-line-classification-postgres.integration-spec.ts",
+      "group": "fiscal",
+      "count": 8,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "ECF_POSTGRES_UAT"
+      ],
+      "execution": "Suite PostgreSQL fiscal aislada requerida para release del área; sin ejecución en esta tarea de IA.",
+      "tests": [
+        {
+          "name": "F1 clasificación supervisada — PostgreSQL sin clasificación, la partida bloquea y NO se adivina",
+          "status": "pending"
+        },
+        {
+          "name": "F1 clasificación supervisada — PostgreSQL confirmar la clasificación desbloquea sin tocar la venta ni la partida",
+          "status": "pending"
+        },
+        {
+          "name": "F1 clasificación supervisada — PostgreSQL cada decisión queda auditada con su valor anterior",
+          "status": "pending"
+        },
+        {
+          "name": "F1 clasificación supervisada — PostgreSQL no se clasifica una partida que ya tiene clasificación congelada",
+          "status": "pending"
+        },
+        {
+          "name": "F1 clasificación supervisada — PostgreSQL una vez que el comprobante salió del equipo, ya no se clasifica",
+          "status": "pending"
+        },
+        {
+          "name": "F1 clasificación supervisada — PostgreSQL no cruza empresas: la partida de otra empresa no existe",
+          "status": "pending"
+        },
+        {
+          "name": "F1 clasificación supervisada — PostgreSQL un identificador manipulado no evade el aislamiento",
+          "status": "pending"
+        },
+        {
+          "name": "F1 clasificación supervisada — PostgreSQL reintentar la misma confirmación no duplica el historial",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/ecf/provider/dosa/dosa-incident-postgres.integration-spec.ts",
+      "group": "fiscal",
+      "count": 8,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "ECF_POSTGRES_UAT"
+      ],
+      "execution": "Suite PostgreSQL fiscal aislada requerida para release del área; sin ejecución en esta tarea de IA.",
+      "tests": [
+        {
+          "name": "Incidencias DOSA — detección y recuperación en PostgreSQL real detecta las cinco condiciones de una empresa",
+          "status": "pending"
+        },
+        {
+          "name": "Incidencias DOSA — detección y recuperación en PostgreSQL real no repite la alerta en barridos sucesivos",
+          "status": "pending"
+        },
+        {
+          "name": "Incidencias DOSA — detección y recuperación en PostgreSQL real aísla las incidencias de cada empresa",
+          "status": "pending"
+        },
+        {
+          "name": "Incidencias DOSA — detección y recuperación en PostgreSQL real el reintento seguro vincula la postulación y cierra la incidencia",
+          "status": "pending"
+        },
+        {
+          "name": "Incidencias DOSA — detección y recuperación en PostgreSQL real dos barridos simultáneos cuentan el intento UNA sola vez",
+          "status": "pending"
+        },
+        {
+          "name": "Incidencias DOSA — detección y recuperación en PostgreSQL real no reintenta una condición que dejaría de ser segura",
+          "status": "pending"
+        },
+        {
+          "name": "Incidencias DOSA — detección y recuperación en PostgreSQL real resuelve sola la incidencia cuando la condición desaparece",
+          "status": "pending"
+        },
+        {
+          "name": "Incidencias DOSA — detección y recuperación en PostgreSQL real cierra con motivo del catálogo y no vuelve a abrirse",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/guardian/guardian.alert.readiness.pg.integration-spec.ts",
+      "group": "guardian",
+      "count": 9,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "GUARDIAN_UAT_DATABASE_URL"
+      ],
+      "execution": "PostgreSQL y rol lector dedicados; ejecución pendiente fuera del chat de IA. No confundir Guardian con APPYRA runtime.",
+      "tests": [
+        {
+          "name": "despacho de alertas con diagnóstico (PostgreSQL real) SEV2 sin diagnóstico: la alerta espera y no se envía nada",
+          "status": "pending"
+        },
+        {
+          "name": "despacho de alertas con diagnóstico (PostgreSQL real) cuando el diagnóstico está DONE se envía y la posición 6 lleva el resumen real",
+          "status": "pending"
+        },
+        {
+          "name": "despacho de alertas con diagnóstico (PostgreSQL real) SEV1 se envía de inmediato sin diagnóstico y con texto de respaldo",
+          "status": "pending"
+        },
+        {
+          "name": "despacho de alertas con diagnóstico (PostgreSQL real) al vencer el plazo se envía el respaldo aunque no haya diagnóstico",
+          "status": "pending"
+        },
+        {
+          "name": "despacho de alertas con diagnóstico (PostgreSQL real) dos workers concurrentes no duplican el envío",
+          "status": "pending"
+        },
+        {
+          "name": "despacho de alertas con diagnóstico (PostgreSQL real) un reinicio tras el envío no reenvía la alerta",
+          "status": "pending"
+        },
+        {
+          "name": "despacho de alertas con diagnóstico (PostgreSQL real) planificar dos veces el mismo incidente deja una sola alerta inicial",
+          "status": "pending"
+        },
+        {
+          "name": "despacho de alertas con diagnóstico (PostgreSQL real) fin a fin con IA mock: diagnóstico generado y enviado dentro de la alerta",
+          "status": "pending"
+        },
+        {
+          "name": "despacho de alertas con diagnóstico (PostgreSQL real) con la espera desactivada el comportamiento vuelve a ser inmediato",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/ecf/provider/dosa/dosa-intent-http-postgres.integration-spec.ts",
+      "group": "fiscal",
+      "count": 10,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "ECF_POSTGRES_UAT",
+        "ECF_POSTGRES_TEST_RNC",
+        "ECF_POSTGRES_TEST_RNC_OTHER"
+      ],
+      "execution": "Suite PostgreSQL fiscal aislada requerida para release del área; sin ejecución en esta tarea de IA.",
+      "tests": [
+        {
+          "name": "Preasociación empresa-RNC — PostgreSQL real registra el intento y la sesión existe en PostgreSQL antes del asistente",
+          "status": "pending"
+        },
+        {
+          "name": "Preasociación empresa-RNC — PostgreSQL real es idempotente: repetir no crea un segundo intento",
+          "status": "pending"
+        },
+        {
+          "name": "Preasociación empresa-RNC — PostgreSQL real el endpoint de estado devuelve la sesión interna",
+          "status": "pending"
+        },
+        {
+          "name": "Preasociación empresa-RNC — PostgreSQL real dos empresas con el mismo RNC: ninguna de las dos se asocia",
+          "status": "pending"
+        },
+        {
+          "name": "Preasociación empresa-RNC — PostgreSQL real una empresa sin RNC fiscal verificado no registra nada",
+          "status": "pending"
+        },
+        {
+          "name": "Preasociación empresa-RNC — PostgreSQL real un RNC del cliente distinto del expediente se rechaza",
+          "status": "pending"
+        },
+        {
+          "name": "Preasociación empresa-RNC — PostgreSQL real empresas con RNC distintos conviven sin contaminarse",
+          "status": "pending"
+        },
+        {
+          "name": "Preasociación empresa-RNC — PostgreSQL real deja auditoría con actor real y sin credenciales",
+          "status": "pending"
+        },
+        {
+          "name": "Preasociación empresa-RNC — PostgreSQL real la preparación NO activa nada: la configuración fiscal queda igual",
+          "status": "pending"
+        },
+        {
+          "name": "Preasociación empresa-RNC — PostgreSQL real prepara una empresa que aún no tiene configuración fiscal, sin crearla",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/ecf/documents/ecf-preparation-postgres.integration-spec.ts",
+      "group": "fiscal",
+      "count": 11,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "ECF_POSTGRES_UAT",
+        "ALANUBE_ENABLE_REAL_CALLS"
+      ],
+      "execution": "Suite PostgreSQL fiscal aislada requerida para release del área; sin ejecución en esta tarea de IA.",
+      "tests": [
+        {
+          "name": "EcfPreparationService (venta → borrador e-CF) on PostgreSQL prepares an E31 draft from a real sale and allocates the e-NCF",
+          "status": "pending"
+        },
+        {
+          "name": "EcfPreparationService (venta → borrador e-CF) on PostgreSQL refuses a changed E31 authorization between date resolution and standalone allocation",
+          "status": "pending"
+        },
+        {
+          "name": "EcfPreparationService (venta → borrador e-CF) on PostgreSQL preparing is NOT emitting: no provider id, no attempt, no evidence receipt",
+          "status": "pending"
+        },
+        {
+          "name": "EcfPreparationService (venta → borrador e-CF) on PostgreSQL refuses to prepare while the company has e-CF switched off",
+          "status": "pending"
+        },
+        {
+          "name": "EcfPreparationService (venta → borrador e-CF) on PostgreSQL refuses a document type the company does not allow",
+          "status": "pending"
+        },
+        {
+          "name": "EcfPreparationService (venta → borrador e-CF) on PostgreSQL refuses E32: it belongs to the sandbox single-use flow, not to the sale flow",
+          "status": "pending"
+        },
+        {
+          "name": "EcfPreparationService (venta → borrador e-CF) on PostgreSQL is idempotent per sale and consumes a single number",
+          "status": "pending"
+        },
+        {
+          "name": "EcfPreparationService (venta → borrador e-CF) on PostgreSQL refuses to re-prepare the same sale with divergent data",
+          "status": "pending"
+        },
+        {
+          "name": "EcfPreparationService (venta → borrador e-CF) on PostgreSQL refuses to prepare a sale from another company",
+          "status": "pending"
+        },
+        {
+          "name": "EcfPreparationService (venta → borrador e-CF) on PostgreSQL surfaces the adapter failure instead of producing a document",
+          "status": "pending"
+        },
+        {
+          "name": "EcfPreparationService (venta → borrador e-CF) on PostgreSQL refuses to prepare when the company has no numbering range",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/ecf/documents/ecf-sequence-postgres.integration-spec.ts",
+      "group": "fiscal",
+      "count": 16,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "ECF_POSTGRES_UAT",
+        "ALANUBE_ENABLE_REAL_CALLS",
+        "ECF_EMISSION_ENABLED"
+      ],
+      "execution": "Suite PostgreSQL fiscal aislada requerida para release del área; sin ejecución en esta tarea de IA.",
+      "tests": [
+        {
+          "name": "e-CF numbering ranges (E31/E34) on PostgreSQL allocates sequential e-NCFs in the official 13-character format",
+          "status": "pending"
+        },
+        {
+          "name": "e-CF numbering ranges (E31/E34) on PostgreSQL never hands out the same number twice under concurrency",
+          "status": "pending"
+        },
+        {
+          "name": "e-CF numbering ranges (E31/E34) on PostgreSQL refuses to allocate beyond the range",
+          "status": "pending"
+        },
+        {
+          "name": "e-CF numbering ranges (E31/E34) on PostgreSQL refuses an expired range without consuming anything",
+          "status": "pending"
+        },
+        {
+          "name": "e-CF numbering ranges (E31/E34) on PostgreSQL inherits E31 expiry on registration/renewal and refuses a date invented by the client",
+          "status": "pending"
+        },
+        {
+          "name": "e-CF numbering ranges (E31/E34) on PostgreSQL rechecks the authorization after a concurrent expiry update without borrowing the old date",
+          "status": "pending"
+        },
+        {
+          "name": "e-CF numbering ranges (E31/E34) on PostgreSQL keeps every company on its own range",
+          "status": "pending"
+        },
+        {
+          "name": "e-CF numbering ranges (E31/E34) on PostgreSQL does not free a number when the document is cancelled",
+          "status": "pending"
+        },
+        {
+          "name": "e-CF numbering ranges (E31/E34) on PostgreSQL reuses the number already consumed for the same operation",
+          "status": "pending"
+        },
+        {
+          "name": "e-CF numbering ranges (E31/E34) on PostgreSQL numera E32 con su propio rango autorizado, sin tocar el de E31",
+          "status": "pending"
+        },
+        {
+          "name": "e-CF numbering ranges (E31/E34) on PostgreSQL rechaza un tipo que el motor no puede numerar",
+          "status": "pending"
+        },
+        {
+          "name": "e-CF numbering ranges (E31/E34) on PostgreSQL refuses a renewal below the consumed frontier",
+          "status": "pending"
+        },
+        {
+          "name": "e-CF numbering ranges (E31/E34) on PostgreSQL refuses a second active range for the same document type",
+          "status": "pending"
+        },
+        {
+          "name": "e-CF numbering ranges (E31/E34) on PostgreSQL makes consumption irreversible at the database level",
+          "status": "pending"
+        },
+        {
+          "name": "e-CF numbering ranges (E31/E34) on PostgreSQL keeps the allocation ledger append-only",
+          "status": "pending"
+        },
+        {
+          "name": "e-CF numbering ranges (E31/E34) on PostgreSQL allocates the number from the range when the emitter does not provide one",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/sales/sales-ecf-atomic-postgres.integration-spec.ts",
+      "group": "fiscal",
+      "count": 16,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "ECF_POSTGRES_UAT",
+        "ALANUBE_ENABLE_REAL_CALLS",
+        "DOSA_EMISSION_ENABLED",
+        "DOSA_PRODUCTION_EMISSION_ENABLED",
+        "DOSA_CONFIRMED_DGII_OUTCOMES_ENABLED"
+      ],
+      "execution": "Suite PostgreSQL fiscal aislada requerida para release del área; sin ejecución en esta tarea de IA.",
+      "tests": [
+        {
+          "name": "atomic electronic checkout on owned PostgreSQL, with no external emission rejects DOSA_EMISSION_ENABLED=false before financial or inventory writes",
+          "status": "pending"
+        },
+        {
+          "name": "atomic electronic checkout on owned PostgreSQL, with no external emission rejects DOSA_PRODUCTION_EMISSION_ENABLED=false before financial or inventory writes",
+          "status": "pending"
+        },
+        {
+          "name": "atomic electronic checkout on owned PostgreSQL, with no external emission rejects DOSA_CONFIRMED_DGII_OUTCOMES_ENABLED=false before financial or inventory writes",
+          "status": "pending"
+        },
+        {
+          "name": "atomic electronic checkout on owned PostgreSQL, with no external emission rejects a cashier without fiscal permission even with a valid cash session",
+          "status": "pending"
+        },
+        {
+          "name": "atomic electronic checkout on owned PostgreSQL, with no external emission requires explicit production activation for this certified company",
+          "status": "pending"
+        },
+        {
+          "name": "atomic electronic checkout on owned PostgreSQL, with no external emission requires this company's production credential, not its TEST key",
+          "status": "pending"
+        },
+        {
+          "name": "atomic electronic checkout on owned PostgreSQL, with no external emission rolls back sale, stock and numbering when fiscal validation fails after local sale construction",
+          "status": "pending"
+        },
+        {
+          "name": "atomic electronic checkout on owned PostgreSQL, with no external emission commits one E31 and one sale, and replays both without another allocation",
+          "status": "pending"
+        },
+        {
+          "name": "atomic electronic checkout on owned PostgreSQL, with no external emission commits one E32 and one sale, and replays both without another allocation",
+          "status": "pending"
+        },
+        {
+          "name": "atomic electronic checkout on owned PostgreSQL, with no external emission also rolls back numbering when mapping fails after allocation",
+          "status": "pending"
+        },
+        {
+          "name": "atomic electronic checkout on owned PostgreSQL, with no external emission uses the own declared expiry without a checkout date and leaves the legacy range's metadata intact",
+          "status": "pending"
+        },
+        {
+          "name": "atomic electronic checkout on owned PostgreSQL, with no external emission rejects a client date different from its own authorization before any business effect",
+          "status": "pending"
+        },
+        {
+          "name": "atomic electronic checkout on owned PostgreSQL, with no external emission blocks missing/expired declared E31 dates (null) without allocating",
+          "status": "pending"
+        },
+        {
+          "name": "atomic electronic checkout on owned PostgreSQL, with no external emission blocks missing/expired declared E31 dates (2000-01-01T00:00:00.000Z) without allocating",
+          "status": "pending"
+        },
+        {
+          "name": "atomic electronic checkout on owned PostgreSQL, with no external emission concurrent checkouts cannot leave an unprepared sale when the final number is consumed",
+          "status": "pending"
+        },
+        {
+          "name": "atomic electronic checkout on owned PostgreSQL, with no external emission legacy ordinary payloads and explicit NORMAL keep ITBIS without any fiscal allocation",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/ecf/portal/ecf-portal-enrollment-postgres.integration-spec.ts",
+      "group": "fiscal",
+      "count": 12,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "ECF_POSTGRES_UAT",
+        "ALANUBE_ENABLE_REAL_CALLS",
+        "ECF_PORTAL_AUTO_ENROLL_ENABLED",
+        "ECF_PORTAL_PILOT_COMPANY_IDS"
+      ],
+      "execution": "Suite PostgreSQL fiscal aislada requerida para release del área; sin ejecución en esta tarea de IA.",
+      "tests": [
+        {
+          "name": "Autorización del portal e-CF — PostgreSQL real automatic ticket requests cannot resurrect a revoked company, even concurrently",
+          "status": "pending"
+        },
+        {
+          "name": "Autorización del portal e-CF — PostgreSQL real sin autorización, una empresa nueva NO es elegible (cerrado por defecto)",
+          "status": "pending"
+        },
+        {
+          "name": "Autorización del portal e-CF — PostgreSQL real una empresa nueva entra con una autorización registrada, sin tocar el entorno",
+          "status": "pending"
+        },
+        {
+          "name": "Autorización del portal e-CF — PostgreSQL real autorizar A no habilita a B",
+          "status": "pending"
+        },
+        {
+          "name": "Autorización del portal e-CF — PostgreSQL real el índice único parcial impide dos autorizaciones vigentes",
+          "status": "pending"
+        },
+        {
+          "name": "Autorización del portal e-CF — PostgreSQL real el servicio es idempotente: no crea una segunda vigente",
+          "status": "pending"
+        },
+        {
+          "name": "Autorización del portal e-CF — PostgreSQL real una autorización caducada deja de servir SIN que nadie intervenga",
+          "status": "pending"
+        },
+        {
+          "name": "Autorización del portal e-CF — PostgreSQL real revocar conserva el historial y corta el acceso",
+          "status": "pending"
+        },
+        {
+          "name": "Autorización del portal e-CF — PostgreSQL real tras revocar se puede autorizar de nuevo, y la nueva vigente manda",
+          "status": "pending"
+        },
+        {
+          "name": "Autorización del portal e-CF — PostgreSQL real el portal usa la autorización de la base: emite boleto sin variable de entorno",
+          "status": "pending"
+        },
+        {
+          "name": "Autorización del portal e-CF — PostgreSQL real dos autorizaciones simultáneas no rompen la regla de una sola vigente",
+          "status": "pending"
+        },
+        {
+          "name": "Autorización del portal e-CF — PostgreSQL real el webhook resuelve la empresa por RNC y declara su elegibilidad",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/ecf/documents/ecf-document-postgres.integration-spec.ts",
+      "group": "fiscal",
+      "count": 12,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "ECF_POSTGRES_UAT",
+        "ALANUBE_ENABLE_REAL_CALLS",
+        "ECF_EMISSION_ENABLED",
+        "DATABASE_URL"
+      ],
+      "execution": "Suite PostgreSQL fiscal aislada requerida para release del área; sin ejecución en esta tarea de IA.",
+      "tests": [
+        {
+          "name": "ECF isolated PostgreSQL UAT 1: permits two independent operations with identical content",
+          "status": "pending"
+        },
+        {
+          "name": "ECF isolated PostgreSQL UAT 2: replays the same operation once",
+          "status": "pending"
+        },
+        {
+          "name": "ECF isolated PostgreSQL UAT 3: rejects changed content for an existing source operation",
+          "status": "pending"
+        },
+        {
+          "name": "ECF isolated PostgreSQL UAT 4: serializes concurrent same-operation creates and rejects divergent racers",
+          "status": "pending"
+        },
+        {
+          "name": "ECF isolated PostgreSQL UAT 5: scopes the same request identity independently to two companies",
+          "status": "pending"
+        },
+        {
+          "name": "ECF isolated PostgreSQL UAT 6: rolls back an expired PostgreSQL transaction",
+          "status": "pending"
+        },
+        {
+          "name": "ECF isolated PostgreSQL UAT 7: survives client/service recreation without duplicating the operation",
+          "status": "pending"
+        },
+        {
+          "name": "ECF isolated PostgreSQL UAT 8: persists an unknown result and never resets it on replay",
+          "status": "pending"
+        },
+        {
+          "name": "ECF isolated PostgreSQL UAT 9: keeps atomic preparation and outcome history without duplicate logs",
+          "status": "pending"
+        },
+        {
+          "name": "ECF isolated PostgreSQL UAT 10: retains unique-operation and foreign-key constraints",
+          "status": "pending"
+        },
+        {
+          "name": "ECF isolated PostgreSQL UAT 11: migrates legacy source/manual keys and their attempts without losing rows",
+          "status": "pending"
+        },
+        {
+          "name": "ECF isolated PostgreSQL UAT 12: aborts migration on divergent legacy operations and preserves old keys",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/ecf/documents/ecf-legacy-test-classification-postgres.integration-spec.ts",
+      "group": "fiscal",
+      "count": 6,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "ECF_POSTGRES_UAT",
+        "ALANUBE_ENABLE_REAL_CALLS"
+      ],
+      "execution": "Suite PostgreSQL fiscal aislada requerida para release del área; sin ejecución en esta tarea de IA.",
+      "tests": [
+        {
+          "name": "reviewed legacy TEST classification, isolated PostgreSQL plans read-only, classifies once and preserves fiscal identity, state and counters",
+          "status": "pending"
+        },
+        {
+          "name": "reviewed legacy TEST classification, isolated PostgreSQL database rejects classification without evidence in this exact transaction",
+          "status": "pending"
+        },
+        {
+          "name": "reviewed legacy TEST classification, isolated PostgreSQL rejects another tenant, wrong issuer, missing proof and altered manifest",
+          "status": "pending"
+        },
+        {
+          "name": "reviewed legacy TEST classification, isolated PostgreSQL rejects stale plans atomically without classifying another document",
+          "status": "pending"
+        },
+        {
+          "name": "reviewed legacy TEST classification, isolated PostgreSQL restores only a validated TEST print stamp without granting fiscal acceptance",
+          "status": "pending"
+        },
+        {
+          "name": "reviewed legacy TEST classification, isolated PostgreSQL cannot reuse a legacy TEST frontier when registering, renewing or allocating a new Sandbox range",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/ecf/provider/dosa/dosa-credential-postgres.integration-spec.ts",
+      "group": "fiscal",
+      "count": 7,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "ECF_POSTGRES_UAT"
+      ],
+      "execution": "Suite PostgreSQL fiscal aislada requerida para release del área; sin ejecución en esta tarea de IA.",
+      "tests": [
+        {
+          "name": "Credenciales DOSA — PostgreSQL real guarda la credencial cifrada y la recupera con el contexto correcto",
+          "status": "pending"
+        },
+        {
+          "name": "Credenciales DOSA — PostgreSQL real la fila no contiene el valor en claro",
+          "status": "pending"
+        },
+        {
+          "name": "Credenciales DOSA — PostgreSQL real el RNC queda normalizado y la clave única evita duplicados",
+          "status": "pending"
+        },
+        {
+          "name": "Credenciales DOSA — PostgreSQL real dos empresas con el mismo RNC no se pisan",
+          "status": "pending"
+        },
+        {
+          "name": "Credenciales DOSA — PostgreSQL real un criptograma de otra empresa no se puede abrir",
+          "status": "pending"
+        },
+        {
+          "name": "Credenciales DOSA — PostgreSQL real una fila ACTIVE no se sobrescribe con material distinto",
+          "status": "pending"
+        },
+        {
+          "name": "Credenciales DOSA — PostgreSQL real el estado avanza solo con la evidencia persistida completa",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/guardian/guardian.diagnosis.pg.integration-spec.ts",
+      "group": "guardian",
+      "count": 8,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "GUARDIAN_UAT_DATABASE_URL",
+        "GUARDIAN_ENABLED",
+        "GUARDIAN_INGEST_ENABLED",
+        "GUARDIAN_DIAGNOSIS_ENABLED"
+      ],
+      "execution": "PostgreSQL y rol lector dedicados; ejecución pendiente fuera del chat de IA. No confundir Guardian con APPYRA runtime.",
+      "tests": [
+        {
+          "name": "Guardian diagnóstico sobre PostgreSQL real nunca afirma una causa sin evidencia verificable",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian diagnóstico sobre PostgreSQL real con poca evidencia concluye INSUFFICIENT y persiste el diagnóstico",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian diagnóstico sobre PostgreSQL real con patrón repetido y coincidencia en código concluye CONFIRMED",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian diagnóstico sobre PostgreSQL real si el proveedor IA falla, el incidente se reprograma sin perderse",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian diagnóstico sobre PostgreSQL real Fase 5A: un fallo no reintentable no se reprograma ni se vuelve a facturar",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian diagnóstico sobre PostgreSQL real rechaza consultas SQL fuera de la lista permitida",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian diagnóstico sobre PostgreSQL real busca símbolos solo en el código autorizado",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian diagnóstico sobre PostgreSQL real dos workers no diagnostican el mismo incidente a la vez",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/ecf/provider/dosa/dosa-closeout-postgres.integration-spec.ts",
+      "group": "fiscal",
+      "count": 6,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "ECF_POSTGRES_UAT"
+      ],
+      "execution": "Suite PostgreSQL fiscal aislada requerida para release del área; sin ejecución en esta tarea de IA.",
+      "tests": [
+        {
+          "name": "Cierre de hallazgos — PostgreSQL real preasociación empresa–RNC registra la sesión con el RNC del servidor y el webhook la encuentra",
+          "status": "pending"
+        },
+        {
+          "name": "Cierre de hallazgos — PostgreSQL real preasociación empresa–RNC si dos empresas comparten el RNC, la segunda queda bloqueada",
+          "status": "pending"
+        },
+        {
+          "name": "Cierre de hallazgos — PostgreSQL real preasociación empresa–RNC sin RNC verificado no se crea sesión",
+          "status": "pending"
+        },
+        {
+          "name": "Cierre de hallazgos — PostgreSQL real webhook recuperable un fallo de la bóveda deja el evento reanudable y el reenvío lo completa",
+          "status": "pending"
+        },
+        {
+          "name": "Cierre de hallazgos — PostgreSQL real webhook recuperable una tercera entrega ya es duplicado",
+          "status": "pending"
+        },
+        {
+          "name": "Cierre de hallazgos — PostgreSQL real webhook recuperable el evento no activa facturación electrónica",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/guardian/guardian.auto-enrollment.pg.integration-spec.ts",
+      "group": "guardian",
+      "count": 6,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "GUARDIAN_UAT_DATABASE_URL",
+        "GUARDIAN_ENABLED",
+        "GUARDIAN_INGEST_ENABLED",
+        "GUARDIAN_AUTO_ENROLL_ACTIVATE",
+        "GUARDIAN_AUTO_ENROLL_GRANTS_PER_HOUR",
+        "GUARDIAN_AUTO_ENROLL_ENABLED",
+        "GUARDIAN_AUTO_ENROLL_COMPANIES",
+        "GUARDIAN_MAX_INSTALLATIONS_PER_COMPANY"
+      ],
+      "execution": "PostgreSQL y rol lector dedicados; ejecución pendiente fuera del chat de IA. No confundir Guardian con APPYRA runtime.",
+      "tests": [
+        {
+          "name": "auto-enrolamiento Guardian sobre PostgreSQL real sin empresas autorizadas no se concede nada",
+          "status": "pending"
+        },
+        {
+          "name": "auto-enrolamiento Guardian sobre PostgreSQL real empresa autorizada: concede, activa y el canje emite credencial ligada al equipo",
+          "status": "pending"
+        },
+        {
+          "name": "auto-enrolamiento Guardian sobre PostgreSQL real el mismo equipo reintenta: rota la credencial, no duplica la instalacion",
+          "status": "pending"
+        },
+        {
+          "name": "auto-enrolamiento Guardian sobre PostgreSQL real aislamiento: el codigo de una empresa nunca enrola en otra",
+          "status": "pending"
+        },
+        {
+          "name": "auto-enrolamiento Guardian sobre PostgreSQL real la cuota de instalaciones por empresa se respeta",
+          "status": "pending"
+        },
+        {
+          "name": "auto-enrolamiento Guardian sobre PostgreSQL real la desactivacion administrativa revoca la credencial al instante",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/license/crm-license.integration-spec.ts",
+      "group": "licenses",
+      "count": 12,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "CRM_LICENSE_FIXTURE_URL"
+      ],
+      "execution": "Fixtures PostgreSQL dedicadas requeridas para release del área; sin ejecución ni modificación de licencias en esta tarea.",
+      "tests": [
+        {
+          "name": "CRM management with isolated PostgreSQL pages beyond 25 and 100 without hiding companies and filters effective expired states",
+          "status": "pending"
+        },
+        {
+          "name": "CRM management with isolated PostgreSQL edits profile and limits without changing license key, expiry, activation or plan",
+          "status": "pending"
+        },
+        {
+          "name": "CRM management with isolated PostgreSQL retains dates of expired trials in the CRM while preserving the legacy projection",
+          "status": "pending"
+        },
+        {
+          "name": "CRM management with isolated PostgreSQL deduplicates simultaneous same UUID requests and rejects UUID reuse with changed payload",
+          "status": "pending"
+        },
+        {
+          "name": "CRM management with isolated PostgreSQL rejects an old version after a different update",
+          "status": "pending"
+        },
+        {
+          "name": "CRM management with isolated PostgreSQL cannot reuse another company receipt and never mutates the other company",
+          "status": "pending"
+        },
+        {
+          "name": "CRM management with isolated PostgreSQL revokes only sessions of the selected company and rejects limits below real usage",
+          "status": "pending"
+        },
+        {
+          "name": "CRM management with isolated PostgreSQL preserves a current paid period and key when suspending and reactivating",
+          "status": "pending"
+        },
+        {
+          "name": "CRM management with isolated PostgreSQL does not reactivate expired periods or create new keys",
+          "status": "pending"
+        },
+        {
+          "name": "CRM management with isolated PostgreSQL requires typed confirmation to revoke and preserves company and configuration",
+          "status": "pending"
+        },
+        {
+          "name": "CRM management with isolated PostgreSQL rolls back a mutation when the mandatory audit insert fails",
+          "status": "pending"
+        },
+        {
+          "name": "CRM management with isolated PostgreSQL default feature gate rejects writes and unknown payment/key fields are rejected",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/ecf/documents/ecf-fiscal-document-persistence-postgres.integration-spec.ts",
+      "group": "fiscal",
+      "count": 7,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "ECF_POSTGRES_UAT",
+        "ALANUBE_ENABLE_REAL_CALLS"
+      ],
+      "execution": "Suite PostgreSQL fiscal aislada requerida para release del área; sin ejecución en esta tarea de IA.",
+      "tests": [
+        {
+          "name": "persistencia íntegra del comprobante preparado on PostgreSQL stores the WHOLE prepared document, not just a summary",
+          "status": "pending"
+        },
+        {
+          "name": "persistencia íntegra del comprobante preparado on PostgreSQL the stored document reproduces the persisted fingerprint",
+          "status": "pending"
+        },
+        {
+          "name": "persistencia íntegra del comprobante preparado on PostgreSQL the summary stays a summary: it does not smuggle the whole document",
+          "status": "pending"
+        },
+        {
+          "name": "persistencia íntegra del comprobante preparado on PostgreSQL a prepared document cannot be altered afterwards",
+          "status": "pending"
+        },
+        {
+          "name": "persistencia íntegra del comprobante preparado on PostgreSQL the rest of the row may still evolve without touching the document",
+          "status": "pending"
+        },
+        {
+          "name": "persistencia íntegra del comprobante preparado on PostgreSQL the read API never returns the stored fiscal document",
+          "status": "pending"
+        },
+        {
+          "name": "persistencia íntegra del comprobante preparado on PostgreSQL documents prepared before this column keep working with a null document",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/ecf/provider/dosa/dosa-same-request-recovery-postgres.integration-spec.ts",
+      "group": "fiscal",
+      "count": 7,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "ECF_POSTGRES_UAT",
+        "ALANUBE_ENABLE_REAL_CALLS"
+      ],
+      "execution": "Suite PostgreSQL fiscal aislada requerida para release del área; sin ejecución en esta tarea de IA.",
+      "tests": [
+        {
+          "name": "autorización y auditoría del replay DOSA — PostgreSQL local serializa dos recuperaciones concurrentes y permite sólo los ordinales 2 y 3",
+          "status": "pending"
+        },
+        {
+          "name": "autorización y auditoría del replay DOSA — PostgreSQL local no autoriza datos alterados, otro padre u otra empresa",
+          "status": "pending"
+        },
+        {
+          "name": "autorización y auditoría del replay DOSA — PostgreSQL local revocación o cambio de credencial interrumpe antes del transporte",
+          "status": "pending"
+        },
+        {
+          "name": "autorización y auditoría del replay DOSA — PostgreSQL local recomprueba en la base certificación, módulo, proveedor y ambiente antes de autorizar",
+          "status": "pending"
+        },
+        {
+          "name": "autorización y auditoría del replay DOSA — PostgreSQL local no reanuda una operación que ya terminó ni un documento de otro ambiente",
+          "status": "pending"
+        },
+        {
+          "name": "autorización y auditoría del replay DOSA — PostgreSQL local en producción requiere autorización productiva y certificación propias además de la compuerta",
+          "status": "pending"
+        },
+        {
+          "name": "autorización y auditoría del replay DOSA — PostgreSQL local durable recovery rejects changed identities, respects leases and fences stale workers",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/ecf/provider/dosa/ecf-dosa-session-postgres.integration-spec.ts",
+      "group": "fiscal",
+      "count": 16,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "ECF_POSTGRES_UAT"
+      ],
+      "execution": "Suite PostgreSQL fiscal aislada requerida para release del área; sin ejecución en esta tarea de IA.",
+      "tests": [
+        {
+          "name": "EcfDosaCertificationSession — PostgreSQL real crea el primer intento con attempt_no = 1 y clave activa",
+          "status": "pending"
+        },
+        {
+          "name": "EcfDosaCertificationSession — PostgreSQL real dos solicitudes simultaneas devuelven la MISMA sesion (sin duplicar)",
+          "status": "pending"
+        },
+        {
+          "name": "EcfDosaCertificationSession — PostgreSQL real dos solicitudes simultaneas tras un intento cerrado no duplican",
+          "status": "pending"
+        },
+        {
+          "name": "EcfDosaCertificationSession — PostgreSQL real aísla por empresa y por RNC",
+          "status": "pending"
+        },
+        {
+          "name": "EcfDosaCertificationSession — PostgreSQL real recupera la sesion existente en lugar de crear otra",
+          "status": "pending"
+        },
+        {
+          "name": "EcfDosaCertificationSession — PostgreSQL real permite repetir la postulacion tras un intento vencido, conservando historial",
+          "status": "pending"
+        },
+        {
+          "name": "EcfDosaCertificationSession — PostgreSQL real permite repetir tras FAILED, CANCELLED y COMPLETED",
+          "status": "pending"
+        },
+        {
+          "name": "EcfDosaCertificationSession — PostgreSQL real no permite cerrar con un estado en curso",
+          "status": "pending"
+        },
+        {
+          "name": "EcfDosaCertificationSession — PostgreSQL real un evento del navegador NO cambia estado ni confirma nada",
+          "status": "pending"
+        },
+        {
+          "name": "EcfDosaCertificationSession — PostgreSQL real un evento sin sesion no crea filas",
+          "status": "pending"
+        },
+        {
+          "name": "EcfDosaCertificationSession — PostgreSQL real solo la confirmacion del backend marca provider_confirmed_at",
+          "status": "pending"
+        },
+        {
+          "name": "EcfDosaCertificationSession — PostgreSQL real rechaza una empresa inexistente por integridad referencial",
+          "status": "pending"
+        },
+        {
+          "name": "EcfDosaCertificationSession — PostgreSQL real un claim invalido no deja filas a medias",
+          "status": "pending"
+        },
+        {
+          "name": "EcfDosaCertificationSession — PostgreSQL real la base impide dos intentos con el mismo numero",
+          "status": "pending"
+        },
+        {
+          "name": "EcfDosaCertificationSession — PostgreSQL real la base impide dos sesiones activas para la misma empresa y RNC",
+          "status": "pending"
+        },
+        {
+          "name": "EcfDosaCertificationSession — PostgreSQL real permite varias sesiones cerradas (NULL en clave activa)",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/ecf/documents/ecf-simulated-dispatch-postgres.integration-spec.ts",
+      "group": "fiscal",
+      "count": 9,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "ECF_POSTGRES_UAT",
+        "ALANUBE_ENABLE_REAL_CALLS",
+        "ECF_EMISSION_ENABLED"
+      ],
+      "execution": "Suite PostgreSQL fiscal aislada requerida para release del área; sin ejecución en esta tarea de IA.",
+      "tests": [
+        {
+          "name": "E-CF simulated dispatch — end to end (HTTP-reachable path) aceptación simulada del proveedor: correlaciona, persiste y NO es aceptación fiscal",
+          "status": "pending"
+        },
+        {
+          "name": "E-CF simulated dispatch — end to end (HTTP-reachable path) rechazo simulado del proveedor: se registra para revisión sin aceptación",
+          "status": "pending"
+        },
+        {
+          "name": "E-CF simulated dispatch — end to end (HTTP-reachable path) respuesta pendiente: queda en revisión sin consumir aceptación",
+          "status": "pending"
+        },
+        {
+          "name": "E-CF simulated dispatch — end to end (HTTP-reachable path) timeout: resultado desconocido, sin evidencia inventada ni aceptación",
+          "status": "pending"
+        },
+        {
+          "name": "E-CF simulated dispatch — end to end (HTTP-reachable path) cuerpo malformado: falla cerrado y no correlaciona",
+          "status": "pending"
+        },
+        {
+          "name": "E-CF simulated dispatch — end to end (HTTP-reachable path) segundo despacho del mismo comprobante: se rechaza (idempotencia)",
+          "status": "pending"
+        },
+        {
+          "name": "E-CF simulated dispatch — end to end (HTTP-reachable path) se niega si el transporte real estaría activo y no toca el documento",
+          "status": "pending"
+        },
+        {
+          "name": "E-CF simulated dispatch — end to end (HTTP-reachable path) se niega fuera de una UAT local",
+          "status": "pending"
+        },
+        {
+          "name": "E-CF simulated dispatch — end to end (HTTP-reachable path) aislamiento: otra empresa no puede despachar el comprobante ajeno",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/notifications/notifications.claim.pg.integration-spec.ts",
+      "group": "notifications",
+      "count": 4,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "GUARDIAN_UAT_DATABASE_URL"
+      ],
+      "execution": "PostgreSQL y transporte simulado; ejecución pendiente. Nunca activar envíos externos para contar estas pruebas.",
+      "tests": [
+        {
+          "name": "notification_outbox sobre PostgreSQL real — claim concurrente dos workers con pools independientes entregan 500 filas exactamente una vez",
+          "status": "pending"
+        },
+        {
+          "name": "notification_outbox sobre PostgreSQL real — claim concurrente un lock vigente no se roba y uno vencido se recupera (muerte de worker)",
+          "status": "pending"
+        },
+        {
+          "name": "notification_outbox sobre PostgreSQL real — claim concurrente la cola concurrente no produce deadlocks ni deja filas bloqueadas",
+          "status": "pending"
+        },
+        {
+          "name": "notification_outbox sobre PostgreSQL real — claim concurrente dedupeKey único bajo concurrencia real: una sola fila, sin excepción",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/ecf/documents/ecf-e31-emission-postgres.integration-spec.ts",
+      "group": "fiscal",
+      "count": 10,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "ECF_POSTGRES_UAT",
+        "ALANUBE_ENABLE_REAL_CALLS",
+        "ECF_EMISSION_ENABLED"
+      ],
+      "execution": "Suite PostgreSQL fiscal aislada requerida para release del área; sin ejecución en esta tarea de IA.",
+      "tests": [
+        {
+          "name": "E31 emission orchestrator (simulated transport) dispatches a valid E31 into human review, never fiscal acceptance",
+          "status": "pending"
+        },
+        {
+          "name": "E31 emission orchestrator (simulated transport) records an explicit rejection for review without releasing the sequence",
+          "status": "pending"
+        },
+        {
+          "name": "E31 emission orchestrator (simulated transport) records a pending operational status without acceptance",
+          "status": "pending"
+        },
+        {
+          "name": "E31 emission orchestrator (simulated transport) never treats HTTP 200 as fiscal acceptance",
+          "status": "pending"
+        },
+        {
+          "name": "E31 emission orchestrator (simulated transport) keeps timeout unknown and refuses a second dispatch",
+          "status": "pending"
+        },
+        {
+          "name": "E31 emission orchestrator (simulated transport) does not bind a contradictory identity",
+          "status": "pending"
+        },
+        {
+          "name": "E31 emission orchestrator (simulated transport) allows only one effective dispatch under concurrency",
+          "status": "pending"
+        },
+        {
+          "name": "E31 emission orchestrator (simulated transport) blocks an E31 lacking the required buyer at preparation",
+          "status": "pending"
+        },
+        {
+          "name": "E31 emission orchestrator (simulated transport) is idempotent per operation and refuses a divergent retry",
+          "status": "pending"
+        },
+        {
+          "name": "E31 emission orchestrator (simulated transport) isolates companies and refuses cross-tenant dispatch",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/ecf/documents/ecf-document-query-postgres.integration-spec.ts",
+      "group": "fiscal",
+      "count": 10,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "ECF_POSTGRES_UAT",
+        "ALANUBE_ENABLE_REAL_CALLS"
+      ],
+      "execution": "Suite PostgreSQL fiscal aislada requerida para release del área; sin ejecución en esta tarea de IA.",
+      "tests": [
+        {
+          "name": "e-CF document query API (tenant isolation) on PostgreSQL reports e-CF disabled by default with no emission path exposed",
+          "status": "pending"
+        },
+        {
+          "name": "e-CF document query API (tenant isolation) on PostgreSQL never lists another company's documents",
+          "status": "pending"
+        },
+        {
+          "name": "e-CF document query API (tenant isolation) on PostgreSQL returns 404 for another company's document id (no IDOR signal)",
+          "status": "pending"
+        },
+        {
+          "name": "e-CF document query API (tenant isolation) on PostgreSQL shows e-NCF, history and attempts on the owner's document",
+          "status": "pending"
+        },
+        {
+          "name": "e-CF document query API (tenant isolation) on PostgreSQL buckets summary counts by functional group",
+          "status": "pending"
+        },
+        {
+          "name": "e-CF document query API (tenant isolation) on PostgreSQL offers only fiscally accepted originals with remaining balance for E34",
+          "status": "pending"
+        },
+        {
+          "name": "e-CF document query API (tenant isolation) on PostgreSQL lists and registers the company numbering range",
+          "status": "pending"
+        },
+        {
+          "name": "e-CF document query API (tenant isolation) on PostgreSQL projects the frozen receiver and the amount, never the provider payload",
+          "status": "pending"
+        },
+        {
+          "name": "e-CF document query API (tenant isolation) on PostgreSQL does not invent a receiver for a document that never froze one",
+          "status": "pending"
+        },
+        {
+          "name": "e-CF document query API (tenant isolation) on PostgreSQL paginates with take/skip and reports the filtered total",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/ecf/provider/dosa/dosa-dispatch-pending-postgres.integration-spec.ts",
+      "group": "fiscal",
+      "count": 6,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "ECF_POSTGRES_UAT",
+        "ALANUBE_ENABLE_REAL_CALLS"
+      ],
+      "execution": "Suite PostgreSQL fiscal aislada requerida para release del área; sin ejecución en esta tarea de IA.",
+      "tests": [
+        {
+          "name": "recuperación de despachos pendientes (sin duplicados) on PostgreSQL lista un comprobante preparado que nunca se envió",
+          "status": "pending"
+        },
+        {
+          "name": "recuperación de despachos pendientes (sin duplicados) on PostgreSQL el barrido de pendientes incluye la nota de crédito E34 y no la duplica",
+          "status": "pending"
+        },
+        {
+          "name": "recuperación de despachos pendientes (sin duplicados) on PostgreSQL NO lista un comprobante que ya tiene intento de envío",
+          "status": "pending"
+        },
+        {
+          "name": "recuperación de despachos pendientes (sin duplicados) on PostgreSQL no ve los pendientes de otra empresa",
+          "status": "pending"
+        },
+        {
+          "name": "recuperación de despachos pendientes (sin duplicados) on PostgreSQL dispatchPending no crea un segundo intento ni envío duplicado",
+          "status": "pending"
+        },
+        {
+          "name": "recuperación de despachos pendientes (sin duplicados) on PostgreSQL un comprobante ya enviado nunca vuelve a la lista aunque su estado sea preparado",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/guardian/guardian.ingest.pg.integration-spec.ts",
+      "group": "guardian",
+      "count": 6,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "GUARDIAN_UAT_DATABASE_URL",
+        "GUARDIAN_ENABLED",
+        "GUARDIAN_INGEST_ENABLED"
+      ],
+      "execution": "PostgreSQL y rol lector dedicados; ejecución pendiente fuera del chat de IA. No confundir Guardian con APPYRA runtime.",
+      "tests": [
+        {
+          "name": "Guardian ingest sobre PostgreSQL real reenviar el mismo eventId 10 veces produce 1 incidente y 9 duplicados",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian ingest sobre PostgreSQL real persiste antes de confirmar y guarda evidencias redactadas",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian ingest sobre PostgreSQL real aísla empresas: mismo eventId en dos empresas y detalle cruzado imposible",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian ingest sobre PostgreSQL real un evento inválido no invalida el resto del lote",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian ingest sobre PostgreSQL real aplica cuotas por empresa cuando la política lo indica",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian ingest sobre PostgreSQL real 100 empresas x 5 eventos simultáneos: todo persistido, sin pérdidas",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "scripts/migration/fullpos-legacy/uat/uat-rehearsal.integration-spec.ts",
+      "group": "legacy",
+      "count": 8,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "UAT_DATABASE_URL",
+        "FULLPOS_LEGACY_DB",
+        "USERPROFILE"
+      ],
+      "execution": "Ensayo de importación/rollback con SQLite y PostgreSQL desechables; fuera del alcance actual.",
+      "tests": [
+        {
+          "name": "PHASE 4 rehearsal against a disposable UAT database imports the whole profile without FK/constraint/Decimal failures",
+          "status": "pending"
+        },
+        {
+          "name": "PHASE 4 rehearsal against a disposable UAT database is idempotent: a second run is a clean no-op",
+          "status": "pending"
+        },
+        {
+          "name": "PHASE 4 rehearsal against a disposable UAT database verifies the imported state read-only without changing a single row",
+          "status": "pending"
+        },
+        {
+          "name": "PHASE 4 rehearsal against a disposable UAT database never touches another tenant (isolation canary)",
+          "status": "pending"
+        },
+        {
+          "name": "PHASE 4 rehearsal against a disposable UAT database rolls back surgically, restoring the clean baseline and keeping the other tenant intact",
+          "status": "pending"
+        },
+        {
+          "name": "PHASE 4 rehearsal against a disposable UAT database pre-cutover preflight passes on the clean baseline without changing a row",
+          "status": "pending"
+        },
+        {
+          "name": "PHASE 4 rehearsal against a disposable UAT database preflight aborts when the target company id is not the locked one",
+          "status": "pending"
+        },
+        {
+          "name": "PHASE 4 rehearsal against a disposable UAT database reimports cleanly after a rollback (repeatable cutover)",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/ecf/provider/dosa/dosa-webhook-postgres.integration-spec.ts",
+      "group": "fiscal",
+      "count": 8,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "ECF_POSTGRES_UAT"
+      ],
+      "execution": "Suite PostgreSQL fiscal aislada requerida para release del área; sin ejecución en esta tarea de IA.",
+      "tests": [
+        {
+          "name": "DosaWebhook — PostgreSQL real sin vinculación previa el evento no entra (RNC desconocido)",
+          "status": "pending"
+        },
+        {
+          "name": "DosaWebhook — PostgreSQL real con vinculación, el evento se guarda en la empresa correcta",
+          "status": "pending"
+        },
+        {
+          "name": "DosaWebhook — PostgreSQL real la doble entrega no duplica: una sola fila y segunda respuesta duplicate",
+          "status": "pending"
+        },
+        {
+          "name": "DosaWebhook — PostgreSQL real empresa sin e-CF habilitado queda fuera (409) y no persiste",
+          "status": "pending"
+        },
+        {
+          "name": "DosaWebhook — PostgreSQL real dos empresas con RNC propios no se contaminan",
+          "status": "pending"
+        },
+        {
+          "name": "DosaWebhook — PostgreSQL real ninguna credencial llega a la fila persistida",
+          "status": "pending"
+        },
+        {
+          "name": "DosaWebhook — PostgreSQL real el evento NO cambia el estado de la sesión de certificación",
+          "status": "pending"
+        },
+        {
+          "name": "DosaWebhook — PostgreSQL real un cambio real de estado sí es un evento nuevo",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/guardian/guardian.alert.delivery.pg.integration-spec.ts",
+      "group": "guardian",
+      "count": 7,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "GUARDIAN_UAT_DATABASE_URL",
+        "GUARDIAN_ENABLED",
+        "GUARDIAN_ALERTS_ENABLED",
+        "GUARDIAN_ALERT_RECIPIENT",
+        "GUARDIAN_ALERT_RECIPIENTS",
+        "GUARDIAN_ALERTS_EVOLUTION_ENABLED"
+      ],
+      "execution": "PostgreSQL y rol lector dedicados; ejecución pendiente fuera del chat de IA. No confundir Guardian con APPYRA runtime.",
+      "tests": [
+        {
+          "name": "Guardian entrega real de alertas sobre PostgreSQL conserva el destinatario administrativo en la alerta",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian entrega real de alertas sobre PostgreSQL aplica el ciclo SENT → DELIVERED → READ sin degradar",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian entrega real de alertas sobre PostgreSQL un webhook desordenado no hace retroceder el estado",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian entrega real de alertas sobre PostgreSQL un failed antes de entregar marca FAILED_PERMANENT",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian entrega real de alertas sobre PostgreSQL un failed posterior a la entrega conserva la evidencia de entrega",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian entrega real de alertas sobre PostgreSQL respeta Retry-After del proveedor al reprogramar un 429",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian entrega real de alertas sobre PostgreSQL crea una alerta por cada destinatario administrativo",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/guardian/guardian.integrity.pg.integration-spec.ts",
+      "group": "guardian",
+      "count": 5,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "GUARDIAN_UAT_DATABASE_URL"
+      ],
+      "execution": "PostgreSQL y rol lector dedicados; ejecución pendiente fuera del chat de IA. No confundir Guardian con APPYRA runtime.",
+      "tests": [
+        {
+          "name": "Guardian auditoría preventiva — PostgreSQL real con datos sintéticos expone el catálogo de reglas",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian auditoría preventiva — PostgreSQL real con datos sintéticos detecta los patrones sembrados en la empresa de prueba",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian auditoría preventiva — PostgreSQL real con datos sintéticos no genera falsos positivos en una empresa con operación normal",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian auditoría preventiva — PostgreSQL real con datos sintéticos aísla empresas: los hallazgos de una no aparecen en la otra",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian auditoría preventiva — PostgreSQL real con datos sintéticos permite ejecutar un subconjunto de reglas",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/ecf/documents/ecf-sales-without-document-postgres.integration-spec.ts",
+      "group": "fiscal",
+      "count": 9,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "ECF_POSTGRES_UAT",
+        "ALANUBE_ENABLE_REAL_CALLS"
+      ],
+      "execution": "Suite PostgreSQL fiscal aislada requerida para release del área; sin ejecución en esta tarea de IA.",
+      "tests": [
+        {
+          "name": "venta sin comprobante electrónico (registro de excepciones) on PostgreSQL registra la excepción con motivo, usuario y venta",
+          "status": "pending"
+        },
+        {
+          "name": "venta sin comprobante electrónico (registro de excepciones) on PostgreSQL rechaza la opción Normal cuando la empresa no la habilitó",
+          "status": "pending"
+        },
+        {
+          "name": "venta sin comprobante electrónico (registro de excepciones) on PostgreSQL rechaza la opción Normal cuando la facturación electrónica está apagada",
+          "status": "pending"
+        },
+        {
+          "name": "venta sin comprobante electrónico (registro de excepciones) on PostgreSQL exige un motivo con contenido real",
+          "status": "pending"
+        },
+        {
+          "name": "venta sin comprobante electrónico (registro de excepciones) on PostgreSQL es idempotente por venta: un reintento devuelve la misma evidencia",
+          "status": "pending"
+        },
+        {
+          "name": "venta sin comprobante electrónico (registro de excepciones) on PostgreSQL no acepta una venta que ya tiene comprobante fiscal legado",
+          "status": "pending"
+        },
+        {
+          "name": "venta sin comprobante electrónico (registro de excepciones) on PostgreSQL no acepta una venta que ya tiene un e-CF preparado",
+          "status": "pending"
+        },
+        {
+          "name": "venta sin comprobante electrónico (registro de excepciones) on PostgreSQL no permite registrar la venta de otra empresa",
+          "status": "pending"
+        },
+        {
+          "name": "venta sin comprobante electrónico (registro de excepciones) on PostgreSQL lista solo las excepciones de la propia empresa",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/license/company-activity.integration-spec.ts",
+      "group": "licenses",
+      "count": 8,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "CRM_LICENSE_FIXTURE_URL"
+      ],
+      "execution": "Fixtures PostgreSQL dedicadas requeridas para release del área; sin ejecución ni modificación de licencias en esta tarea.",
+      "tests": [
+        {
+          "name": "Company activity: disposable database only does not invent historical duration and never changes license/company data",
+          "status": "pending"
+        },
+        {
+          "name": "Company activity: disposable database only rejects tenant overrides, invalid sessions and disabled collection",
+          "status": "pending"
+        },
+        {
+          "name": "Company activity: disposable database only deduplicates concurrency, rejects gaps and isolates companies",
+          "status": "pending"
+        },
+        {
+          "name": "Company activity: disposable database only unions simultaneous sessions and splits midnight in UTC minus four",
+          "status": "pending"
+        },
+        {
+          "name": "Company activity: disposable database only bounds per-session pulse rate",
+          "status": "pending"
+        },
+        {
+          "name": "Company activity: disposable database only counts actual products and groups only business events by UTC minus four",
+          "status": "pending"
+        },
+        {
+          "name": "Company activity: disposable database only retains recent measurements and purges only expired auxiliary pulses",
+          "status": "pending"
+        },
+        {
+          "name": "Company activity: disposable database only keeps current statistics available before the optional measurement migration",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/ecf/provider/dosa/dosa-postulacion-binding-postgres.integration-spec.ts",
+      "group": "fiscal",
+      "count": 6,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "ECF_POSTGRES_UAT"
+      ],
+      "execution": "Suite PostgreSQL fiscal aislada requerida para release del área; sin ejecución en esta tarea de IA.",
+      "tests": [
+        {
+          "name": "postulacion_id — exclusividad concurrente en PostgreSQL dos empresas simultáneas con el MISMO postulacion_id: solo una lo obtiene",
+          "status": "pending"
+        },
+        {
+          "name": "postulacion_id — exclusividad concurrente en PostgreSQL repetir la misma vinculación es idempotente",
+          "status": "pending"
+        },
+        {
+          "name": "postulacion_id — exclusividad concurrente en PostgreSQL un evento fuera de orden no reescribe el vínculo confirmado",
+          "status": "pending"
+        },
+        {
+          "name": "postulacion_id — exclusividad concurrente en PostgreSQL sin intento activo no se vincula ni se crea nada",
+          "status": "pending"
+        },
+        {
+          "name": "postulacion_id — exclusividad concurrente en PostgreSQL no se vincula al intento de OTRO RNC de la misma empresa",
+          "status": "pending"
+        },
+        {
+          "name": "postulacion_id — exclusividad concurrente en PostgreSQL una ráfaga de 10 intentos cruzados deja un único dueño",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/guardian/guardian.alert.recovery.pg.integration-spec.ts",
+      "group": "guardian",
+      "count": 7,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "GUARDIAN_UAT_DATABASE_URL",
+        "GUARDIAN_ENABLED",
+        "GUARDIAN_ALERTS_ENABLED",
+        "GUARDIAN_ALERT_RECIPIENT",
+        "GUARDIAN_DIAGNOSIS_ENABLED",
+        "GUARDIAN_AI_PROVIDER",
+        "NOTIFICATIONS_ENABLED"
+      ],
+      "execution": "PostgreSQL y rol lector dedicados; ejecución pendiente fuera del chat de IA. No confundir Guardian con APPYRA runtime.",
+      "tests": [
+        {
+          "name": "Recuperación de alertas tras diagnóstico (PostgreSQL real) planifica exactamente una alerta para un incidente diagnosticado",
+          "status": "pending"
+        },
+        {
+          "name": "Recuperación de alertas tras diagnóstico (PostgreSQL real) repetir el proceso no duplica alertas",
+          "status": "pending"
+        },
+        {
+          "name": "Recuperación de alertas tras diagnóstico (PostgreSQL real) no recrea una alerta ya existente",
+          "status": "pending"
+        },
+        {
+          "name": "Recuperación de alertas tras diagnóstico (PostgreSQL real) ignora incidentes fuera de la ventana de recuperación",
+          "status": "pending"
+        },
+        {
+          "name": "Recuperación de alertas tras diagnóstico (PostgreSQL real) nunca planifica alertas para empresas con Guardian desactivado",
+          "status": "pending"
+        },
+        {
+          "name": "Recuperación de alertas tras diagnóstico (PostgreSQL real) con las alertas apagadas no planifica nada",
+          "status": "pending"
+        },
+        {
+          "name": "Recuperación de alertas tras diagnóstico (PostgreSQL real) no provoca llamadas de IA ni envíos reales",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/guardian/guardian.company.optin.pg.integration-spec.ts",
+      "group": "guardian",
+      "count": 6,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "GUARDIAN_UAT_DATABASE_URL",
+        "GUARDIAN_ENABLED",
+        "GUARDIAN_INGEST_ENABLED"
+      ],
+      "execution": "PostgreSQL y rol lector dedicados; ejecución pendiente fuera del chat de IA. No confundir Guardian con APPYRA runtime.",
+      "tests": [
+        {
+          "name": "Guardian opt-in por empresa sobre PostgreSQL real una empresa nueva nace con Guardian DESACTIVADO",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian opt-in por empresa sobre PostgreSQL real con Guardian desactivado la ingesta se rechaza sin persistir",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian opt-in por empresa sobre PostgreSQL real activada explícitamente, la ingesta se acepta",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian opt-in por empresa sobre PostgreSQL real aislamiento: A activada acepta, B desactivada rechaza el mismo evento",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian opt-in por empresa sobre PostgreSQL real una credencial de máquina válida no salta la desactivación de la empresa",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian opt-in por empresa sobre PostgreSQL real desactivar bloquea nuevas ingestas y no borra el historial",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/ecf/documents/ecf-simulated-dispatch-concurrency-postgres.integration-spec.ts",
+      "group": "fiscal",
+      "count": 4,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "ECF_POSTGRES_UAT",
+        "ALANUBE_ENABLE_REAL_CALLS",
+        "ECF_EMISSION_ENABLED"
+      ],
+      "execution": "Suite PostgreSQL fiscal aislada requerida para release del área; sin ejecución en esta tarea de IA.",
+      "tests": [
+        {
+          "name": "E-CF simulated dispatch — real concurrency dos despachos SIMULTÁNEOS del mismo comprobante: solo uno gana",
+          "status": "pending"
+        },
+        {
+          "name": "E-CF simulated dispatch — real concurrency dos empresas distintas despachando a la vez quedan aisladas",
+          "status": "pending"
+        },
+        {
+          "name": "E-CF simulated dispatch — real concurrency un timeout no habilita una segunda emisión: el reintento se rechaza",
+          "status": "pending"
+        },
+        {
+          "name": "E-CF simulated dispatch — real concurrency N despachos simultáneos sobre el mismo comprobante: sigue habiendo uno",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/guardian/guardian.retention.pg.integration-spec.ts",
+      "group": "guardian",
+      "count": 6,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "GUARDIAN_UAT_DATABASE_URL",
+        "GUARDIAN_RETENTION_DAYS",
+        "GUARDIAN_RETENTION_CRITICAL_DAYS",
+        "GUARDIAN_RETENTION_MAX_PER_COMPANY",
+        "GUARDIAN_RETENTION_BATCH_SIZE",
+        "GUARDIAN_RETENTION_MAX_BATCHES"
+      ],
+      "execution": "PostgreSQL y rol lector dedicados; ejecución pendiente fuera del chat de IA. No confundir Guardian con APPYRA runtime.",
+      "tests": [
+        {
+          "name": "Guardian retención — PostgreSQL real en modo simulación cuenta sin borrar nada",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian retención — PostgreSQL real aplica solo a incidentes cerrados y fuera de retención, conservando críticos y abiertos",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian retención — PostgreSQL real la eliminación arrastra evidencias (FK en cascada)",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian retención — PostgreSQL real reporta métricas de almacenamiento por tabla",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian retención — PostgreSQL real nunca borra un incidente con alerta pendiente de entrega",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian retención — PostgreSQL real borra en lotes acotados y es reanudable entre ejecuciones",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/ecf/documents/ecf-environment-isolation-postgres.integration-spec.ts",
+      "group": "fiscal",
+      "count": 6,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "ECF_POSTGRES_UAT",
+        "ALANUBE_ENABLE_REAL_CALLS"
+      ],
+      "execution": "Suite PostgreSQL fiscal aislada requerida para release del área; sin ejecución en esta tarea de IA.",
+      "tests": [
+        {
+          "name": "Numbering environment boundaries on isolated PostgreSQL keeps existing production numbering while TEST has no range",
+          "status": "pending"
+        },
+        {
+          "name": "Numbering environment boundaries on isolated PostgreSQL allows the same approved numbers in TEST without consuming production or borrowing its idempotency record",
+          "status": "pending"
+        },
+        {
+          "name": "Numbering environment boundaries on isolated PostgreSQL rejects a different tenant even when its TEST mode matches",
+          "status": "pending"
+        },
+        {
+          "name": "Numbering environment boundaries on isolated PostgreSQL does not reuse an operation number when the configured environment changed after preparation began",
+          "status": "pending"
+        },
+        {
+          "name": "Numbering environment boundaries on isolated PostgreSQL preserves the immutable environment of a numbering row",
+          "status": "pending"
+        },
+        {
+          "name": "Numbering environment boundaries on isolated PostgreSQL isolates document identity and allows equal e-NCFs only in separate confirmed environments",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/ecf/documents/ecf-pos-readiness-postgres.integration-spec.ts",
+      "group": "fiscal",
+      "count": 1,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "ECF_POSTGRES_UAT",
+        "DOSA_EMISSION_ENABLED",
+        "ALANUBE_ENABLE_REAL_CALLS",
+        "ECF_EMISSION_ENABLED"
+      ],
+      "execution": "Suite PostgreSQL fiscal aislada requerida para release del área; sin ejecución en esta tarea de IA.",
+      "tests": [
+        {
+          "name": "company activation and POS readiness on isolated PostgreSQL activates taxes, waits for readiness, and never borrows another tenant's range",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/guardian/guardian.machine.pg.integration-spec.ts",
+      "group": "guardian",
+      "count": 5,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "GUARDIAN_UAT_DATABASE_URL"
+      ],
+      "execution": "PostgreSQL y rol lector dedicados; ejecución pendiente fuera del chat de IA. No confundir Guardian con APPYRA runtime.",
+      "tests": [
+        {
+          "name": "credenciales de máquina sobre PostgreSQL real resuelve la empresa correcta para cada credencial",
+          "status": "pending"
+        },
+        {
+          "name": "credenciales de máquina sobre PostgreSQL real una clave inexistente no resuelve ninguna empresa",
+          "status": "pending"
+        },
+        {
+          "name": "credenciales de máquina sobre PostgreSQL real revocar la credencial la invalida de inmediato",
+          "status": "pending"
+        },
+        {
+          "name": "credenciales de máquina sobre PostgreSQL real el uso queda auditado con rol MACHINE",
+          "status": "pending"
+        },
+        {
+          "name": "credenciales de máquina sobre PostgreSQL real nunca guarda la clave en claro",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/license/crm-license-fiscal-postgres.integration-spec.ts",
+      "group": "licenses",
+      "count": 1,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "CRM_LICENSE_FIXTURE_URL"
+      ],
+      "execution": "Fixtures PostgreSQL dedicadas requeridas para release del área; sin ejecución ni modificación de licencias en esta tarea.",
+      "tests": [
+        {
+          "name": "CRM license changes preserve each company fiscal numbering profile, suspend, reactivate and revoke leave authorization, expiry and counters unchanged",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/license/license-integration-postgres.integration-spec.ts",
+      "group": "licenses",
+      "count": 2,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "LICENSE_PAYMENTS_FIXTURE_URL"
+      ],
+      "execution": "Fixtures PostgreSQL dedicadas requeridas para release del área; sin ejecución ni modificación de licencias en esta tarea.",
+      "tests": [
+        {
+          "name": "integracion IA/planes en PostgreSQL propio renovaciones concurrentes suman dos meses y respetan concesiones solo de esa empresa",
+          "status": "pending"
+        },
+        {
+          "name": "integracion IA/planes en PostgreSQL propio dos altas simultaneas no superan un almacen y la empresa legada sigue creando varios",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/guardian/guardian.security.pg.integration-spec.ts",
+      "group": "guardian",
+      "count": 4,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "GUARDIAN_READER_DATABASE_URL",
+        "GUARDIAN_UAT_DATABASE_URL"
+      ],
+      "execution": "PostgreSQL y rol lector dedicados; ejecución pendiente fuera del chat de IA. No confundir Guardian con APPYRA runtime.",
+      "tests": [
+        {
+          "name": "guardian_reader — permisos reales en PostgreSQL puede leer las tablas autorizadas",
+          "status": "pending"
+        },
+        {
+          "name": "guardian_reader — permisos reales en PostgreSQL no puede insertar, actualizar ni borrar",
+          "status": "pending"
+        },
+        {
+          "name": "guardian_reader — permisos reales en PostgreSQL tampoco puede escribir con SQL crudo",
+          "status": "pending"
+        },
+        {
+          "name": "guardian_reader — permisos reales en PostgreSQL las herramientas de diagnóstico usan el cliente de solo lectura",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/ecf/provider/dosa/dosa-graceful-shutdown-postgres.integration-spec.ts",
+      "group": "fiscal",
+      "count": 1,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "ECF_POSTGRES_UAT"
+      ],
+      "execution": "Suite PostgreSQL fiscal aislada requerida para release del área; sin ejecución en esta tarea de IA.",
+      "tests": [
+        {
+          "name": "NestJS — cierre ordenado y liberación de conexiones arranca, atiende y deja cero conexiones abiertas al cerrar",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/guardian/guardian.alerts.pg.integration-spec.ts",
+      "group": "guardian",
+      "count": 10,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "GUARDIAN_UAT_DATABASE_URL",
+        "GUARDIAN_ENABLED",
+        "GUARDIAN_ALERTS_ENABLED",
+        "GUARDIAN_ALERT_RECIPIENT",
+        "NOTIFICATIONS_ENABLED",
+        "GUARDIAN_WA_APP_SECRET"
+      ],
+      "execution": "PostgreSQL y rol lector dedicados; ejecución pendiente fuera del chat de IA. No confundir Guardian con APPYRA runtime.",
+      "tests": [
+        {
+          "name": "Guardian alertas sobre PostgreSQL real SEV1 a las 03:00 se encola para envío inmediato (sin horario comercial)",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian alertas sobre PostgreSQL real no duplica la alerta inicial del mismo incidente",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian alertas sobre PostgreSQL real SEV4 no despierta al administrador por defecto (solo se registra)",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian alertas sobre PostgreSQL real los workers reclaman alertas sin solaparse",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian alertas sobre PostgreSQL real un fallo transitorio reprograma con backoff y deja historial de intento",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian alertas sobre PostgreSQL real tras dos intentos fallidos usa el canal de respaldo independiente",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian alertas sobre PostgreSQL real un canal de outbox deja la alerta en QUEUED y no la marca como enviada",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian alertas sobre PostgreSQL real un proveedor que confirma con id deja la alerta en ACCEPTED",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian alertas sobre PostgreSQL real un fallo permanente marca la alerta y genera escalamiento",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian alertas sobre PostgreSQL real el webhook de entrega marca la alerta como entregada",
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "path": "src/guardian/guardian.platform.pg.integration-spec.ts",
+      "group": "guardian",
+      "count": 10,
+      "intentionalDefaultOptIn": true,
+      "gateNames": [
+        "GUARDIAN_UAT_DATABASE_URL",
+        "GUARDIAN_PLATFORM_TOKEN",
+        "GUARDIAN_ENABLED",
+        "GUARDIAN_INGEST_ENABLED",
+        "GUARDIAN_WA_CLOUD_TOKEN",
+        "GUARDIAN_WA_PHONE_NUMBER_ID",
+        "META_WHATSAPP_TOKEN",
+        "META_PHONE_NUMBER_ID",
+        "OPENAI_API_KEY",
+        "GUARDIAN_AI_API_KEY"
+      ],
+      "execution": "PostgreSQL y rol lector dedicados; ejecución pendiente fuera del chat de IA. No confundir Guardian con APPYRA runtime.",
+      "tests": [
+        {
+          "name": "Guardian API de plataforma — PostgreSQL real lista empresas monitoreadas con contadores y nombres",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian API de plataforma — PostgreSQL real el resumen agrega por severidad, estado y módulo",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian API de plataforma — PostgreSQL real lista incidentes de todas las empresas e incluye nombre de empresa",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian API de plataforma — PostgreSQL real filtra por empresa y devuelve paginación por cursor",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian API de plataforma — PostgreSQL real el detalle de plataforma incluye evidencias, historial y alertas con intentos",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian API de plataforma — PostgreSQL real las acciones administrativas se registran en la auditoría",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian API de plataforma — PostgreSQL real la salud de plataforma reporta el estado de los componentes",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian API de plataforma — PostgreSQL real el detalle es serializable a JSON (intentos sin BigInt) y conserva el contrato del panel",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian API de plataforma — PostgreSQL real la salud no declara WhatsApp configurado por heredar credenciales de otro producto",
+          "status": "pending"
+        },
+        {
+          "name": "Guardian API de plataforma — PostgreSQL real reporta el estado de los workers y la disponibilidad global",
+          "status": "pending"
+        }
+      ]
+    }
+  ]
+}

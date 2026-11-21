@@ -1,5 +1,96 @@
 # Execution State
 
+## Latest — chat design and reconnection locally verified (2026-11-20)
+
+See docs/ia-auditoria/2026-11-20/DISENO_Y_RECONEXION.md for current status.
+Requested panel/messages/composer/buttons polished with existing theme; source
+chips hidden while citation data is preserved. Dock60/68px, reduced4px.
+Explicit Retry preserves the original message/ID and avoids duplicate bubbles;
+different media cannot reuse the failed message ID. Module changes cancel retry.
+Real desktop1280/mobile390 browser tests lose a response AFTER backend handling,
+then recover the exact same response with one click. PostgreSQL: one turn per
+request, foreign company0. No automatic retries; existing12s circuit retained.
+Both screenshot states inspected after composer becomes available again.
+Windows39 AI tests, analyze, UAT web build136.4s PASS; AI/network/auth81 PASS.
+Linux39 AI tests PASS; four Linux goldens generated and compared on Linux,
+four Windows goldens generated and compared on Windows. No check weakened.
+Previous reconnection harness blocker is superseded, its failures retained.
+GO for local owner design review. Production remains NO-GO pending owner review,
+publication authorization, provider/transport configuration review and CI gates.
+No push/merge/deploy; no fiscal/Prisma/license edits; other worktrees untouched.
+
+## Latest continuation — real OpenAI evaluation (2026-11-20)
+
+See docs/ia-auditoria/2026-11-20/OPENAI.md and openai/ evidence.
+Local ignored key authenticated; accidental key in tracked .env.example removed
+before any publication. No key in changed/untracked files in either worktree.
+Tenant-scoped local provider/task uses gpt-6.2-astra, daily cap USD3; no production
+configuration changed. Optional model-directed tool loop disabled for this
+transport; server-authorized catalogue/account/company reads remain enabled.
+Realistic regression proved the 9000-char prompt cut quotation steps; budget now
+16000, knowledge still capped6000. Actual Astra conversations10/10 technical and
+quality, browser desktop full procedure verified; historical Qwen still8/10.
+Follow-up after prompt refinement5.84/5.64s. APPYRA929 tests/82 suites, bank171,
+typecheck/lint/build PASS. Flutter34 AI tests/analyze PASS; final UI web build74.2s
+and 390px browser validation PASS, screenshots inspected and linked in OPENAI.md.
+Error shown once without technical
+exception text; mobile dock hides without replacing Navigator subtree.
+Connectivity harness remains NO-GO: after global12s circuit cooldown it typed
+partial text (PostgreSQL records "¿Cóm"), so identity check was not a valid repeat.
+Third correction attempt explicitly rejected incomplete input; stop further
+iterations on that same failure per AGENTS.md. Do not call it a product PASS.
+No push, merge, fiscal/Prisma/license edits or production changes.
+
+## Current work — isolated AI improvements (2026-11-20)
+
+Continuation: owner requested browser unblock, broader real conversations,
+classification of all 597 skips and real frontend/API/engine/PostgreSQL evidence.
+See docs/ia-auditoria/2026-11-20/INFORME.md for current results and blockers.
+No production publication authorized. Default tests 3065 PASS/597 skipped;
+skips individually inventoried (454 fiscal,42 license,89 Guardian,4 outbox,8 legacy;
+zero AI skips). APPYRA 928 PASS; bank171/171. Actual ten HTTP conversations pass
+transport/scenario checks, but two fail content review: fabricated quotation
+buttons and excessive repetition/latency with local qwen2.5-coder:3b. NO-GO.
+Confirmed fixes: report-vs-operational-history intent, exact final reply on retry,
+contextual knowledge for short follow-ups and safe handling of empty refusals.
+Desktop browser query/report and scoped PostgreSQL/expiry checked using fictitious
+companies. UAT browser initially used forbidden4049; corrected to approved4004.
+Mobile accessibility bounds/root-overlay fix and final browser validation are
+recorded in the continuation report. No fiscal/Prisma/license source changes.
+
+Owner requests a separate AI branch, practical FullPOS support and real incident
+reporting. Own worktree C:/src/fullpos-ultimos-ajustes-ia, branch
+agent/ultimos-ajustes-de-la-ia, base production-main33625e3c (merged PR52).
+No upstream, no commit/push, no production access or deployment in this task.
+Other worktrees and the PR52 release preparation remain separate.
+
+Owner subsequently approved local implementation and testing. APPYRA changes use
+their own worktree C:/src/appyra-ultimos-ajustes-ia, branch
+agent/ultimos-ajustes-ia-fullpos, base 7fc0ed6. Neither original tree is edited.
+Implemented secret-request distinction, route context, incident metadata and
+confirmation dialog, identity/lifecycle guards, bridge timeout correction,
+tenant-scoped fallback data and UUID/company-correct memory SQL. APPYRA binds
+session ownership before deduplication, requests incident details and retains
+verified references. Guides correct cash change and document Plans/recovery.
+
+Latest local checks: FullPOS 3065 passed, 597 skipped (264 passed suites);
+Flutter selected AI/auth/Plans/e-CF regression 613 passed; Flutter analyze passed;
+APPYRA 922 passed (81 suites), question bank 171/171. Bank is deterministic,
+not proof of model accuracy. Both API builds passed in isolated fixture startup.
+Two fictitious companies on exclusive local PostgreSQL passed cross-company
+conversation rejection, scoped data/memory persistence, incident reference and
+duplicate preservation. No production or external notification was involved.
+
+Real local qwen2.5-coder:3b produced incorrect recovery/cash instructions during
+quality review. Those two questions now use published curated answers, honestly
+labelled rules rather than model output; live regression assertions pass.
+Current web release build passed (114.1s, local UAT API only). Lab APIs bind
+127.0.0.1; expected database/port guards match exclusive fixtures. Browser
+automation still fails during startup/capture; no visual PASS is claimed.
+Remaining: successful real app visual/functional review,
+broader model quality/knowledge coverage review and final diff revalidation.
+NO-GO for AI publication. No commit/push/PR/merge or deployment authorized.
+
 ## Current work — recover pending Plans, IA and cash warning (2026-11-20)
 
 Owner authorizes auditing all related branches and recovering the omitted work
