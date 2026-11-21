@@ -430,6 +430,24 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       final card = tester.getSize(find.byType(PlanCard).first);
+      expect(card.height, greaterThanOrEqualTo(width >= 1280 ? 520 : 320));
+      final surface = tester.widget<Container>(
+        find
+            .descendant(
+              of: find.byType(PlanCard).first,
+              matching: find.byWidgetPredicate(
+                (widget) =>
+                    widget is Container &&
+                    widget.decoration is BoxDecoration &&
+                    (widget.decoration as BoxDecoration).color == Colors.white,
+              ),
+            )
+            .first,
+      );
+      expect(
+        (surface.decoration as BoxDecoration).borderRadius,
+        BorderRadius.zero,
+      );
       if (width >= 1280) {
         expect(card.width, greaterThan(width >= 1900 ? 320 : 280));
       }

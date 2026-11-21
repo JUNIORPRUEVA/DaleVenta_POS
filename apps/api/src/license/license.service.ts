@@ -13,6 +13,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CatalogRealtimeRelayService } from '../products/catalog-realtime-relay.service';
 import { buildEntitlements } from './plans/license-entitlements.service';
 import { LicenseRenewalService } from './renewal/license-renewal.service';
+import { createLicenseKey } from './license-key';
 import {
   resolveLicenseAccess,
   type LicenseAccess,
@@ -1026,7 +1027,7 @@ export class LicenseService {
   }
 
   private generateLicenseKey() {
-    return `DV-${randomUUID().replace(/-/g, '').slice(0, 20).toUpperCase()}`;
+    return createLicenseKey();
   }
 
   private withRequestActor(user: TenantUser, dto: LicenseUpdateInput) {

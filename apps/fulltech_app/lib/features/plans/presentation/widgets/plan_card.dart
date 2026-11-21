@@ -117,9 +117,10 @@ class PlanCard extends StatelessWidget {
         .toList(growable: false);
 
     return Container(
+      constraints: BoxConstraints(minHeight: compact ? 320 : 520),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.zero,
         border: Border.all(
           color: highlighted ? _Ink.primary : _Ink.hair,
           width: highlighted ? 1.4 : 1,
@@ -243,7 +244,7 @@ class _RecommendedBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(
         color: _Ink.primary,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.zero,
       ),
       child: const Text(
         'Más elegido',
@@ -258,7 +259,7 @@ class _RecommendedBadge extends StatelessWidget {
   }
 }
 
-/// Boton de la tarjeta: redondeado, bajo y sin azul.
+/// Botón cuadrado, alineado al pie de la tarjeta.
 class _PlanAction extends StatelessWidget {
   const _PlanAction({
     required this.label,

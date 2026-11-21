@@ -163,6 +163,7 @@ suite('Pago de planes con PostgreSQL aislado', () => {
     });
     expect(company.licenseStatus).toBe('ACTIVE');
     expect(company.planCode).toBe('pro');
+    expect(company.licenseKey).toMatch(/^DV-[0-9A-F]{20}$/);
     expect(company.maxUsers).toBe(4);
     expect(company.maxProducts).toBe(1000);
     expect(company.maxWarehouses).toBe(5);
@@ -285,6 +286,7 @@ suite('Pago de planes con PostgreSQL aislado', () => {
       new Date(two.license.periodEnd).getTime() -
         new Date(one.license.periodEnd).getTime(),
     ).toBeGreaterThan(27 * 86_400_000);
+    expect(two.license.licenseKey).toBe(one.license.licenseKey);
   });
 
   it('apaga lo que el plan no incluye al activar un plan inferior', async () => {
