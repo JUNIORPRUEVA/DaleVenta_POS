@@ -33,10 +33,22 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       requestId?: string;
       user?: { id?: string; companyId?: string | null };
     }>();
-    const res = ctx.getResponse<{ status: (code: number) => any; json: (body: any) => any }>();
+    const res = ctx.getResponse<{ status: (code: number) => any; json: (body: any) => any; setHeader?: (name: string, value: string) => void }>();
 
     const method = req?.method ?? 'UNKNOWN';
     const url = req?.originalUrl ?? req?.url ?? 'UNKNOWN';
+
+    const databaseMessage=exception instanceof Prisma.PrismaClientKnownRequestError
+      ?safeString(exception.meta):exception instanceof Prisma.PrismaClientUnknownRequestError?exception.message:'';
+    const lifecycleSignal=databaseMessage.match(/PRODUCT_LIFECYCLE_(NOT_ACTIVE|ANNULLED|TENANT_MISMATCH)/)?.[1];
+    if(lifecycleSignal){
+      const forbidden=lifecycleSignal==='TENANT_MISMATCH';
+      res.status(forbidden?403:409).json({statusCode:forbidden?403:409,
+        code:forbidden?'PRODUCT_COMPANY_MISMATCH':lifecycleSignal==='ANNULLED'?'PRODUCT_ANNULLED':'PRODUCT_NOT_ACTIVE',
+        message:forbidden?'El producto no pertenece a esta empresa.':'El producto ya no está activo. Actualiza el catálogo antes de continuar.',
+      });
+      return;
+    }
 
     const isHttp = exception instanceof HttpException;
     const status = isHttp
@@ -77,6 +89,12 @@ export class GlobalExceptionFilter implements ExceptionFilter {
                 : null;
 
     const rawResponse = isHttp ? exception.getResponse() : null;
+    if (status === HttpStatus.TOO_MANY_REQUESTS && isObject(rawResponse)) {
+      const seconds = rawResponse.retryAfterSeconds;
+      if (typeof seconds === 'number' && Number.isFinite(seconds) && seconds >= 0) {
+        res.setHeader?.('Retry-After', String(Math.ceil(seconds)));
+      }
+    }
     const message = isHttp
       ? safeString(rawResponse)
       : exception instanceof Error

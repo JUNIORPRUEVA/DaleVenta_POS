@@ -160,6 +160,7 @@ void main() {
           }), 409, headers: {Headers.contentTypeHeader: ['application/json']});
         }
         return ResponseBody.fromString(jsonEncode({'id':'remote-sale-a','userId':'user-a',
+          'clientRequestId': (options.data as Map)['clientRequestId'],
           'totalSold':400,'totalCost':160,'totalProfit':240,'commissionAmount':0,'paymentMethod':'cash','items':[]}), 201,
           headers: {Headers.contentTypeHeader: ['application/json']});
       });
@@ -187,13 +188,82 @@ void main() {
         await store.closeForTesting();
         if (mode == 'timeout') {
           await expectLater(charge(repo, 'request-b'), throwsA(anything));
-          expect(posts, 1, reason: 'Unknown outcome must block an independent second charge');
+          expect(posts, 1, reason: 'This second request has identical cart contents inside the 30-minute guard window');
         }
       } else { expect(remaining, isEmpty); }
       expect(posts, mode == 'disk-error' ? 0 : 1);
       dio.close(force:true);
     });
   }
+  test('a recent uncertain sale does not stop a different new sale', () async {
+    var posts = 0;
+    final dio = Dio()..httpClientAdapter = _Adapter((request) async {
+      if (request.path != '/sales') {
+        return ResponseBody.fromString('[]', 200,
+          headers: {Headers.contentTypeHeader: ['application/json']});
+      }
+      posts++;
+      if (posts == 1) {
+        throw DioException(requestOptions: request, type: DioExceptionType.receiveTimeout);
+      }
+      return ResponseBody.fromString(jsonEncode({
+        'id': 'new-independent-sale', 'userId': 'user-a',
+        'clientRequestId': (request.data as Map)['clientRequestId'],
+        'totalSold': 500, 'totalCost': 200, 'totalProfit': 300,
+        'commissionAmount': 0, 'paymentMethod': 'cash', 'items': [],
+      }), 201, headers: {Headers.contentTypeHeader: ['application/json']});
+    });
+    final repo = VentasRepository(dio, queue, WarehouseRepository(dio),
+      originCashSessionIdResolver: () async => 'turn-a', durableSaleAttemptsForTesting: true);
+    await expectLater(charge(repo, 'uncertain-original'), throwsA(anything));
+    final original = (await store.listUnresolvedSaleAttempts(companyId: 'company-a', userId: 'user-a')).single;
+    final sale = await repo.createSale(clientRequestId: 'independent-new',
+      paymentMethod: 'cash', paymentCashAmount: 500, cashReceived: 500, expectedTotalSold: 500,
+      items: const [SaleDraftItem(productId: 'product-a', name: 'Fixture', imageUrl: null,
+        isExternal: false, qty: 5, priceSoldUnit: 100, costUnitSnapshot: 40)]);
+    expect(sale?.id, 'new-independent-sale');
+    expect(posts, 2);
+    final remaining = await store.listUnresolvedSaleAttempts(companyId: 'company-a', userId: 'user-a');
+    expect(remaining.single.id, original.id);
+    expect(remaining.single.payload, original.payload);
+    expect(remaining.single.createdAt, original.createdAt);
+    dio.close(force: true);
+  });
+
+  test('identical new POS tickets continue while the original uncertain ticket stays protected after restart', () async {
+    var posts = 0;
+    final dio = Dio()..httpClientAdapter = _Adapter((request) async {
+      if (request.path != '/sales') {
+        return ResponseBody.fromString('[]', 200,
+          headers: {Headers.contentTypeHeader: ['application/json']});
+      }
+      posts++;
+      if (posts == 1) throw DioException(requestOptions: request, type: DioExceptionType.receiveTimeout);
+      return ResponseBody.fromString(jsonEncode({'id':'independent-identical-sale', 'userId':'user-a',
+        'clientRequestId':(request.data as Map)['clientRequestId'], 'totalSold':400,'totalCost':160,
+        'totalProfit':240,'commissionAmount':0,'paymentMethod':'cash','items':[]}),201,
+        headers:{Headers.contentTypeHeader:['application/json']});
+    });
+    final repo = VentasRepository(dio,queue,WarehouseRepository(dio),
+      originCashSessionIdResolver:()async=>'turn-a',durableSaleAttemptsForTesting:true);
+    Future<SaleModel?> ticket(String id) => repo.createSale(clientTicketId:id,
+      paymentMethod:'cash',paymentCashAmount:400,cashReceived:400,expectedTotalSold:400,
+      items:const [SaleDraftItem(productId:'product-a',name:'Fixture',imageUrl:null,isExternal:false,
+        qty:4,priceSoldUnit:100,costUnitSnapshot:40)]);
+    await expectLater(ticket('pos-ticket-original'),throwsA(anything));
+    final original=(await store.listUnresolvedSaleAttempts(companyId:'company-a',userId:'user-a')).single;
+    expect(original.payload['posTicketId'],'pos-ticket-original');
+    expect((await ticket('pos-ticket-independent'))?.id,'independent-identical-sale');
+    expect(posts,2);
+    await store.closeForTesting();
+    await expectLater(ticket('pos-ticket-original'),throwsA(anything));
+    expect(posts,2,reason:'Same ticket keeps its original request identity across SQLite restart');
+    final retained=(await store.listUnresolvedSaleAttempts(companyId:'company-a',userId:'user-a')).single;
+    expect(retained.idempotencyKey,original.idempotencyKey);
+    expect(retained.payload,original.payload);
+    expect(retained.createdAt,original.createdAt);
+    dio.close(force:true);
+  });
 }
 
 class _Adapter implements HttpClientAdapter {

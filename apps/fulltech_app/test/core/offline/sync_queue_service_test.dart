@@ -282,7 +282,7 @@ void main() {
     )).single;
     expect(action.status, 'error');
     expect(action.permanent, isFalse);
-    expect(action.error, contains('ventas están pendientes'));
+      expect(action.error, contains('servicio no está disponible'));
     expect(action.error, isNot(contains('DioException')));
     expect(action.error, isNot(contains('RequestOptions')));
     expect(action.error, isNot(contains('500')));

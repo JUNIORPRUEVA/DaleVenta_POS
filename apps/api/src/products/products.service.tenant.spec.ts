@@ -22,6 +22,13 @@ describe("ProductsService tenant isolation (multiempresa)", () => {
         work(prisma),
       );
     }
+    prisma.$queryRaw ??= jest.fn(async () => [{id:'product-a',stock:new Prisma.Decimal(0),archivedAt:null}]);
+    prisma.$executeRaw ??= jest.fn(async()=>1);
+    prisma.warehouseStock ??= {findMany:jest.fn(async()=>[])};
+    prisma.priceListProductRule ??= {count:jest.fn(async()=>0)};
+    prisma.websiteProductOverride ??= {count:jest.fn(async()=>0)};
+    prisma.productLifecycleEvent ??= {findFirst:jest.fn(async()=>null),findMany:jest.fn(async()=>[]),create:jest.fn(async()=>({}))};
+    prisma.productLifecycleEvent ??= {findFirst:jest.fn(async()=>null),findMany:jest.fn(async()=>[]),create:jest.fn(async()=>({}))};
     const resolveSource =
       options.resolveSource ??
       jest.fn(async (companyId: string) => ({
@@ -624,7 +631,7 @@ describe("ProductsService tenant isolation (multiempresa)", () => {
         } as never,
         "01583f95-78c7-4100-887b-7a29480e5d0d",
       ),
-    ).resolves.toEqual({ ok: true });
+    ).rejects.toMatchObject({status:404});
 
     expect(prisma.product.findFirst).toHaveBeenCalledWith({
       where: {

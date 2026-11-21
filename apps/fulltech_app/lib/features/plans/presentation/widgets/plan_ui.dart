@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/errors/api_exception.dart';
 import '../../../../core/license/license_repository.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/app_feedback.dart';
 import '../../data/plans_repository.dart';
 
 /// Piezas visuales compartidas por las pantallas de la seccion Planes.
@@ -396,10 +397,7 @@ String planSummary(String code) {
 
 /// Nombre del plan que se pinta en el encabezado: primero el catalogo y, si
 /// aun no cargo, el codigo tal cual. Nunca la etiqueta heredada STANDARD.
-String? currentPlanName(
-  LicenseStatusModel? license,
-  List<PlanOffer> catalog,
-) {
+String? currentPlanName(LicenseStatusModel? license, List<PlanOffer> catalog) {
   if (license == null) return null;
   final code = license.planCode?.trim().toLowerCase();
   if (code == null || code.isEmpty) return license.planLabel;
@@ -461,107 +459,10 @@ void showPlansToast(
   String message, {
   bool isError = false,
 }) {
-  final overlay = Overlay.maybeOf(context, rootOverlay: true);
-  if (overlay == null) return;
-  var removed = false;
-  late OverlayEntry entry;
-  void remove() {
-    if (removed) return;
-    removed = true;
-    entry.remove();
-  }
-
-  entry = OverlayEntry(
-    builder: (_) => Positioned(
-      top: 16,
-      right: 16,
-      child: _PlansToast(
-        message: message,
-        isError: isError,
-        onClose: remove,
-      ),
-    ),
+  AppFeedback.showToast(
+    context,
+    title: isError ? 'Atención' : 'Listo',
+    body: message,
+    kind: isError ? AppFeedbackKind.error : AppFeedbackKind.success,
   );
-  overlay.insert(entry);
-  Future<void>.delayed(const Duration(seconds: 5), remove);
-}
-
-class _PlansToast extends StatelessWidget {
-  const _PlansToast({
-    required this.message,
-    required this.isError,
-    required this.onClose,
-  });
-
-  final String message;
-  final bool isError;
-  final VoidCallback onClose;
-
-  @override
-  Widget build(BuildContext context) {
-    final accent = isError ? AppColors.error : const Color(0xFF15803D);
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOut,
-      builder: (context, value, child) => Opacity(
-        opacity: value,
-        child: Transform.translate(
-          offset: Offset(0, -8 * (1 - value)),
-          child: child,
-        ),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 380),
-          padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            border: Border.all(color: accent.withValues(alpha: 0.35)),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x1F0F172A),
-                blurRadius: 18,
-                offset: Offset(0, 6),
-              ),
-            ],
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(
-                isError
-                    ? Icons.error_outline_rounded
-                    : Icons.check_circle_outline_rounded,
-                size: 18,
-                color: accent,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  message,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    height: 1.45,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.1,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-              ),
-              IconButton(
-                tooltip: 'Cerrar aviso',
-                onPressed: onClose,
-                icon: const Icon(Icons.close_rounded, size: 16),
-                color: AppColors.textMuted,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }

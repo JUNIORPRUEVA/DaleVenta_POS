@@ -98,6 +98,10 @@ const appUrl = import.meta.env.PUBLIC_APP_URL ?? '/home';
     const alertBox = root.querySelector<HTMLElement>('[data-form-alert]')!;
     const submitBtn = root.querySelector<HTMLButtonElement>('[data-submit]')!;
     let submitting = false;
+    if (new URL(window.location.href).searchParams.get('access') === 'retry') {
+      alertBox.textContent = 'No pudimos completar tu acceso. Tu cuenta sigue disponible. Inicia sesión para continuar.';
+      alertBox.hidden = false;
+    }
 
     const setError = (name: string, message: string | null): void => {
       const field = root.querySelector<HTMLElement>(`[data-field="${name}"]`);

@@ -2,7 +2,7 @@ import { PrismaClient, Role } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve, dirname, basename } from 'node:path';
 import { ConfigService } from '@nestjs/config';
 import { LicenseActivationService } from './license-activation.service';
 import { LicenseEvidenceStorage } from './license-evidence.storage';
@@ -79,7 +79,13 @@ suite('Pago de planes con PostgreSQL aislado', () => {
 
   afterAll(async () => {
     await db?.$disconnect();
-    if (storageDir) await rm(storageDir, { recursive: true, force: true });
+    if (storageDir) {
+      const target = resolve(storageDir);
+      if (dirname(target) !== resolve(tmpdir()) || !basename(target).startsWith('license-evidence-')) {
+        throw new Error('unsafe_fixture_cleanup');
+      }
+      await rm(target, { recursive: true, force: true });
+    }
   });
 
   beforeEach(async () => {
@@ -157,6 +163,7 @@ suite('Pago de planes con PostgreSQL aislado', () => {
     });
     expect(company.licenseStatus).toBe('ACTIVE');
     expect(company.planCode).toBe('pro');
+    expect(company.licenseKey).toMatch(/^DV-[0-9A-F]{20}$/);
     expect(company.maxUsers).toBe(4);
     expect(company.maxProducts).toBe(1000);
     expect(company.maxWarehouses).toBe(5);
@@ -279,6 +286,7 @@ suite('Pago de planes con PostgreSQL aislado', () => {
       new Date(two.license.periodEnd).getTime() -
         new Date(one.license.periodEnd).getTime(),
     ).toBeGreaterThan(27 * 86_400_000);
+    expect(two.license.licenseKey).toBe(one.license.licenseKey);
   });
 
   it('apaga lo que el plan no incluye al activar un plan inferior', async () => {

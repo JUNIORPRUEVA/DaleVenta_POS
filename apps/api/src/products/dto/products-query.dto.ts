@@ -27,6 +27,10 @@ export class ProductsQueryDto {
   includeArchived?: string;
 
   @IsOptional()
+  @IsBooleanString()
+  archivedOnly?: string;
+
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)

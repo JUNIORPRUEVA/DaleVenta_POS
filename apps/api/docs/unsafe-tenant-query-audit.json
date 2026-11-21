@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-13T23:56:44.401Z",
+  "generatedAt": "2026-11-21T01:59:37.339Z",
   "findings": [
     {
       "file": "ai-assistant/ai-assistant.service.ts",
@@ -192,91 +192,91 @@
     },
     {
       "file": "cash/cash.service.ts",
-      "line": 103,
+      "line": 108,
       "severity": "warning",
       "pattern": "findMany possibly unscoped",
       "text": "this.prisma.cashSession.findMany({"
     },
     {
       "file": "cash/cash.service.ts",
-      "line": 692,
+      "line": 741,
       "severity": "warning",
       "pattern": "findMany possibly unscoped",
       "text": "return this.prisma.cashMovement.findMany({"
     },
     {
       "file": "cash/cash.service.ts",
-      "line": 739,
+      "line": 788,
       "severity": "warning",
       "pattern": "findMany possibly unscoped",
       "text": "const rows = await this.prisma.cashMovement.findMany({"
     },
     {
       "file": "cash/cash.service.ts",
-      "line": 818,
+      "line": 867,
       "severity": "warning",
       "pattern": "findMany possibly unscoped",
       "text": "const rows = await this.prisma.cashSession.findMany({"
     },
     {
       "file": "cash/cash.service.ts",
-      "line": 876,
+      "line": 925,
       "severity": "warning",
       "pattern": "findMany possibly unscoped",
       "text": "this.prisma.cashMovement.findMany({"
     },
     {
       "file": "cash/cash.service.ts",
-      "line": 995,
+      "line": 1063,
       "severity": "warning",
       "pattern": "aggregate possibly unscoped",
       "text": "this.prisma.cashSession.aggregate({"
     },
     {
       "file": "cash/cash.service.ts",
-      "line": 1000,
+      "line": 1068,
       "severity": "warning",
       "pattern": "count possibly unscoped",
       "text": "this.prisma.cashSession.count({"
     },
     {
       "file": "cash/cash.service.ts",
-      "line": 1037,
+      "line": 1105,
       "severity": "warning",
       "pattern": "findMany possibly unscoped",
       "text": "const rows = await this.prisma.cashSession.findMany({"
     },
     {
       "file": "cash/cash.service.ts",
-      "line": 1283,
+      "line": 1351,
       "severity": "warning",
       "pattern": "aggregate possibly unscoped",
       "text": "const totals = await tx.cashSession.aggregate({"
     },
     {
       "file": "cash/cash.service.ts",
-      "line": 1361,
+      "line": 1429,
       "severity": "warning",
       "pattern": "aggregate possibly unscoped",
       "text": "this.prisma.saleCreditPayment.aggregate({"
     },
     {
       "file": "cash/cash.service.ts",
-      "line": 1371,
+      "line": 1439,
       "severity": "warning",
       "pattern": "aggregate possibly unscoped",
       "text": "this.prisma.saleCreditPayment.aggregate({"
     },
     {
       "file": "cash/cash.service.ts",
-      "line": 1581,
+      "line": 1649,
       "severity": "warning",
       "pattern": "findMany possibly unscoped",
       "text": "const sales = await this.prisma.sale.findMany({"
     },
     {
       "file": "cash/cash.service.ts",
-      "line": 1609,
+      "line": 1677,
       "severity": "warning",
       "pattern": "findMany possibly unscoped",
       "text": "this.prisma.saleCreditPayment.findMany({"
@@ -605,42 +605,49 @@
     },
     {
       "file": "ecf/documents/ecf-document-query.service.ts",
-      "line": 92,
+      "line": 81,
       "severity": "warning",
       "pattern": "findMany possibly unscoped",
       "text": "const documents = await this.prisma.ecfElectronicDocument.findMany({"
     },
     {
       "file": "ecf/documents/ecf-document-query.service.ts",
-      "line": 114,
+      "line": 103,
       "severity": "warning",
       "pattern": "findMany possibly unscoped",
       "text": "const originals = sales.length ? await this.prisma.ecfElectronicDocument.findMany({"
     },
     {
       "file": "ecf/documents/ecf-document-query.service.ts",
-      "line": 145,
+      "line": 136,
       "severity": "warning",
       "pattern": "findMany possibly unscoped",
-      "text": "? await this.prisma.ecfSequence.findMany({"
+      "text": "? await db.ecfSequence.findMany({"
     },
     {
       "file": "ecf/documents/ecf-document-query.service.ts",
-      "line": 231,
+      "line": 147,
+      "severity": "warning",
+      "pattern": "findMany possibly unscoped",
+      "text": "const authorizations = config?.enabled ? await db.ecfDgiiAuthorizedSequence.findMany({"
+    },
+    {
+      "file": "ecf/documents/ecf-document-query.service.ts",
+      "line": 226,
       "severity": "warning",
       "pattern": "count possibly unscoped",
       "text": "this.prisma.ecfElectronicDocument.count({ where }),"
     },
     {
       "file": "ecf/documents/ecf-document-query.service.ts",
-      "line": 232,
+      "line": 227,
       "severity": "warning",
       "pattern": "findMany possibly unscoped",
       "text": "this.prisma.ecfElectronicDocument.findMany({"
     },
     {
       "file": "ecf/documents/ecf-document-query.service.ts",
-      "line": 353,
+      "line": 348,
       "severity": "warning",
       "pattern": "findMany possibly unscoped",
       "text": "const candidates = await this.prisma.ecfElectronicDocument.findMany({"
@@ -682,35 +689,35 @@
     },
     {
       "file": "ecf/ecf.service.ts",
-      "line": 138,
+      "line": 140,
       "severity": "warning",
       "pattern": "findMany possibly unscoped",
       "text": "this.prisma.ecfOnboardingStep.findMany({"
     },
     {
       "file": "ecf/ecf.service.ts",
-      "line": 142,
+      "line": 144,
       "severity": "warning",
       "pattern": "findMany possibly unscoped",
       "text": "this.prisma.ecfAuditLog.findMany({"
     },
     {
       "file": "ecf/ecf.service.ts",
-      "line": 258,
+      "line": 260,
       "severity": "warning",
       "pattern": "findMany possibly unscoped",
       "text": "return this.prisma.ecfAuditLog.findMany({"
     },
     {
       "file": "ecf/ecf.service.ts",
-      "line": 497,
+      "line": 499,
       "severity": "warning",
       "pattern": "findMany possibly unscoped",
       "text": "const steps = await tx.ecfOnboardingStep.findMany({"
     },
     {
       "file": "ecf/ecf.service.ts",
-      "line": 521,
+      "line": 523,
       "severity": "warning",
       "pattern": "count possibly unscoped",
       "text": "const completeWebhookEvents = await tx.ecfDosaWebhookEvent.count({"
@@ -745,21 +752,21 @@
     },
     {
       "file": "ecf/portal/ecf-portal-enrollment.service.ts",
-      "line": 251,
+      "line": 252,
       "severity": "warning",
       "pattern": "findMany possibly unscoped",
       "text": "return this.prisma.ecfPortalEnrollment.findMany({"
     },
     {
       "file": "ecf/pos/ecf-sale-fiscal.adapter.ts",
-      "line": 236,
+      "line": 235,
       "severity": "warning",
       "pattern": "aggregate possibly unscoped",
       "text": "? await this.prisma.saleCreditPayment.aggregate({"
     },
     {
       "file": "ecf/pos/ecf-sale-fiscal.adapter.ts",
-      "line": 310,
+      "line": 309,
       "severity": "warning",
       "pattern": "findMany possibly unscoped",
       "text": "const rows = await this.prisma.ecfLineClassification.findMany({"
@@ -843,7 +850,7 @@
     },
     {
       "file": "ecf/sandbox/e32-sandbox.cli.ts",
-      "line": 57,
+      "line": 58,
       "severity": "warning",
       "pattern": "count possibly unscoped",
       "text": "const occupied = facts.schema ? await prisma.ecfSandboxE32Trial.count({where:{slot:\"FIRST_E32_SANDBOX\"}}) : 1;"
@@ -1199,25 +1206,158 @@
       "text": "const companies = await prisma.company.findMany({"
     },
     {
+      "file": "license/company-activity.service.ts",
+      "line": 61,
+      "severity": "error",
+      "pattern": "findUnique id-only",
+      "text": "if(!await tx.company.findUnique({where:{id},select:{id:true}}))throw new NotFoundException('company_not_found');"
+    },
+    {
+      "file": "license/crm-license.service.ts",
+      "line": 80,
+      "severity": "error",
+      "pattern": "findUnique id-only",
+      "text": "if (!await tx.company.findUnique({ where: { id }, select: { id: true } })) throw new NotFoundException('company_not_found');"
+    },
+    {
+      "file": "license/crm-license.service.ts",
+      "line": 93,
+      "severity": "warning",
+      "pattern": "count possibly unscoped",
+      "text": "const total = await tx.company.count({ where });"
+    },
+    {
+      "file": "license/crm-license.service.ts",
+      "line": 94,
+      "severity": "warning",
+      "pattern": "findMany possibly unscoped",
+      "text": "const rows = await tx.company.findMany({ where, skip: (page - 1) * limit, take: limit, orderBy: [{ createdAt: 'desc' }, { id: 'asc' }], select: { id: true } });"
+    },
+    {
+      "file": "license/crm-license.service.ts",
+      "line": 114,
+      "severity": "error",
+      "pattern": "findUnique id-only",
+      "text": "const receipt = await tx.companyLicenseAuditLog.findUnique({ where: { id: command.operationId } });"
+    },
+    {
+      "file": "license/crm-license.service.ts",
+      "line": 152,
+      "severity": "error",
+      "pattern": "update id-only",
+      "text": "await tx.licensePaymentOrder.update({ where: { id: order.id }, data: {"
+    },
+    {
+      "file": "license/crm-license.service.ts",
+      "line": 195,
+      "severity": "warning",
+      "pattern": "findMany possibly unscoped",
+      "text": "const rows = await this.prisma.licensePaymentOrder.findMany({ where, orderBy: [{ createdAt: 'desc' }, { id: 'asc' }], take: limit,"
+    },
+    {
+      "file": "license/crm-license.service.ts",
+      "line": 219,
+      "severity": "error",
+      "pattern": "findUnique id-only",
+      "text": "const company = await tx.company.findUnique({ where: { id }, select: { id: true, name: true } });"
+    },
+    {
       "file": "license/license.service.ts",
-      "line": 133,
+      "line": 230,
       "severity": "warning",
       "pattern": "count possibly unscoped",
       "text": "this.prisma.company.count({ where }),"
     },
     {
       "file": "license/license.service.ts",
-      "line": 134,
+      "line": 231,
       "severity": "warning",
       "pattern": "findMany possibly unscoped",
       "text": "this.prisma.company.findMany({"
     },
     {
       "file": "license/license.service.ts",
-      "line": 150,
+      "line": 247,
       "severity": "warning",
       "pattern": "findMany possibly unscoped",
       "text": "const auditLogs = await this.prisma.companyLicenseAuditLog.findMany({"
+    },
+    {
+      "file": "license/notifications/license-notifier.service.ts",
+      "line": 85,
+      "severity": "warning",
+      "pattern": "findMany possibly unscoped",
+      "text": "const jobs = await this.prisma.licenseNotificationJob.findMany({"
+    },
+    {
+      "file": "license/notifications/license-reminder.scheduler.ts",
+      "line": 53,
+      "severity": "warning",
+      "pattern": "findMany possibly unscoped",
+      "text": "const companies = await this.prisma.company.findMany({"
+    },
+    {
+      "file": "license/notifications/license-reminder.scheduler.ts",
+      "line": 74,
+      "severity": "warning",
+      "pattern": "count possibly unscoped",
+      "text": "const inReview = await this.prisma.licensePaymentOrder.count({"
+    },
+    {
+      "file": "license/orders/license-order-insights.ts",
+      "line": 210,
+      "severity": "warning",
+      "pattern": "findMany possibly unscoped",
+      "text": "? await db.licensePlan.findMany({"
+    },
+    {
+      "file": "license/orders/license-orders.service.ts",
+      "line": 356,
+      "severity": "warning",
+      "pattern": "findMany possibly unscoped",
+      "text": "const orders = await this.prisma.licensePaymentOrder.findMany({"
+    },
+    {
+      "file": "license/orders/license-orders.service.ts",
+      "line": 460,
+      "severity": "warning",
+      "pattern": "count possibly unscoped",
+      "text": "const uploadsToday = await this.prisma.licensePaymentEvidence.count({"
+    },
+    {
+      "file": "license/orders/license-orders.service.ts",
+      "line": 874,
+      "severity": "warning",
+      "pattern": "findMany possibly unscoped",
+      "text": "const orders = await this.prisma.licensePaymentOrder.findMany({"
+    },
+    {
+      "file": "license/orders/license-provisional.scheduler.ts",
+      "line": 58,
+      "severity": "warning",
+      "pattern": "findMany possibly unscoped",
+      "text": "const orders = await this.prisma.licensePaymentOrder.findMany({"
+    },
+    {
+      "file": "license/plans/license-plans.service.ts",
+      "line": 45,
+      "severity": "warning",
+      "pattern": "count possibly unscoped",
+      "text": "const total = await this.prisma.licensePlan.count();"
+    },
+    {
+      "file": "license/plans/license-plans.service.ts",
+      "line": 57,
+      "severity": "warning",
+      "pattern": "findMany possibly unscoped",
+      "text": "const rows = await this.prisma.licensePlan.findMany({"
+    },
+    {
+      "file": "license/renewal/license-plan-request.service.ts",
+      "line": 119,
+      "severity": "warning",
+      "pattern": "findMany possibly unscoped",
+      "text": "const rows = await this.prisma.licensePlanRequest.findMany({"
     },
     {
       "file": "locations/locations.service.ts",
@@ -1403,126 +1543,105 @@
     },
     {
       "file": "products/products.service.ts",
-      "line": 145,
+      "line": 147,
       "severity": "warning",
       "pattern": "findMany possibly unscoped",
       "text": "const activeWarehouses = await tx.warehouse.findMany({"
     },
     {
       "file": "products/products.service.ts",
-      "line": 342,
+      "line": 344,
       "severity": "warning",
       "pattern": "count possibly unscoped",
       "text": "tx.warehouseStock.count({"
     },
     {
       "file": "products/products.service.ts",
-      "line": 351,
+      "line": 353,
       "severity": "warning",
       "pattern": "count possibly unscoped",
       "text": "tx.purchaseOrderItem.count({"
     },
     {
       "file": "products/products.service.ts",
-      "line": 481,
+      "line": 483,
       "severity": "warning",
       "pattern": "findMany possibly unscoped",
       "text": "const rows = await this.prisma.unitOfMeasure.findMany({"
     },
     {
       "file": "products/products.service.ts",
-      "line": 599,
+      "line": 601,
       "severity": "warning",
       "pattern": "findMany possibly unscoped",
       "text": "const candidates = await tx.product.findMany({"
     },
     {
       "file": "products/products.service.ts",
-      "line": 653,
-      "severity": "warning",
-      "pattern": "count possibly unscoped",
-      "text": "tx.saleItem.count({ where: { productId } }),"
-    },
-    {
-      "file": "products/products.service.ts",
-      "line": 654,
-      "severity": "warning",
-      "pattern": "count possibly unscoped",
-      "text": "tx.cotizacionItem.count({ where: { productId } }),"
-    },
-    {
-      "file": "products/products.service.ts",
-      "line": 655,
-      "severity": "warning",
-      "pattern": "count possibly unscoped",
-      "text": "tx.purchaseOrderItem.count({ where: { productId } }),"
-    },
-    {
-      "file": "products/products.service.ts",
-      "line": 656,
-      "severity": "warning",
-      "pattern": "count possibly unscoped",
-      "text": "tx.websiteProductOverride.count({ where: { productId } }),"
-    },
-    {
-      "file": "products/products.service.ts",
-      "line": 762,
+      "line": 753,
       "severity": "warning",
       "pattern": "count possibly unscoped",
       "text": "tx.saleItem.count({"
     },
     {
       "file": "products/products.service.ts",
-      "line": 765,
+      "line": 756,
       "severity": "warning",
       "pattern": "count possibly unscoped",
       "text": "tx.cotizacionItem.count({"
     },
     {
       "file": "products/products.service.ts",
-      "line": 768,
+      "line": 759,
       "severity": "warning",
       "pattern": "count possibly unscoped",
       "text": "tx.purchaseOrderItem.count({"
     },
     {
       "file": "products/products.service.ts",
-      "line": 771,
+      "line": 762,
       "severity": "warning",
       "pattern": "count possibly unscoped",
       "text": "tx.purchaseReceiptItem.count({"
     },
     {
       "file": "products/products.service.ts",
-      "line": 807,
+      "line": 772,
+      "severity": "warning",
+      "pattern": "count possibly unscoped",
+      "text": "tx.websiteProductOverride.count({ where: { productId } }),"
+    },
+    {
+      "file": "products/products.service.ts",
+      "line": 803,
       "severity": "warning",
       "pattern": "findMany possibly unscoped",
       "text": "const candidates = await tx.product.findMany({"
     },
     {
       "file": "products/products.service.ts",
-      "line": 1401,
+      "line": 1391,
       "severity": "warning",
       "pattern": "findMany possibly unscoped",
       "text": "this.prisma.product.findMany({"
     },
     {
       "file": "products/products.service.ts",
-      "line": 1409,
+      "line": 1399,
       "severity": "warning",
       "pattern": "count possibly unscoped",
       "text": "? this.prisma.product.count({ where })"
     },
     {
       "file": "products/products.service.ts",
-      "line": 1421,
+      "line": 1412,
       "severity": "warning",
       "pattern": "findMany possibly unscoped",
       "text": "this.prisma.product.findMany({"
     },
     {
       "file": "products/products.service.ts",
-      "line": 1429,
+      "line": 1420,
       "severity": "warning",
       "pattern": "count possibly unscoped",
       "text": "? this.prisma.product.count({ where: legacyWhere })"
@@ -1591,6 +1710,13 @@
       "text": "this.prisma.purchaseOrder.findMany({"
     },
     {
+      "file": "recovery/recovery-review.service.ts",
+      "line": 49,
+      "severity": "warning",
+      "pattern": "findMany possibly unscoped",
+      "text": "const rows=await this.prisma.recoveryReviewCase.findMany({where,orderBy:{id:'asc'},take:100,"
+    },
+    {
       "file": "reports/reports.service.ts",
       "line": 175,
       "severity": "warning",
@@ -1634,98 +1760,105 @@
     },
     {
       "file": "sales/sale-reconciliation-obligation.service.ts",
-      "line": 406,
+      "line": 409,
       "severity": "warning",
       "pattern": "findMany possibly unscoped",
       "text": "const rows = await this.prisma.saleReconciliationObligation.findMany({"
     },
     {
       "file": "sales/sale-reconciliation-obligation.service.ts",
-      "line": 431,
+      "line": 477,
       "severity": "warning",
       "pattern": "findMany possibly unscoped",
       "text": "await this.prisma.saleReconciliationDeclarationEvent.findMany({"
     },
     {
       "file": "sales/sales.service.ts",
-      "line": 473,
+      "line": 475,
       "severity": "warning",
       "pattern": "count possibly unscoped",
       "text": "return this.prisma.sale.count({ where });"
     },
     {
       "file": "sales/sales.service.ts",
-      "line": 475,
+      "line": 477,
       "severity": "warning",
       "pattern": "findMany possibly unscoped",
       "text": "const rows = await this.prisma.sale.findMany({"
     },
     {
       "file": "sales/sales.service.ts",
-      "line": 622,
+      "line": 624,
       "severity": "warning",
       "pattern": "findMany possibly unscoped",
-      "text": "return await this.prisma.sale.findMany({"
+      "text": "const rows = await this.prisma.sale.findMany({"
     },
     {
       "file": "sales/sales.service.ts",
-      "line": 631,
+      "line": 634,
       "severity": "warning",
       "pattern": "findMany possibly unscoped",
       "text": "return this.prisma.sale.findMany({"
     },
     {
       "file": "sales/sales.service.ts",
-      "line": 757,
+      "line": 649,
+      "severity": "warning",
+      "pattern": "findMany possibly unscoped",
+      "text": "const documents = await this.prisma.ecfElectronicDocument.findMany({"
+    },
+    {
+      "file": "sales/sales.service.ts",
+      "line": 775,
       "severity": "warning",
       "pattern": "findMany possibly unscoped",
       "text": "const refundItems = await tx.saleItem.findMany({"
     },
     {
       "file": "sales/sales.service.ts",
-      "line": 1021,
+      "line": 1039,
       "severity": "warning",
       "pattern": "findMany possibly unscoped",
       "text": "const rows = await this.prisma.sale.findMany({"
     },
     {
       "file": "sales/sales.service.ts",
-      "line": 1315,
+      "line": 1333,
       "severity": "warning",
       "pattern": "aggregate possibly unscoped",
       "text": "this.prisma.sale.aggregate({"
     },
     {
       "file": "sales/sales.service.ts",
-      "line": 1324,
+      "line": 1342,
       "severity": "warning",
       "pattern": "aggregate possibly unscoped",
       "text": "this.prisma.sale.aggregate({"
     },
     {
       "file": "sales/sales.service.ts",
-      "line": 1334,
+      "line": 1352,
       "severity": "warning",
       "pattern": "aggregate possibly unscoped",
       "text": "? this.prisma.sale.aggregate({"
     },
     {
       "file": "sales/sales.service.ts",
-      "line": 1499,
+      "line": 1517,
       "severity": "warning",
       "pattern": "findMany possibly unscoped",
       "text": "? await this.prisma.user.findMany({"
     },
     {
       "file": "sales/sales.service.ts",
-      "line": 1662,
+      "line": 1680,
       "severity": "warning",
       "pattern": "findMany possibly unscoped",
       "text": "products = await this.prisma.product.findMany({"
     },
     {
       "file": "sales/sales.service.ts",
-      "line": 2302,
+      "line": 2352,
       "severity": "warning",
       "pattern": "findMany possibly unscoped",
       "text": "? await this.prisma.product.findMany({"
@@ -1746,7 +1879,7 @@
     },
     {
       "file": "settings/settings.service.ts",
-      "line": 397,
+      "line": 423,
       "severity": "warning",
       "pattern": "findMany possibly unscoped",
       "text": "const distributedRows = await tx.warehouseStock.findMany({"
@@ -1865,52 +1998,59 @@
     },
     {
       "file": "warehouses/warehouses.service.ts",
-      "line": 48,
+      "line": 51,
       "severity": "warning",
       "pattern": "findMany possibly unscoped",
       "text": "const rows = await this.prisma.warehouse.findMany({"
     },
     {
       "file": "warehouses/warehouses.service.ts",
-      "line": 77,
+      "line": 80,
       "severity": "warning",
       "pattern": "findMany possibly unscoped",
       "text": "const rows = await this.prisma.terminal.findMany({"
     },
     {
       "file": "warehouses/warehouses.service.ts",
-      "line": 192,
+      "line": 198,
       "severity": "warning",
       "pattern": "count possibly unscoped",
       "text": "const nonZero = await tx.warehouseStock.count({"
     },
     {
       "file": "warehouses/warehouses.service.ts",
-      "line": 204,
+      "line": 210,
       "severity": "warning",
       "pattern": "count possibly unscoped",
       "text": "const linkedTerminals = await tx.terminal.count({"
     },
     {
       "file": "warehouses/warehouses.service.ts",
-      "line": 307,
+      "line": 313,
       "severity": "warning",
       "pattern": "findMany possibly unscoped",
       "text": "const warehouses = await this.prisma.warehouse.findMany({"
     },
     {
       "file": "warehouses/warehouses.service.ts",
-      "line": 361,
+      "line": 367,
       "severity": "warning",
       "pattern": "findMany possibly unscoped",
       "text": "const rows = await this.prisma.warehouseTransfer.findMany({"
     },
     {
       "file": "warehouses/warehouses.service.ts",
-      "line": 429,
+      "line": 435,
       "severity": "warning",
       "pattern": "findMany possibly unscoped",
       "text": "const products = await tx.product.findMany({"
+    },
+    {
+      "file": "warehouses/warehouses.service.ts",
+      "line": 694,
+      "severity": "warning",
+      "pattern": "count possibly unscoped",
+      "text": "const active = await tx.warehouse.count({"
     },
     {
       "file": "warranty-configs/warranty-configs.service.ts",

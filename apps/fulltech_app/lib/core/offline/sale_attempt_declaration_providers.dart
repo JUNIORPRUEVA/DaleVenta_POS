@@ -65,11 +65,13 @@ final saleAttemptDeclarationSyncHandlersProvider =
 final saleAttemptDeclarationAuthRecoveryProvider = Provider<void>((ref) {
   ref.listen<AuthState>(authStateProvider, (previous, next) {
     final wasAuthenticated = previous?.isAuthenticated ?? false;
-    if (wasAuthenticated || !next.isAuthenticated) return;
+    final sameOwner = previous?.user?.id == next.user?.id &&
+        previous?.user?.companyId == next.user?.companyId;
+    if (!next.isAuthenticated || (wasAuthenticated && sameOwner)) return;
     final queue = ref.read(syncQueueServiceProvider.notifier);
     unawaited(
       queue
-          .releaseAuthBlocked(type: SaleAttemptDeclaration.actionType)
+          .releaseAuthBlocked(type: '')
           .catchError((Object error) {
             TraceLog.log('reconcile', 'declaraciones.no.rehabilitadas: $error');
             return 0;

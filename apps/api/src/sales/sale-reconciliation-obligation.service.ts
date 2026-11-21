@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   Logger,
@@ -13,6 +14,7 @@ import {
   type TenantUser,
 } from "../auth/tenant-context";
 import type { CreateSaleAttemptDeclarationDto } from "./dto/sale-attempt-declaration.dto";
+import type { ResolveReconciliationObligationDto } from './dto/sale-attempt-declaration.dto';
 
 /**
  * Señal interna: alguien sin rol administrativo intentó cambiar el importe.
@@ -403,6 +405,7 @@ export class SaleReconciliationObligationService {
 
   async list(user: TenantUser, status?: string) {
     const companyId = requireTenant(user);
+    if(user.role !== 'ADMIN') throw new ForbiddenException('Solo el administrador puede consultar las declaraciones.');
     const rows = await this.prisma.saleReconciliationObligation.findMany({
       where: {
         companyId,
@@ -414,9 +417,52 @@ export class SaleReconciliationObligationService {
     return rows.map((row) => this.toDto(row));
   }
 
+  /** Resolves evidence only. Never creates, reverses or deletes money. */
+  async resolve(user: TenantUser, id: string, input: ResolveReconciliationObligationDto) {
+    const companyId = requireTenant(user);
+    if(user.role !== 'ADMIN') throw new ForbiddenException('Solo el administrador puede resolver la declaración.');
+    if(!['CHECK','DISMISS'].includes(input.decision) || !Number.isInteger(input.expectedVersion) ||
+      input.expectedVersion < 1 || typeof input.note !== 'string' || input.note.trim().length < 10 || input.note.length > 500) {
+      throw new BadRequestException('Indica un motivo válido para resolver la declaración.');
+    }
+    return this.prisma.$transaction(async tx => {
+      const row = await tx.saleReconciliationObligation.findFirst({where:{id,companyId}});
+      if(!row) throw new ForbiddenException('La declaración no existe en esta empresa.');
+      const target = input.decision === 'CHECK' ? 'RECONCILED' : 'DISMISSED';
+      if(row.status === target) return this.toDto(row);
+      if(row.status !== 'PENDING' || row.version !== input.expectedVersion) {
+        throw new ConflictException('La declaración cambió. Actualiza antes de resolverla.');
+      }
+      const sale = await tx.sale.findFirst({where:{companyId,clientRequestId:row.clientRequestId},
+        select:{id:true,userId:true,totalSold:true,cashSessionId:true,paymentMethod:true}});
+      if(input.decision === 'CHECK') {
+        const snapshot = row.attemptPayload as Record<string,unknown> | null;
+        const session = snapshot?.originCashSessionId ?? snapshot?.sessionId;
+        if(!sale?.id || !row.declaredByUserId || sale.userId !== row.declaredByUserId ||
+          !sale.totalSold.minus(row.totalDeclared).abs().lte(0.005) ||
+          sale.paymentMethod !== row.paymentMethod || (session && sale.cashSessionId !== session)) {
+          throw new ConflictException('No hay una venta coincidente. La declaración sigue pendiente.');
+        }
+      } else if(sale) {
+        throw new ConflictException('Existe una venta relacionada. Comprueba el registro antes de retirar la declaración.');
+      }
+      const changed = await tx.saleReconciliationObligation.updateMany({where:{id,companyId,status:'PENDING',version:row.version},
+        data:{status:target,resolvedAt:new Date(),resolvedByUserId:user.id,resolutionNote:input.note.trim(),version:{increment:1}}});
+      if(changed.count !== 1) throw new ConflictException('Otra sesión actualizó la declaración. Consulta su estado.');
+      await tx.saleReconciliationDeclarationEvent.create({data:{companyId,obligationId:id,clientRequestId:row.clientRequestId,
+        declarationHash:createHash('sha256').update(`resolve:${id}:${row.version}:${target}`).digest('hex'),
+        kind:target,totalDeclared:row.totalDeclared,previousTotal:row.totalDeclared,actorUserId:user.id,actorRole:String(user.role),
+        note:input.note.trim(),declaredAtUtc:row.declaredAtUtc}});
+      const updated = await tx.saleReconciliationObligation.findFirst({where:{id,companyId}});
+      if(!updated) throw new ConflictException('No se pudo comprobar la resolución guardada.');
+      return this.toDto(updated);
+    }, {isolationLevel:Prisma.TransactionIsolationLevel.Serializable});
+  }
+
   /** Historial de declaraciones de UNA obligación (solo lectura, por empresa). */
   async listEvents(user: TenantUser, obligationId: string) {
     const companyId = requireTenant(user);
+    if(user.role !== 'ADMIN') throw new ForbiddenException('Solo el administrador puede consultar las declaraciones.');
     const obligation = await this.prisma.saleReconciliationObligation.findFirst({
       where: { id: obligationId, companyId },
       select: { id: true },

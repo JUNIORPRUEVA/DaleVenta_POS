@@ -291,7 +291,7 @@ void main() {
       final dio = Dio(BaseOptions(baseUrl: 'https://example.test'))
         ..httpClientAdapter = _FakeHttpClientAdapter((options) async {
           return _jsonResponse({
-            'session': {'id': 'sid-A', 'status': 'CLOSED'},
+            'session': {'id': 'sid-A', 'status': 'CLOSED', 'closingAmount':3731.80},
             'difference': 0,
           }, 201);
         });

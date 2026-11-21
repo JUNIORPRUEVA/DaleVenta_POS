@@ -28,42 +28,48 @@ String? customerOperationErrorMessage(Object? source, {int? statusCode}) {
     final quantities = requested != null && available != null
         ? ' Cantidad solicitada: $requested. Disponible: $available.'
         : '';
-    return 'No hay existencias suficientes$name.$quantities '
-        'Revisa la cantidad y el inventario antes de cobrar. '
-        'Registra una entrada solo si recibiste mercancía.';
+    return 'Existencias insuficientes$name.$quantities Revisa la cantidad antes de cobrar.';
   }
   if (text.contains('origin_session_closed')) {
-    return 'El turno de esta operación ya está cerrado. Pide al encargado que revise la operación y el cierre original; no la registres en otro turno.';
+    return 'El turno original está cerrado. Comprueba el registro; no repitas la operación.';
   }
   if (text.contains('origin_session_not_found') ||
       text.contains('legacy_missing_session')) {
-    return 'No pudimos comprobar a qué turno pertenece esta operación. Pide al encargado que la revise con soporte; no la registres en otro turno.';
+    return 'No se pudo identificar el turno original. Comprueba el registro; no repitas la operación.';
   }
   if (text.contains('offline_protocol_unsupported')) {
-    return 'Esta función necesita una actualización del servicio para sincronizarse. Contacta a soporte y conserva las operaciones pendientes en este equipo.';
+    return 'Se necesita actualizar el servicio. Contacta a soporte; tus operaciones siguen guardadas.';
   }
   // Un turno de caja de un día anterior es un estado conocido y accionable:
   // decirlo así evita el mensaje genérico de 409, que invita a "revisar el
   // historial" cuando en realidad solo hay que cerrar y abrir el turno.
   if (text.contains('cash_session_stale')) {
-    return 'El turno de caja abierto es de un día anterior y ya no admite '
-        'ventas. Ciérralo y abre un turno nuevo para poder facturar.';
+    return 'El turno de caja está vencido. Ciérralo y abre un turno nuevo para facturar.';
   }
   if (text.contains('offline_sync_conflict') ||
       statusCode == 409 ||
       RegExp(r'\b409\b').hasMatch(text)) {
-    return 'Esta operación necesita revisión. Comprueba si ya aparece en el historial y pide ayuda al encargado antes de repetirla.';
+    return 'Comprueba la operación en el historial con el encargado antes de repetirla.';
   }
   // Old backends used this stock explanation for online sales too. Without
   // structured details, do not guess the product, quantities or connectivity.
   if (text.contains('stock cambió mientras el dispositivo')) {
-    return 'No se pudo completar la venta por una diferencia de inventario. Revisa las existencias de los productos y consulta al encargado antes de repetir el cobro.';
+    return 'Hay una diferencia de inventario. Revisa las existencias antes de repetir el cobro.';
   }
   if (statusCode == 401 || RegExp(r'\b401\b').hasMatch(text)) {
-    return 'Necesitas iniciar sesión nuevamente para continuar sincronizando.';
+    return 'Necesitas iniciar sesión de nuevo para continuar.';
   }
   if (statusCode == 403) {
-    return 'Tu usuario no tiene permiso para completar esta operación. Pide ayuda al administrador de la empresa.';
+    return 'No tienes permiso para esta acción. Consulta al administrador.';
+  }
+  if (statusCode == 422) {
+    return 'Revisa los datos de la operación. No se reintentará automáticamente.';
+  }
+  if (statusCode == 429) {
+    return 'Espera un momento antes de volver a consultar.';
+  }
+  if (statusCode != null && statusCode >= 500) {
+    return 'El servicio no está disponible ahora. Inténtalo más tarde.';
   }
   return null;
 }

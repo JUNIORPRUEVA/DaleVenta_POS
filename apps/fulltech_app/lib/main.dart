@@ -105,7 +105,11 @@ Future<void> main([List<String> args = const []]) async {
       // Handoff del sitio web: canjea `?handoff=` ANTES de que Riverpod
       // inicialice la sesión, para no pedir la contraseña una segunda vez.
       // Es no-op fuera de Web y nunca lanza.
-      await SessionHandoffBootstrap.consumeFromUrl();
+      final accessReady = await SessionHandoffBootstrap.consumeFromUrl();
+      if (!accessReady) {
+        SessionHandoffBootstrap.openRecoveryLogin();
+        return;
+      }
 
       FlutterError.onError = (details) {
         FlutterError.presentError(details);

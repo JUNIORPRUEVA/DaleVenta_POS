@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -269,7 +270,12 @@ void main() {
           if (options.path == '/warehouses/terminals') {
             return _jsonResponse(<dynamic>[]);
           }
-          return _jsonResponse(<dynamic>[]);
+          return _jsonResponse({
+            'id': 'sale-payload-fixture',
+            'clientRequestId': (options.data as Map)['clientRequestId'],
+            'totalSold': (options.data as Map)['expectedTotalSold'],
+            'items': <dynamic>[],
+          });
         });
       final repository = VentasRepository(
         dio,
@@ -308,7 +314,12 @@ void main() {
         if (options.path == '/warehouses/terminals') {
           return _jsonResponse(<dynamic>[]);
         }
-        return _jsonResponse(<dynamic>[]);
+        return _jsonResponse({
+          'id': 'sale-request-fixture',
+          'clientRequestId': (options.data as Map)['clientRequestId'],
+          'totalSold': (options.data as Map)['expectedTotalSold'],
+          'items': <dynamic>[],
+        });
       });
     final repository = VentasRepository(
       dio,
@@ -395,37 +406,12 @@ ResponseBody _jsonResponse(dynamic body) {
         ? '{}'
         : body is String
         ? body
-        : _encode(body),
+        : jsonEncode(body),
     200,
     headers: {
       Headers.contentTypeHeader: [Headers.jsonContentType],
     },
   );
-}
-
-String _encode(dynamic body) {
-  final parts = <String>[];
-  void walk(dynamic value) {
-    if (value is Map) {
-      parts.add(
-        '{${value.entries.map((e) => '"${e.key}":${_literal(e.value)}').join(',')}}',
-      );
-    } else if (value is List) {
-      parts.add('[${value.map((e) => _literal(e)).join(',')}]');
-    } else {
-      parts.add(_literal(value));
-    }
-  }
-
-  walk(body);
-  return parts.join();
-}
-
-String _literal(dynamic value) {
-  if (value == null) return 'null';
-  if (value is bool) return value.toString();
-  if (value is num) return value.toString();
-  return '"${value.toString().replaceAll('"', '\\"')}"';
 }
 
 typedef _AdapterHandler = ResponseBody Function(RequestOptions options);

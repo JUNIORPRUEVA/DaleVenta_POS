@@ -12,6 +12,130 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
+  test(
+    'offline opening receipt is scoped to the authorized owner and device',
+    () async {
+      final policy = OfflineEmergencyPolicy(sealStore: _MemorySealStore());
+      final at = DateTime.utc(2026, 11, 20, 12);
+      await policy.recordServerValidation(
+        companyId: 'company-1',
+        userId: 'user-1',
+        deviceFingerprint: 'device-1',
+        serverUtc: at,
+        observedAtUtc: at,
+        allowedOperations: ['sales.create', 'cash.open'],
+        cashOpenPermit: 'signed-receipt',
+      );
+      expect(
+        await policy.cashOpeningPermit(
+          companyId: 'company-1',
+          userId: 'user-1',
+          deviceFingerprint: 'device-1',
+          openedAt: at.add(const Duration(minutes: 10)),
+        ),
+        'signed-receipt',
+      );
+      expect(
+        await policy.cashOpeningPermit(
+          companyId: 'company-2',
+          userId: 'user-1',
+          deviceFingerprint: 'device-1',
+          openedAt: at,
+        ),
+        isNull,
+      );
+      expect(
+        await policy.cashOpeningPermit(
+          companyId: 'company-1',
+          userId: 'user-2',
+          deviceFingerprint: 'device-1',
+          openedAt: at,
+        ),
+        isNull,
+      );
+      expect(
+        await policy.cashOpeningPermit(
+          companyId: 'company-1',
+          userId: 'user-1',
+          deviceFingerprint: 'device-2',
+          openedAt: at,
+        ),
+        isNull,
+      );
+      expect(
+        await policy.cashOpeningPermit(
+          companyId: 'company-1',
+          userId: 'user-1',
+          deviceFingerprint: 'device-1',
+          openedAt: at.add(const Duration(hours: 49)),
+        ),
+        isNull,
+      );
+    },
+  );
+
+  test(
+    'a sales-only authorization cannot grant an offline cash opening',
+    () async {
+      final policy = OfflineEmergencyPolicy(sealStore: _MemorySealStore());
+      final at = DateTime.utc(2026, 11, 20, 12);
+      await policy.recordServerValidation(
+        companyId: 'company-1',
+        userId: 'user-1',
+        deviceFingerprint: 'device-1',
+        serverUtc: at,
+        observedAtUtc: at,
+        cashOpenPermit: 'signed-receipt',
+      );
+      expect(
+        await policy.cashOpeningPermit(
+          companyId: 'company-1',
+          userId: 'user-1',
+          deviceFingerprint: 'device-1',
+          openedAt: at,
+        ),
+        isNull,
+      );
+    },
+  );
+
+  for (final offset in [-400, 400]) {
+    test(
+      'cash opening uses sealed server time with device offset ${offset}ms',
+      () async {
+        final policy = OfflineEmergencyPolicy(sealStore: _MemorySealStore());
+        final server = DateTime.utc(2026, 11, 20, 12);
+        final observed = server.add(Duration(milliseconds: offset));
+        await policy.recordServerValidation(
+          companyId: 'company-1',
+          userId: 'user-1',
+          deviceFingerprint: 'device-1',
+          serverUtc: server,
+          observedAtUtc: observed,
+          allowedOperations: ['sales.create', 'cash.open'],
+          cashOpenPermit: 'signed-receipt',
+        );
+        final opening = await policy.cashOpeningAuthorization(
+          companyId: 'company-1',
+          userId: 'user-1',
+          deviceFingerprint: 'device-1',
+          deviceOpenedAt: observed.add(const Duration(milliseconds: 50)),
+        );
+        expect(opening?.permit, 'signed-receipt');
+        expect(opening?.openedAt, server.add(const Duration(milliseconds: 50)));
+        expect(
+          await policy.cashOpeningAuthorization(
+            companyId: 'company-1',
+            userId: 'user-1',
+            deviceFingerprint: 'device-1',
+            deviceOpenedAt: observed.subtract(const Duration(minutes: 6)),
+          ),
+          isNull,
+        );
+      },
+    );
+  }
+
   test('blocks when there is no trusted server validation', () async {
     final policy = OfflineEmergencyPolicy();
 

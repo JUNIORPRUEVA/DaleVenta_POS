@@ -5,3 +5,5 @@
 void replaceHistoryState(String path) {
   // Sin navegador: no-op intencional.
 }
+
+void navigateToAccessRecovery() {}

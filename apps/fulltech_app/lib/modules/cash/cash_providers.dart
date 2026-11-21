@@ -180,14 +180,15 @@ class ActiveCashSessionController
       TraceLog.log('cash', 'cash.open.start');
       _setState(const AsyncLoading());
       final nextState = await AsyncValue.guard(() async {
-        final session = await ref
-            .read(cashRepositoryProvider)
-            .openSession(openingAmount: openingAmount, note: note);
+        final repository = ref.read(cashRepositoryProvider);
+        final session = await repository.openSession(
+          openingAmount: openingAmount,
+          note: note,
+        );
         if (!mounted) return session;
         _invalidateCashReadsAfterRefresh();
-        // La apertura se confirmó contra el backend: el estado ya no es un
-        // snapshot no verificado.
-        _markCashStateUnverified(false);
+        // A signed local opening can still be awaiting server confirmation.
+        _markCashStateUnverified(repository.lastStateFromCache);
         TraceLog.log('cash', 'cash.open.done shiftId=${session.shiftId}');
         return session;
       });

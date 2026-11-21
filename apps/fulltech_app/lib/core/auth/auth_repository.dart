@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../api/server_connection.dart';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
@@ -147,6 +148,10 @@ final dioProvider = Provider<Dio>((ref) {
     ApiOfflineCircuitBreaker(
       state: offlineCircuitState,
       cachedResponseResolver: offlineCacheInterceptor.cachedResponseFor,
+      onReachabilityChanged: (reachable) {
+        ref.read(serverConnectionProvider.notifier).state = reachable
+            ? ServerConnection.reachable : ServerConnection.unreachable;
+      },
     ),
   );
   api.dio.interceptors.add(offlineCacheInterceptor);

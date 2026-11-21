@@ -515,6 +515,7 @@
       var updatePending = false;
       var autoReloadingForUpdate = false;
       var flutterBooted = false;
+      var pendingUpdateRegistration = null;
       var banner = document.getElementById('pwa-banner');
       var title = document.getElementById('pwa-banner-title');
       var copy = document.getElementById('pwa-banner-copy');
@@ -583,6 +584,12 @@
 
       function applyUpdateNow(registration) {
         if (autoReloadingForUpdate) return;
+        // main() consumes the one-use access ticket before the first frame.
+        // Reloading or clearing runtime caches here could interrupt that save.
+        if (!flutterBooted) {
+          pendingUpdateRegistration = registration;
+          return;
+        }
         autoReloadingForUpdate = true;
         hideBanner();
 
@@ -784,6 +791,11 @@
 
       window.addEventListener('flutter-first-frame', function () {
         flutterBooted = true;
+        if (pendingUpdateRegistration) {
+          var registration = pendingUpdateRegistration;
+          pendingUpdateRegistration = null;
+          applyUpdateNow(registration);
+        }
         window.setTimeout(maybeShowInstallPrompt, 1200);
       });
     })();

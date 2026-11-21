@@ -5,7 +5,10 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../auth/token_storage.dart';
+import '../auth/auth_repository.dart' show tokenStorageProvider;
+import '../auth/operation_scope.dart';
+import '../config/uat_identity.dart';
+import '../api/retry_after.dart';
 import '../debug/app_error_reporter.dart';
 import '../debug/trace_log.dart';
 import '../errors/api_exception.dart';
@@ -57,6 +60,7 @@ class SyncQueueState {
   final int syncingCount;
   final int errorCount;
   final int conflictCount;
+  final int blockedCount;
   final bool isProcessing;
   final DateTime? lastSyncedAt;
   final DateTime? lastAttemptAt;
@@ -68,6 +72,7 @@ class SyncQueueState {
     this.syncingCount = 0,
     this.errorCount = 0,
     this.conflictCount = 0,
+    this.blockedCount = 0,
     this.isProcessing = false,
     this.lastSyncedAt,
     this.lastAttemptAt,
@@ -80,6 +85,7 @@ class SyncQueueState {
     int? syncingCount,
     int? errorCount,
     int? conflictCount,
+    int? blockedCount,
     bool? isProcessing,
     DateTime? lastSyncedAt,
     DateTime? lastAttemptAt,
@@ -92,6 +98,7 @@ class SyncQueueState {
       syncingCount: syncingCount ?? this.syncingCount,
       errorCount: errorCount ?? this.errorCount,
       conflictCount: conflictCount ?? this.conflictCount,
+      blockedCount: blockedCount ?? this.blockedCount,
       isProcessing: isProcessing ?? this.isProcessing,
       lastSyncedAt: lastSyncedAt ?? this.lastSyncedAt,
       lastAttemptAt: lastAttemptAt ?? this.lastAttemptAt,
@@ -107,7 +114,7 @@ final offlineStoreProvider = Provider<OfflineStore>((ref) {
 
 final syncQueueServiceProvider =
     StateNotifierProvider<SyncQueueService, SyncQueueState>((ref) {
-      final storage = TokenStorage();
+      final storage = ref.watch(tokenStorageProvider);
       final service = SyncQueueService(
         ref.read(offlineStoreProvider),
         scopeResolver: () async {
@@ -142,6 +149,34 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
   final OfflineStore _store;
   final SyncScopeResolver? _scopeResolver;
   final Map<String, SyncQueueHandler> _handlers = {};
+  OfflineStore get store => _store;
+  Future<OfflineSyncScope?> captureScope() => _resolveScope();
+
+  /// Retain the result of a foreground request using the same classification
+  /// and retry deadline as background replay. The original identity survives.
+  Future<void> retainFailedAttempt(
+    PendingSyncAction action,
+    Object error,
+  ) async {
+    final permanent = _isPermanentFailure(error);
+    final now = DateTime.now().toUtc();
+    await _store.updatePendingAction(
+      action.copyWith(
+        status: _failureStatus(error, permanent: permanent),
+        error: _customerSyncMessage(error),
+        permanent: permanent,
+        attempts: action.attempts + 1,
+        lastAttemptAt: now,
+        updatedAt: now,
+        nextAttemptAt: permanent
+            ? null
+            : now.add(_retryAfter(error) ?? _backoffFor(action.attempts + 1)),
+        clearNextAttemptAt: permanent,
+      ),
+    );
+    await refreshStats();
+  }
+
   static const Duration staleSyncingAge = Duration(minutes: 2);
   static const String _lastSyncedAtKey = 'sync_queue.last_synced_at';
   static const String _lastAttemptAtKey = 'sync_queue.last_attempt_at';
@@ -151,6 +186,17 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
   Timer? _timer;
   bool _started = false;
   bool _processing = false;
+  String? _visibleScopeKey;
+
+  String _scopeKey(OfflineSyncScope? scope) => UatIdentity.storageKey(
+    'sync_queue.${Uri.encodeComponent(scope?.companyId ?? '')}.${Uri.encodeComponent(scope?.userId ?? '')}',
+  );
+
+  String _metaKey(String key, OfflineSyncScope scope) =>
+      '${_scopeKey(scope)}.$key';
+
+  Future<bool> _isCurrentScope(OfflineSyncScope scope) async =>
+      _scopeKey(await _resolveScope()) == _scopeKey(scope);
 
   /// Se invoca al terminar cada pasada de la cola (con éxito o con error).
   /// Lo usa el motor de recuperación automática; nunca la venta.
@@ -169,7 +215,6 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
       const Duration(seconds: 20),
       (_) => unawaited(processPending()),
     );
-    unawaited(_restoreSyncMeta());
     unawaited(refreshStats());
     unawaited(processPending());
   }
@@ -189,18 +234,23 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
     String? companyId,
     String? userId,
   }) async {
-    if (type.trim().isEmpty) return 0;
     final scope = await _resolveScope();
     final resolvedCompany = _clean(companyId) ?? scope?.companyId;
     final resolvedUser = _clean(userId) ?? scope?.userId;
+    if (resolvedCompany == null ||
+        resolvedUser == null ||
+        resolvedCompany != scope?.companyId ||
+        resolvedUser != scope?.userId) {
+      return 0;
+    }
     final actions = await _store.listPendingActions(
       companyId: resolvedCompany,
       userId: resolvedUser,
-      limit: 500,
+      limit: null,
     );
     var released = 0;
     for (final action in actions) {
-      if (action.type != type) continue;
+      if (type.isNotEmpty && action.type != type) continue;
       if (action.status != 'auth_blocked') continue;
       await _store.updatePendingAction(
         action.copyWith(
@@ -254,10 +304,15 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
     String? cacheKey,
     Map<String, dynamic>? cachePayload,
     bool requireDatabase = false,
+    DateTime? createdAt,
   }) async {
     final activeScope = await _resolveScope();
-    final resolvedCompanyId = _clean(companyId) ?? activeScope?.companyId;
-    final resolvedUserId = _clean(userId) ?? activeScope?.userId;
+    final resolvedCompanyId =
+        _clean(companyId) ??
+        OperationScope.current?.companyId ??
+        activeScope?.companyId;
+    final resolvedUserId =
+        _clean(userId) ?? OperationScope.current?.userId ?? activeScope?.userId;
     final resolvedIdempotencyKey =
         _clean(idempotencyKey) ??
         _clean(payload['operationId']?.toString()) ??
@@ -276,7 +331,7 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
         payload: payload,
         status: 'pending',
         attempts: 0,
-        createdAt: DateTime.now().toUtc(),
+        createdAt: createdAt ?? DateTime.now().toUtc(),
         updatedAt: DateTime.now().toUtc(),
       ),
       cacheKey: cacheKey,
@@ -296,18 +351,28 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
   Future<void> refreshStats() async {
     try {
       final scope = await _resolveScope();
-      final stats = scope == null || !scope.hasTenant
+      final scopeKey = _scopeKey(scope);
+      if (_visibleScopeKey != scopeKey) {
+        _visibleScopeKey = scopeKey;
+        _patchState((_) => SyncQueueState(isProcessing: _processing));
+        if (scope != null && scope.hasTenant && scope.hasUser) {
+          await _restoreSyncMeta(scope);
+        }
+      }
+      final stats = scope == null || !scope.hasTenant || !scope.hasUser
           ? {'pending': 0, 'syncing': 0, 'error': 0, 'conflict': 0}
           : await _store.pendingActionStats(
               companyId: scope.companyId,
               userId: scope.userId,
             );
+      if (_scopeKey(await _resolveScope()) != scopeKey) return;
       _patchState(
         (current) => current.copyWith(
           pendingCount: stats['pending'] ?? 0,
           syncingCount: stats['syncing'] ?? 0,
           errorCount: stats['error'] ?? 0,
           conflictCount: stats['conflict'] ?? 0,
+          blockedCount: stats['blocked'] ?? 0,
         ),
       );
     } catch (error, stackTrace) {
@@ -348,7 +413,7 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
 
     try {
       final scope = await _resolveScope();
-      if (scope == null || !scope.hasTenant) {
+      if (scope == null || !scope.hasTenant || !scope.hasUser) {
         TraceLog.log('sync_queue', 'process skipped without tenant scope');
         return;
       }
@@ -359,12 +424,15 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
       );
 
       final actions = await _store.listPendingActions(
-        limit: 40,
+        limit: null,
         companyId: scope.companyId,
         userId: scope.userId,
         dueOnly: true,
+        processableOnly: true,
       );
+      var processed = 0;
       for (final action in actions) {
+        if (processed >= 40) break;
         final currentScope = await _resolveScope();
         if (currentScope?.companyId != scope.companyId ||
             currentScope?.userId != scope.userId) {
@@ -386,6 +454,40 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
           continue;
         }
 
+        // A close must not overtake an earlier write to the same original
+        // shift. A failed opening also keeps its dependent operations local.
+        final dependencies = await _store.listPendingActions(
+          limit: null,
+          companyId: scope.companyId,
+          userId: scope.userId,
+        );
+        String sessionOf(PendingSyncAction item) =>
+            (item.payload['operationCashSessionId'] ??
+                    item.payload['originCashSessionId'] ??
+                    item.payload['sessionId'] ??
+                    item.payload['clientSessionId'] ??
+                    '')
+                .toString();
+        final sessionId = sessionOf(action);
+        if (sessionId.isNotEmpty &&
+            dependencies.any(
+              (dependency) =>
+                  dependency.status != 'review_resolved' &&
+                  dependency.id != action.id &&
+                  sessionOf(dependency) == sessionId &&
+                  (dependency.type == 'cash.open' ||
+                      (action.type == 'cash.close' &&
+                          PendingSyncAction.compareOrder(dependency, action) <
+                              0 &&
+                          (dependency.type == 'sales.create' ||
+                              dependency.type == 'sales.attempt' ||
+                              dependency.type == 'sales.return' ||
+                              dependency.type == 'credit.payment' ||
+                              dependency.type == 'cash.movement'))),
+            )) {
+          continue;
+        }
+
         if (action.type == 'catalog.products.stock' ||
             action.type == 'sales.create') {
           final productIds = action.type == 'catalog.products.stock'
@@ -398,7 +500,7 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
           final pendingDependencies = await _store.listPendingActions(
             companyId: scope.companyId,
             userId: scope.userId,
-            limit: 100000,
+            limit: null,
           );
           final blocked = pendingDependencies.any((dependency) {
             if (dependency.id == action.id) return false;
@@ -422,6 +524,7 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
         }
 
         final now = DateTime.now().toUtc();
+        processed++;
         final syncing = action.copyWith(
           status: 'syncing',
           attempts: action.attempts + 1,
@@ -431,24 +534,29 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
           clearNextAttemptAt: true,
         );
         await _store.updatePendingAction(syncing);
-        await _recordAttempt(now);
+        await _recordAttempt(now, scope);
         await refreshStats();
 
         try {
-          await handler(action.payload);
+          await OperationScope(
+            scope.companyId!,
+            scope.userId!,
+          ).run(() => handler(action.payload));
           await _store.removePendingAction(action.id);
           final syncedAt = DateTime.now().toUtc();
           TraceLog.log(
             'sync_queue',
             'sync success type=${action.type} id=${action.id}',
           );
-          await _recordSuccess(syncedAt);
+          await _recordSuccess(syncedAt, scope);
         } catch (error, stackTrace) {
           final permanent = _isPermanentFailure(error);
           final status = _failureStatus(error, permanent: permanent);
           final nextAttemptAt = permanent
               ? null
-              : DateTime.now().toUtc().add(_backoffFor(syncing.attempts));
+              : DateTime.now().toUtc().add(
+                  _retryAfter(error) ?? _backoffFor(syncing.attempts),
+                );
           TraceLog.log(
             'sync_queue',
             'sync $status type=${action.type} id=${action.id} attempts=${syncing.attempts}',
@@ -465,10 +573,7 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
             ),
           );
           final customerMessage = _customerSyncMessage(error);
-          await _recordError(customerMessage, DateTime.now().toUtc());
-          _patchState(
-            (current) => current.copyWith(lastError: customerMessage),
-          );
+          await _recordError(customerMessage, DateTime.now().toUtc(), scope);
         }
       }
     } catch (error, stackTrace) {
@@ -530,13 +635,20 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
     }
   }
 
-  Future<void> _restoreSyncMeta() async {
+  Future<void> _restoreSyncMeta(OfflineSyncScope scope) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final lastSyncedAt = _parseIso(prefs.getString(_lastSyncedAtKey));
-      final lastAttemptAt = _parseIso(prefs.getString(_lastAttemptAtKey));
-      final lastErrorAt = _parseIso(prefs.getString(_lastErrorAtKey));
-      final lastError = prefs.getString(_lastErrorKey);
+      final lastSyncedAt = _parseIso(
+        prefs.getString(_metaKey(_lastSyncedAtKey, scope)),
+      );
+      final lastAttemptAt = _parseIso(
+        prefs.getString(_metaKey(_lastAttemptAtKey, scope)),
+      );
+      final lastErrorAt = _parseIso(
+        prefs.getString(_metaKey(_lastErrorAtKey, scope)),
+      );
+      final lastError = prefs.getString(_metaKey(_lastErrorKey, scope));
+      if (!await _isCurrentScope(scope)) return;
       _patchState(
         (current) => current.copyWith(
           lastSyncedAt: lastSyncedAt,
@@ -555,21 +667,30 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
     }
   }
 
-  Future<void> _recordAttempt(DateTime at) async {
+  Future<void> _recordAttempt(DateTime at, OfflineSyncScope scope) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_lastAttemptAtKey, at.toUtc().toIso8601String());
+      await prefs.setString(
+        _metaKey(_lastAttemptAtKey, scope),
+        at.toUtc().toIso8601String(),
+      );
     } catch (_) {}
-    _patchState((current) => current.copyWith(lastAttemptAt: at.toUtc()));
+    if (await _isCurrentScope(scope)) {
+      _patchState((current) => current.copyWith(lastAttemptAt: at.toUtc()));
+    }
   }
 
-  Future<void> _recordSuccess(DateTime at) async {
+  Future<void> _recordSuccess(DateTime at, OfflineSyncScope scope) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_lastSyncedAtKey, at.toUtc().toIso8601String());
-      await prefs.remove(_lastErrorAtKey);
-      await prefs.remove(_lastErrorKey);
+      await prefs.setString(
+        _metaKey(_lastSyncedAtKey, scope),
+        at.toUtc().toIso8601String(),
+      );
+      await prefs.remove(_metaKey(_lastErrorAtKey, scope));
+      await prefs.remove(_metaKey(_lastErrorKey, scope));
     } catch (_) {}
+    if (!await _isCurrentScope(scope)) return;
     _patchState(
       (current) => current.copyWith(
         lastSyncedAt: at.toUtc(),
@@ -579,12 +700,20 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
     );
   }
 
-  Future<void> _recordError(String message, DateTime at) async {
+  Future<void> _recordError(
+    String message,
+    DateTime at,
+    OfflineSyncScope scope,
+  ) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_lastErrorAtKey, at.toUtc().toIso8601String());
-      await prefs.setString(_lastErrorKey, message);
+      await prefs.setString(
+        _metaKey(_lastErrorAtKey, scope),
+        at.toUtc().toIso8601String(),
+      );
+      await prefs.setString(_metaKey(_lastErrorKey, scope), message);
     } catch (_) {}
+    if (!await _isCurrentScope(scope)) return;
     _patchState(
       (current) =>
           current.copyWith(lastErrorAt: at.toUtc(), lastError: message),
@@ -609,6 +738,14 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
     final index = (attempts - 1).clamp(0, schedule.length - 1);
     final base = schedule[index];
     return base + Duration(milliseconds: _jitter.nextInt(3000));
+  }
+
+  Duration? _retryAfter(Object error) {
+    if (error is ApiException) return error.retryAfter;
+    if (error is DioException) {
+      return parseRetryAfter(error.response?.headers.value('retry-after'));
+    }
+    return null;
   }
 
   bool _isPermanentFailure(Object error) {
@@ -680,14 +817,12 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
     if (_requiresHumanAction(error)) return 'requires_action';
     if (_isProductHistoryDecisionRequired(error)) return 'requires_action';
     if (_isConflictFailure(error)) return 'conflict';
-    if (error is ApiException &&
-        (error.type == ApiErrorType.unauthorized ||
-            error.type == ApiErrorType.forbidden)) {
+    if (error is ApiException && error.type == ApiErrorType.unauthorized) {
       return 'auth_blocked';
     }
     if (error is DioException) {
       final status = error.response?.statusCode;
-      if (status == 401 || status == 403) return 'auth_blocked';
+      if (status == 401) return 'auth_blocked';
     }
     return permanent ? 'failed' : 'error';
   }
@@ -732,7 +867,10 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
 
     if (error is DioException) {
       final status = error.response?.statusCode;
-      if (status == 401 || status == 403) {
+      if (status == 403) {
+        return 'Tu usuario no tiene permiso para completar esta operación. Pide ayuda al administrador de la empresa.';
+      }
+      if (status == 401) {
         return 'Necesitas iniciar sesión nuevamente para continuar sincronizando.';
       }
       if (status != null && status >= 500) {

@@ -21,6 +21,7 @@ import {
 import * as bcrypt from "bcryptjs";
 import { ConfigService } from "@nestjs/config";
 import { JwtUser } from "./jwt-user.type";
+import { OfflineCashPermitService } from './offline-cash-permit.service';
 import { LicenseService } from "../license/license.service";
 import { RedisService } from "../common/redis/redis.service";
 import { PasswordResetEmailService } from "./password-reset-email.service";
@@ -53,6 +54,8 @@ export class AuthService {
     private readonly passwordResetEmail: PasswordResetEmailService,
     @Optional()
     private readonly telemetry?: UsageTelemetryService,
+    @Optional()
+    private readonly cashPermits?: OfflineCashPermitService,
   ) {}
 
   async login(identifier: string, password: string) {
@@ -285,7 +288,7 @@ export class AuthService {
     await this.licenses.assertCompanyCanUseApp(companyId);
     // Advertise the protocol only when the additive database expansion exists.
     // No tenant data is queried here; permissions remain in allowedOperations.
-    const schema = await this.prisma.$queryRaw<{ ready: boolean }[]>`
+    const schema = await this.prisma.$queryRaw<{ ready: boolean; cash_ready?: boolean }[]>`
       SELECT (
         (SELECT count(*) FROM information_schema.columns
          WHERE table_schema = current_schema()
@@ -293,10 +296,17 @@ export class AuthService {
              OR (table_name = 'inventory_movements' AND column_name IN ('operation_id', 'operation_payload_hash')))) = 3
         AND EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = current_schema()
           AND indexname = 'inventory_movements_company_operation_key')
-      ) AS ready
+      ) AS ready,
+      EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema()
+        AND table_name='cash_sessions' AND column_name='offline_opening_evidence_hash') AS cash_ready
     `;
     const advancedReady = schema[0]?.ready === true;
     const validUntil = new Date(now.getTime() + OFFLINE_EMERGENCY_TTL_MS);
+    const canOpenCash = ['ADMIN', 'CAJERO', 'ASISTENTE', 'VENDEDOR'].includes(`${user.role}`);
+    const cashOpenPermit = canOpenCash && schema[0]?.cash_ready === true ? this.cashPermits?.issue({
+      companyId, userId, sessionId, deviceFingerprint,
+      validFrom: now.toISOString(), validUntil: validUntil.toISOString(),
+    }) ?? null : null;
 
     return {
       authorized: true,
@@ -308,6 +318,7 @@ export class AuthService {
       serverUtc: now.toISOString(),
       validUntilUtc: validUntil.toISOString(),
       maxOfflineHours: 48,
+      ...(cashOpenPermit ? { cashOpenPermit } : {}),
       capabilities: {
         protocolVersion: 2,
         minimumClientProtocol: 2,
@@ -320,6 +331,7 @@ export class AuthService {
       },
       allowedOperations: [
         "sales.create",
+        ...(cashOpenPermit ? ['cash.open'] : []),
         ...(["ADMIN", "ASISTENTE"].includes(`${user.role}`) ||
         (activeUser.userPermissions as Record<string, unknown> | null)?.editProducts === true
           ? ["catalog.products.create"] : []),

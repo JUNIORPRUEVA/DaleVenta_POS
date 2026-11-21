@@ -26,6 +26,7 @@ class ApiException implements Exception {
   final Uri? uri;
   final String? method;
   final bool retryable;
+  final Duration? retryAfter;
 
   ApiException(String message, [int? code])
     : this.detailed(
@@ -46,6 +47,7 @@ class ApiException implements Exception {
     this.uri,
     this.method,
     this.retryable = false,
+    this.retryAfter,
   });
 
   bool get isNetworkError {
@@ -77,7 +79,7 @@ class ApiException implements Exception {
 
   static ApiErrorType _inferType(int? code, String message) {
     if (code != null) {
-      if (code == 400) return ApiErrorType.badRequest;
+      if (code == 400 || code == 422) return ApiErrorType.badRequest;
       if (code == 401) return ApiErrorType.unauthorized;
       if (code == 403) return ApiErrorType.forbidden;
       if (code == 404) return ApiErrorType.notFound;

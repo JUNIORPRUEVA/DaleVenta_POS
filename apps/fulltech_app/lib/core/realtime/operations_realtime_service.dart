@@ -120,6 +120,9 @@ class OperationsRealtimeService {
   final Set<String> _seenEventIds = <String>{};
 
   io.Socket? _socket;
+  String? _socketIdentity;
+  final _productController = StreamController<String>.broadcast();
+  Stream<String> get productStream => _productController.stream;
 
   Stream<OperationsRealtimeMessage> get stream => _controller.stream;
   Stream<ClientsRealtimeMessage> get clientStream => _clientsController.stream;
@@ -148,9 +151,12 @@ class OperationsRealtimeService {
     }
 
     final existing = _socket;
-    if (existing != null && (existing.connected || existing.active)) {
+    final identity = '${authState.user?.companyId}:${authState.user?.id}:$token';
+    if (_socketIdentity == identity && existing != null && (existing.connected || existing.active)) {
       return;
     }
+    disconnect();
+    _socketIdentity = identity;
 
     final socket = io.io(
       Env.apiBaseUrl,
@@ -165,6 +171,9 @@ class OperationsRealtimeService {
     );
 
     socket.onConnect((_) {
+      if (_socketIdentity == identity) {
+        _productController.add('');
+      }
       final user = authState.user;
       final companyId = user?.companyId?.trim() ?? '';
       final userId = user?.id.trim() ?? '';
@@ -179,6 +188,14 @@ class OperationsRealtimeService {
           updatedAt: DateTime.now(),
         ),
       );
+    });
+
+    socket.on('product.changed', (data) {
+      if (_socketIdentity != identity || data is! Map || data['companyId'] != authState.user?.companyId) return;
+      final eventId = data['eventId']?.toString() ?? '';
+      if (eventId.isEmpty || !_seenEventIds.add(eventId)) return;
+      if (_seenEventIds.length > 300) _seenEventIds.remove(_seenEventIds.first);
+      _productController.add(data['productId']?.toString() ?? '');
     });
 
     socket.on('service.event', (data) {
@@ -382,6 +399,10 @@ class OperationsRealtimeService {
   }
 
   void disconnect() {
+    _socketIdentity = null;
+    _seenEventIds.clear();
+    _socketIdentity = null;
+    _seenEventIds.clear();
     _socket?.dispose();
     _socket = null;
   }

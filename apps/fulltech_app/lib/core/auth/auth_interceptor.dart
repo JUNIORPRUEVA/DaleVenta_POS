@@ -7,6 +7,7 @@ import '../api/api_routes.dart';
 import '../usage/client_telemetry_headers.dart';
 import 'auth_session_events.dart';
 import 'token_storage.dart';
+import 'operation_scope.dart';
 
 class AuthInterceptor extends Interceptor {
   final TokenStorage tokenStorage;
@@ -52,6 +53,19 @@ class AuthInterceptor extends Interceptor {
       // Avoid a second outer timeout that can cause requests to go out
       // without Authorization on slower devices (notably Windows).
       final token = await tokenStorage.getAccessToken();
+      final operationScope = options.extra['__operationScope'] as OperationScope? ??
+          OperationScope.current;
+      if (operationScope != null) {
+        options.extra['__operationScope'] = operationScope;
+        if (token == null || !operationScope.matchesToken(token)) {
+          handler.reject(DioException(
+            requestOptions: options,
+            type: DioExceptionType.cancel,
+            message: 'La sesión cambió. La operación permanece guardada para su empresa y usuario originales.',
+          ));
+          return;
+        }
+      }
       if (token != null && token.isNotEmpty) {
         options.headers['Authorization'] = 'Bearer $token';
         options.headers.addAll(await ClientTelemetryHeaders.instance.headers());

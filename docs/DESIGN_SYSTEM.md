@@ -52,6 +52,13 @@ Role-specific branding can change primary/secondary/tertiary colors. Check `role
 
 ## Buttons and Inputs
 
+Action notices (owner clarification, 2026-11-21): AppFeedback transient notices
+use a compact paragraph with a bold short title, icon and close action, at 12 px
+from the top and right safe edges. Product lifecycle notices use the same upper
+right position; the previous lower corner instruction is superseded. Technical
+record identifiers are hidden in customer-facing product labels and these
+notices; persisted identifiers and commercial product codes remain unchanged.
+
 - Elevated/Filled buttons use role primary color and white foreground.
 - Outlined/Text buttons use role primary color.
 - Buttons use Manrope label styling and minimum 40px size.
@@ -72,10 +79,37 @@ History refinement requested on2026-11-15: sales, quotation and credit history
 search remains36px tall and is limited to560px on desktop. Filter controls use
 6px corners; side panels are capped at380px, with compact headers and40px footer
 actions. Other modules keep their existing toolbar defaults. Public marketing
-adds a separate e-CF/RD announcement above its navigation; auth on mobile uses
+includes a compact e-CF announcement within its navigation header; auth on mobile uses
 document scrolling so browser chrome can respond naturally to user gestures.
 
+Public website refinement (2026-11-20): at widths up to900px the marketing header
+scrolls with the document. Desktop keeps its sticky navigation. The mobile menu
+has an explicit close action and closes on section links. Plan carousels accept
+keyboard focus, leave room above recommendation badges and use larger mobile
+body text. Preserve root document scrolling; browser toolbar visibility remains
+controlled by the browser, not by page scripts.
+
+Final header refinement (2026-11-20): the e-CF notice is one24px white line inside
+the header, with a subtle animated1px accent (static for reduced motion). No
+second geographic line. The mobile menu is a full-height rectangular right drawer,
+up to340px wide, with square outer and action corners, a close button and
+bottom registration/plan actions. Omit the phone number from this drawer.
+
+Owner's public website button style (2026-11-20): square corners, using
+`--button-radius: 0` for marketing, navigation, drawer, plan, download and
+authentication actions. The floating WhatsApp button and its pulse stay circular
+as an explicit owner-approved exception. Keep existing colors, focus states and touch
+areas. The standalone preparation page uses the same0px corners. Decorative
+chips, cards and status indicators retain their own shapes.
+
 ## Tables, Lists, Menus
+
+Owner-approved recovery refinement (2026-11-20): keep the Recovery Center in a
+920px bounded card, with compact 12–13px rows, square actions and a single
+top sync control. The empty state contains only a success icon and «Todo en
+orden». Uncertain charges first offer verification; a valid absent-record
+result replaces it with the two resolution actions. Omit import/export menus
+and diagnostic histories from this customer flow; retain their stored evidence.
 
 - `DataTableTheme` uses muted heading row and medium body weight.
 - `ListTileTheme` uses rounded 16px shape and role primary icons.

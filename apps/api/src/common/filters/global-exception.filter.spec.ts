@@ -1,5 +1,6 @@
 import { BadRequestException, HttpException, HttpStatus } from '@nestjs/common';
 import { GlobalExceptionFilter } from './global-exception.filter';
+import { Prisma } from '@prisma/client';
 
 function createHost(req: Record<string, unknown>) {
   const captured: { status?: number; body?: any } = {};
@@ -25,6 +26,19 @@ function createHost(req: Record<string, unknown>) {
 }
 
 describe('GlobalExceptionFilter — correlación y respuesta segura', () => {
+  it.each([
+    ['NOT_ACTIVE',409,'PRODUCT_NOT_ACTIVE'],
+    ['ANNULLED',409,'PRODUCT_ANNULLED'],
+    ['TENANT_MISMATCH',403,'PRODUCT_COMPANY_MISMATCH'],
+  ])('maps PostgreSQL lifecycle %s to a controlled response without raw SQL', (signal,status,code) => {
+    const {captured,host}=createHost({method:'POST',originalUrl:'/products'});
+    const error=new Prisma.PrismaClientUnknownRequestError(`Raw query failed: PRODUCT_LIFECYCLE_${signal}`,{clientVersion:'5.22.0'});
+    new GlobalExceptionFilter().catch(error,host);
+    expect(captured.status).toBe(status);
+    expect(captured.body.code).toBe(code);
+    expect(JSON.stringify(captured.body)).not.toContain('Raw query');
+    expect(JSON.stringify(captured.body)).not.toContain('PRODUCT_LIFECYCLE_');
+  });
   let errorSpy: jest.SpyInstance;
   let warnSpy: jest.SpyInstance;
 

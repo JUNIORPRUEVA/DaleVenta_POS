@@ -109,6 +109,7 @@ void main() {
     attempts = [attempt('req-1')];
     nextResponse = {
       'status': 'CONFIRMED',
+        'matchesExpected': true,
       'clientRequestId': 'req-1',
       'sale': {'id': 'sale-1', 'totalSold': 50.0, 'paymentMethod': 'cash'},
       'guidance': 'ALREADY_REGISTERED',
@@ -199,6 +200,9 @@ void main() {
       final outcome = await engine.runOnce(trigger: RecoveryTrigger.manual);
       expect(outcome, RecoveryRunOutcome.deferred);
       expect(lookups, 0, reason: 'no se martillea el servidor');
+      expect(await engine.runOnce(trigger: RecoveryTrigger.manual), RecoveryRunOutcome.deferred);
+      expect(await engine.runOnce(trigger: RecoveryTrigger.connectivityRestored), RecoveryRunOutcome.deferred);
+      expect(lookups, 0, reason: 'manual y reconexión tampoco saltan Retry-After');
 
       now = now.add(const Duration(minutes: 3));
       expect(engine.shouldRunNow(RecoveryTrigger.manual), isTrue);
@@ -257,6 +261,7 @@ void main() {
 
     nextResponse = {
       'status': 'CONFIRMED',
+      'matchesExpected': true,
       'clientRequestId': 'req-8',
       'sale': {'id': 'sale-8', 'totalSold': 50.0},
     };

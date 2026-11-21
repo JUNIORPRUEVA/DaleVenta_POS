@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
+import 'dart:typed_data';
+import 'package:dio/dio.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -10,6 +14,10 @@ import 'package:daleventa_pos/features/plans/presentation/screens/license_overvi
 import 'package:daleventa_pos/features/plans/presentation/screens/orders_history_screen.dart';
 import 'package:daleventa_pos/features/plans/presentation/screens/payment_screen.dart';
 import 'package:daleventa_pos/features/plans/presentation/screens/plans_catalog_screen.dart';
+import 'package:daleventa_pos/features/plans/presentation/widgets/plan_ui.dart';
+import 'package:daleventa_pos/features/plans/presentation/widgets/plan_card.dart';
+import 'package:daleventa_pos/core/utils/app_feedback.dart';
+import '../../support/plans_file_picker.dart';
 
 PlanOffer _plan({
   required String code,
@@ -138,7 +146,8 @@ final _licenseTrial = LicenseStatusModel(
   periodEndsAtOverride: DateTime(2026, 11, 24),
 );
 
-final _order = LicenseOrder(  id: 'order-1',
+final _order = LicenseOrder(
+  id: 'order-1',
   planCode: 'pro',
   planName: 'FullPOS Pro',
   amount: 3500,
@@ -257,9 +266,15 @@ Widget _app({
   List<LicenseOrder>? orders,
   PlanUpgradeRequest? openRequest,
   String initialLocation = Routes.planes,
+  Object? quoteError,
+  double? quotedAmount,
+  PlansRepository? repository,
+  Future<List<LicenseOrder>> Function()? loadOrders,
 }) {
   return ProviderScope(
     overrides: [
+      if (repository != null)
+        plansRepositoryProvider.overrideWithValue(repository),
       plansCatalogProvider.overrideWith((ref) async => _plans),
       paymentInstructionsProvider.overrideWith(
         (ref) async => const PaymentInstructions(
@@ -272,9 +287,13 @@ Widget _app({
           holderTaxId: '133080206',
         ),
       ),
-      licenseOrdersProvider.overrideWith((ref) async => orders ?? [_order]),
-      orderQuoteProvider.overrideWith(
-        (ref, params) async => OrderQuote(
+      licenseOrdersProvider.overrideWith(
+        (ref) async =>
+            loadOrders != null ? await loadOrders() : orders ?? [_order],
+      ),
+      orderQuoteProvider.overrideWith((ref, params) async {
+        if (quoteError != null) throw quoteError;
+        return OrderQuote(
           planCode: params.planCode,
           planName: 'FullPOS Pro',
           months: params.months,
@@ -284,14 +303,17 @@ Widget _app({
           credit: 0,
           creditDays: 0,
           creditPlanCode: null,
-          amountDue: 3500.0 * params.months,
+          amountDue: quotedAmount ?? 3500.0 * params.months,
           planChange: false,
-        ),
-      ),
+        );
+      }),
       licenseStatusProvider.overrideWith(
         (ref) async => license ?? _licenseActive,
       ),
-      planUpgradeRequesterProvider.overrideWithValue(({planCode, message}) async {
+      planUpgradeRequesterProvider.overrideWithValue(({
+        planCode,
+        message,
+      }) async {
         return const PlanUpgradeRequest(
           id: 'req-1',
           reference: 'SOL-2026-000123',
@@ -330,7 +352,294 @@ Widget _app({
   );
 }
 
+class _UploadRepository extends PlansRepository {
+  _UploadRepository() : super(Dio());
+  int uploads = 0;
+  @override
+  Future<EvidenceUploadResult> uploadEvidence({
+    required String orderId,
+    String? filePath,
+    Uint8List? fileBytes,
+    required String fileName,
+  }) async {
+    uploads++;
+    return EvidenceUploadResult(
+      activated: false,
+      message: 'Recibido',
+      order: LicenseOrder(
+        id: orderId,
+        planCode: 'pro',
+        amount: 3500,
+        currency: 'DOP',
+        months: 1,
+        status: 'EVIDENCE_RECEIVED',
+        reference: 'FP-TEST',
+      ),
+    );
+  }
+}
+
 void main() {
+  testWidgets(
+    'el historial no confunde un fallo de red con ausencia de pagos',
+    (tester) async {
+      await tester.pumpWidget(
+        _app(
+          initialLocation: Routes.planesHistorial,
+          loadOrders: () async => throw StateError('offline'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.text('No se pudo comprobar el historial. Intenta nuevamente.'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Todavia no has comprado ni renovado un plan.'),
+        findsNothing,
+      );
+    },
+  );
+
+  testWidgets(
+    'el centro de pagos no afirma estar al dia sin comprobar el servidor',
+    (tester) async {
+      await tester.pumpWidget(
+        _app(
+          initialLocation: Routes.planesPago,
+          loadOrders: () async => throw StateError('offline'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          'No se pudo comprobar el estado del pago. Intenta nuevamente.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Tu suscripcion esta al dia'), findsNothing);
+    },
+  );
+  tearDown(AppFeedback.clearToasts);
+  for (final width in [390.0, 1280.0, 1920.0]) {
+    testWidgets('catalog is spacious and responsive at $width', (tester) async {
+      tester.view.physicalSize = Size(width, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(_app(initialLocation: Routes.planesCatalogo));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      final card = tester.getSize(find.byType(PlanCard).first);
+      expect(card.height, greaterThanOrEqualTo(width >= 1280 ? 520 : 320));
+      final surface = tester.widget<Container>(
+        find
+            .descendant(
+              of: find.byType(PlanCard).first,
+              matching: find.byWidgetPredicate(
+                (widget) =>
+                    widget is Container &&
+                    widget.decoration is BoxDecoration &&
+                    (widget.decoration as BoxDecoration).color == Colors.white,
+              ),
+            )
+            .first,
+      );
+      expect(
+        (surface.decoration as BoxDecoration).borderRadius,
+        BorderRadius.zero,
+      );
+      if (width >= 1280) {
+        expect(card.width, greaterThan(width >= 1900 ? 320 : 280));
+      }
+      final renew = find.widgetWithText(TextButton, 'Renovar plan');
+      expect(renew, findsOneWidget);
+      expect(tester.widget<TextButton>(renew).onPressed, isNotNull);
+    });
+  }
+  testWidgets(
+    'cancelled file selection leaves payment ready without uploading',
+    (tester) async {
+      final repository = _UploadRepository();
+      final picker = PlansTestFilePicker(() async => null);
+      FilePicker.platform = picker;
+      await tester.pumpWidget(
+        _app(
+          repository: repository,
+          initialLocation: '${Routes.planesPago}?plan=pro&paso=pagar',
+        ),
+      );
+      await tester.pumpAndSettle();
+      final button = find.text('Subir comprobante de la transferencia');
+      await tester.ensureVisible(button);
+      await tester.tap(button);
+      await tester.pumpAndSettle();
+      expect(repository.uploads, 0);
+      expect(picker.calls, 1);
+      expect(
+        tester
+            .widget<SquareButton>(
+              find.byWidgetPredicate(
+                (w) =>
+                    w is SquareButton &&
+                    w.label == 'Subir comprobante de la transferencia',
+              ),
+            )
+            .onPressed,
+        isNotNull,
+      );
+    },
+  );
+  testWidgets(
+    'one upload receives the proof without a fake confirmation step',
+    (tester) async {
+      final repository = _UploadRepository();
+      final pending = Completer<FilePickerResult?>();
+      final picker = PlansTestFilePicker(() => pending.future);
+      FilePicker.platform = picker;
+      await tester.pumpWidget(
+        _app(
+          repository: repository,
+          initialLocation: '${Routes.planesPago}?plan=pro&paso=pagar',
+        ),
+      );
+      await tester.pumpAndSettle();
+      final button = find.text('Subir comprobante de la transferencia');
+      await tester.ensureVisible(button);
+      await tester.tap(button);
+      await tester.pump();
+      expect(find.text('Procesando…'), findsOneWidget);
+      await tester.tap(find.text('Procesando…'));
+      expect(picker.calls, 1);
+      pending.complete(
+        FilePickerResult([
+          PlatformFile(
+            name: 'prueba.pdf',
+            size: 4,
+            bytes: Uint8List.fromList([37, 80, 68, 70]),
+          ),
+        ]),
+      );
+      await tester.pumpAndSettle();
+      expect(repository.uploads, 1);
+      expect(find.text('Comprobante recibido'), findsOneWidget);
+      expect(find.text('Confirmar pago'), findsNothing);
+      expect(find.text('Ver estado del pago'), findsOneWidget);
+    },
+  );
+  testWidgets(
+    'order loading failure has a working retry and never silently enables a new order',
+    (tester) async {
+      var attempts = 0;
+      await tester.pumpWidget(
+        _app(
+          initialLocation: '${Routes.planesPago}?plan=pro&paso=pagar',
+          loadOrders: () async {
+            if (attempts++ == 0) throw Exception('Synthetic order unavailable');
+            return [_order];
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.text('No se pudo comprobar tu orden de pago.'),
+        findsOneWidget,
+      );
+      await tester.ensureVisible(find.text('Reintentar'));
+      await tester.tap(find.text('Reintentar'));
+      await tester.pumpAndSettle();
+      expect(attempts, 2);
+      expect(
+        find.text('Subir comprobante de la transferencia'),
+        findsOneWidget,
+      );
+    },
+  );
+  testWidgets(
+    'reviewed receipt remains visible on reopening without another upload',
+    (tester) async {
+      await tester.pumpWidget(
+        _app(
+          initialLocation: '${Routes.planesPago}?plan=pro&paso=pagar',
+          orders: [
+            const LicenseOrder(
+              id: 'received',
+              planCode: 'pro',
+              amount: 3500,
+              currency: 'DOP',
+              months: 1,
+              status: 'EVIDENCE_RECEIVED',
+              reference: 'FP-TEST-RECEIVED',
+            ),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Comprobante recibido'), findsOneWidget);
+      expect(find.text('Subir comprobante de la transferencia'), findsNothing);
+      expect(find.text('Confirmar pago'), findsNothing);
+    },
+  );
+  testWidgets(
+    'an existing order can accept its voucher when quote refresh fails',
+    (tester) async {
+      await tester.pumpWidget(
+        _app(
+          initialLocation: '${Routes.planesPago}?plan=pro&paso=pagar',
+          quoteError: Exception('Synthetic quote unavailable'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final button = find.byWidgetPredicate(
+        (w) =>
+            w is SquareButton &&
+            w.label == 'Subir comprobante de la transferencia',
+      );
+      expect(button, findsOneWidget);
+      expect(tester.widget<SquareButton>(button).onPressed, isNotNull);
+    },
+  );
+  testWidgets('a changed quote never replaces an existing transfer amount', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _app(
+        initialLocation: '${Routes.planesPago}?plan=pro&paso=pagar',
+        quotedAmount: 3400,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Subir comprobante de la transferencia'), findsOneWidget);
+    expect(find.textContaining('3,500'), findsWidgets);
+    expect(find.textContaining('3,400'), findsNothing);
+  });
+  testWidgets(
+    'resuming a multi-month order keeps its period instead of generating another order',
+    (tester) async {
+      await tester.pumpWidget(
+        _app(
+          initialLocation: '${Routes.planesPago}?plan=pro&paso=pagar',
+          orders: [
+            LicenseOrder(
+              id: 'three-months',
+              planCode: 'pro',
+              amount: 10500,
+              currency: 'DOP',
+              months: 3,
+              status: 'AWAITING_TRANSFER',
+              reference: 'FP-TEST-003',
+              expiresAt: DateTime.now().add(const Duration(days: 2)),
+            ),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Subir comprobante de la transferencia'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('10,500'), findsWidgets);
+    },
+  );
   testWidgets('con la licencia activa muestra el plan actual y dos acciones', (
     tester,
   ) async {
@@ -592,7 +901,8 @@ void main() {
     await tester.pump(const Duration(seconds: 6));
   });
 
-  testWidgets('con planes superiores no aparece la solicitud a soporte', (    tester,
+  testWidgets('con planes superiores no aparece la solicitud a soporte', (
+    tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(1320, 1000));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -612,7 +922,8 @@ void main() {
     expect(find.text('Ver todos los planes'), findsNothing);
   });
 
-  testWidgets('si el ticket ya existe se muestra sin pedirlo otra vez', (    tester,
+  testWidgets('si el ticket ya existe se muestra sin pedirlo otra vez', (
+    tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(1320, 1000));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -630,10 +941,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
-    expect(
-      find.text('Solicitar mejora de plan a soporte'),
-      findsNothing,
-    );
+    expect(find.text('Solicitar mejora de plan a soporte'), findsNothing);
     expect(find.textContaining('SOL-2026-000777'), findsOneWidget);
     expect(find.text('Ver todos los planes'), findsNothing);
   });
@@ -666,9 +974,6 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.text('Cancelar orden'), findsOneWidget);
-    expect(
-      find.text('Subir comprobante de la transferencia'),
-      findsOneWidget,
-    );
+    expect(find.text('Subir comprobante de la transferencia'), findsOneWidget);
   });
 }

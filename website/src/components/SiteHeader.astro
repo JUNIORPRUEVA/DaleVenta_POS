@@ -1,5 +1,5 @@
 ---
-import { site, cta, waLink } from '../config/site';
+import { site, cta } from '../config/site';
 
 const path = Astro.url.pathname.replace(/\/$/, '') || '/';
 
@@ -15,6 +15,10 @@ const isCurrent = (href: string) => path === href;
 ---
 
 <header class="site-header">
+  <aside class="fiscal-announcement" aria-label="Facturación electrónica disponible">
+    <span class="fiscal-status" aria-hidden="true"></span>
+    <span>Facturación electrónica disponible</span>
+  </aside>
   <nav class="nav container" aria-label="Navegación principal">
     <a class="brand" href="/" aria-label={`${site.name}, inicio`}>
       <img
@@ -59,22 +63,34 @@ const isCurrent = (href: string) => path === href;
   </nav>
 </header>
 
-<!-- Menu movil con Popover API (cierre con Esc y clic fuera, sin JS propio) -->
+<!-- Menú móvil con Popover API: cierre con Esc, clic fuera o botón explícito. -->
 <div id="site-menu" popover class="menu" aria-label="Menú">
-  {links.map((link) => (
-    <a href={link.href}>
-      {link.label}
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M5 12h14M13 5l7 7-7 7"></path>
+  <div class="menu-heading">
+    <strong>Menú</strong>
+    <button class="nav-toggle" type="button" popovertarget="site-menu" popovertargetaction="hide" aria-label="Cerrar menú">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" aria-hidden="true">
+        <path d="m6 6 12 12M18 6 6 18"></path>
       </svg>
-    </a>
-  ))}
-  <a href="/login">{cta.header.login}</a>
-  <div class="menu-sep" role="presentation"></div>
+    </button>
+  </div>
+  <nav class="menu-links" aria-label="Navegación móvil">
+    {links.map((link) => (
+      <a href={link.href} aria-current={isCurrent(link.href) ? 'page' : undefined}>
+        {link.label}
+      </a>
+    ))}
+    <a href="/login">{cta.header.login}</a>
+  </nav>
   <div class="menu-cta">
     <a class="btn btn-primary btn-block" href="/registro">{cta.header.primary}</a>
     <a class="btn btn-ghost btn-block" href="/precios">Ver planes y precios</a>
   </div>
-  <div class="menu-sep" role="presentation"></div>
-  <a href={waLink} rel="noopener">WhatsApp {site.supportPhoneLabel}</a>
 </div>
+
+<script>
+  // Los enlaces a secciones de la misma página también deben cerrar el menú.
+  const menu = document.querySelector<HTMLElement>('#site-menu');
+  menu?.addEventListener('click', (event) => {
+    if (event.target instanceof Element && event.target.closest('a')) menu.hidePopover();
+  });
+</script>

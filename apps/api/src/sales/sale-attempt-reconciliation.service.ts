@@ -204,6 +204,7 @@ export class SaleAttemptReconciliationService {
       throw new HttpException(
         {
           code: "SALE_ATTEMPT_RECONCILIATION_RATE_LIMITED",
+            retryAfterSeconds: Math.max(1, Math.ceil((bucket.resetAt - now) / 1000)),
           message:
             "Demasiadas verificaciones seguidas. Espera un momento: el intento sigue guardado y no se ha repetido ningún cobro.",
         },

@@ -26,12 +26,16 @@ class OrdersHistoryScreen extends ConsumerWidget {
             eyebrow: 'Historial',
             title: 'Tus ordenes',
             subtitle:
-                'Cada comprobante queda registrado con su referencia. «En revision» significa '
-                'que la licencia ya esta activa y el pago se esta verificando.',
+                'Consulta tus transferencias y comprobantes. Un pago en revisión todavía no está confirmado.',
           ),
           const SizedBox(height: 16),
           if (ordersAsync.isLoading && orders.isEmpty)
             const LoadingBlock(height: 200)
+          else if (ordersAsync.hasError)
+            ErrorBlock(
+              message: 'No se pudo comprobar el historial. Intenta nuevamente.',
+              onRetry: () => ref.invalidate(licenseOrdersProvider),
+            )
           else if (orders.isEmpty)
             PlansPanel(
               child: Column(
@@ -106,7 +110,8 @@ class _OrderRow extends StatelessWidget {
                   [
                     order.reference,
                     if (order.createdAt != null) shortDate(order.createdAt),
-                    if (order.periodEnd != null) 'vence ${shortDate(order.periodEnd)}',
+                    if (order.periodEnd != null)
+                      'vence ${shortDate(order.periodEnd)}',
                   ].join(' · '),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,

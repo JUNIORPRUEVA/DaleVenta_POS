@@ -162,7 +162,6 @@ export class CotizacionesController {
     return this.cotizaciones.createPdfShareLink(user, dto, requestBaseUrl);
   }
 
-  @Delete("debug/purge")
   @Roles(Role.ADMIN)
   purgeAllForDebug(@Req() req: Request) {
     const user = req.user as { id: string; role: Role };

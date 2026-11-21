@@ -167,6 +167,13 @@ void main() {
       );
       expect(resolved, isTrue);
 
+      final archived = (await OfflineStore.instance.listPendingActions(
+        companyId: company, userId: user, limit: null,
+      )).single;
+      expect(archived.status, 'review_resolved');
+      expect(archived.payload, action.payload);
+      expect(archived.idempotencyKey, action.idempotencyKey);
+
       // Ahora sí puede cobrarse ese mismo contenido.
       await OfflineStore.instance.reserveRemoteSaleAttempt(
         attempt(requestId: 'req-3', fingerprint: 'carrito-1'),

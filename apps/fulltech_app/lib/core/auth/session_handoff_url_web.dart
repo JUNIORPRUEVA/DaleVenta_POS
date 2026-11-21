@@ -7,3 +7,7 @@ import 'package:web/web.dart' as web;
 void replaceHistoryState(String path) {
   web.window.history.replaceState(null, '', path);
 }
+
+void navigateToAccessRecovery() {
+  web.window.location.replace('/login?access=retry');
+}

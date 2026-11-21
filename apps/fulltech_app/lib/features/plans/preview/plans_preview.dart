@@ -1,8 +1,12 @@
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/auth/app_role.dart';
+import '../../../core/auth/auth_repository.dart';
 import '../../../core/license/license_repository.dart';
 import '../../../core/routing/routes.dart';
 import '../../../core/theme/app_theme.dart';
@@ -34,25 +38,32 @@ void main() {
   // La ruta de entrada se toma del hash para poder abrir cualquier pantalla
   // directamente y comparar el mismo estado en escritorio y en telefono.
   final fragment = Uri.base.fragment;
-  final initialRoute =
-      fragment.startsWith('/') ? fragment : Routes.planes;
+  final initialRoute = fragment.startsWith('/') ? fragment : Routes.planes;
   runApp(
     ProviderScope(
       overrides: [
+        // Every fallback request is rejected locally, including private files.
+        dioProvider.overrideWithValue(_noNetwork()),
+        plansRepositoryProvider.overrideWith(
+          (ref) => _PreviewPlansRepository(ref),
+        ),
+        planUpgradeOpenProvider.overrideWith((ref) async => null),
         plansCatalogProvider.overrideWith((ref) async => _plans),
         paymentInstructionsProvider.overrideWith(
           (ref) async => const PaymentInstructions(
             configured: true,
             instructions:
                 'Transfiere el monto exacto e incluye la referencia de tu orden en el concepto.',
-            bankName: 'Banco Popular Dominicano',
-            accountNumber: '712-345678-9',
+            bankName: 'Banco de demostración — no transferir',
+            accountNumber: 'CUENTA FICTICIA',
             accountType: 'Corriente',
             holder: 'FULLTECH SRL',
             holderTaxId: '1-31-12345-6',
           ),
         ),
-        licenseOrdersProvider.overrideWith((ref) async => _orders),
+        licenseOrdersProvider.overrideWith(
+          (ref) async => ref.watch(_demoOrdersProvider),
+        ),
         // Cotizacion inventada: en la vista previa no hay servidor.
         orderQuoteProvider.overrideWith((ref, params) async {
           final plan = _plans.firstWhere(
@@ -60,7 +71,9 @@ void main() {
             orElse: () => _plans.last,
           );
           final subtotal = plan.monthlyPrice * params.months;
-          const credit = 1400.0; // 12 dias del plan actual
+          final credit = plan.code == 'pro'
+              ? 0.0
+              : subtotal.clamp(0.0, 1400.0).toDouble();
           return OrderQuote(
             planCode: plan.code,
             planName: plan.name,
@@ -72,7 +85,7 @@ void main() {
             creditDays: 12,
             creditPlanCode: 'pro',
             amountDue: subtotal - credit,
-            planChange: true,
+            planChange: plan.code != 'pro',
           );
         }),
         licenseStatusProvider.overrideWith((ref) async {
@@ -99,7 +112,7 @@ void main() {
                 children: [
                   const Expanded(
                     child: Text(
-                      'VISTA PREVIA · datos ficticios',
+                      'SIMULACIÓN · no transfieras dinero',
                       style: TextStyle(
                         color: Colors.white70,
                         fontSize: 11,
@@ -117,8 +130,9 @@ void main() {
                             ref.read(_demoLicenseProvider.notifier).state =
                                 expired ? _licenseActive : _licenseSuspended,
                         style: TextButton.styleFrom(
-                          backgroundColor:
-                              expired ? Colors.green.shade600 : Colors.red.shade600,
+                          backgroundColor: expired
+                              ? Colors.green.shade600
+                              : Colors.red.shade600,
                           foregroundColor: Colors.white,
                           shape: const RoundedRectangleBorder(),
                           padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -318,8 +332,8 @@ final _orders = <LicenseOrder>[
     months: 1,
     status: 'AWAITING_TRANSFER',
     reference: 'FP-2026-000482',
-    expiresAt: DateTime(2026, 11, 18, 18),
-    createdAt: DateTime(2026, 11, 16, 9, 12),
+    expiresAt: DateTime.now().add(const Duration(days: 2)),
+    createdAt: DateTime.now(),
   ),
   LicenseOrder(
     id: 'order-settled',
@@ -353,3 +367,97 @@ final _orders = <LicenseOrder>[
     createdAt: DateTime(2026, 9, 28, 11, 5),
   ),
 ];
+
+final _demoOrdersProvider = StateProvider<List<LicenseOrder>>((ref) => _orders);
+
+Dio _noNetwork() => Dio()
+  ..interceptors.add(
+    InterceptorsWrapper(
+      onRequest: (options, handler) => handler.reject(
+        DioException(
+          requestOptions: options,
+          message: 'Simulación sin conexión. No se envían archivos ni pagos.',
+        ),
+      ),
+    ),
+  );
+
+/// Only this standalone preview uses simulated writes. The production
+/// repository and all server validation remain untouched.
+class _PreviewPlansRepository extends PlansRepository {
+  _PreviewPlansRepository(this.ref) : super(_noNetwork());
+  final Ref ref;
+
+  @override
+  Future<LicenseOrder> createOrder(String planCode, {int months = 1}) async {
+    final quote = await ref.read(
+      orderQuoteProvider((planCode: planCode, months: months)).future,
+    );
+    final order = LicenseOrder(
+      id: 'demo-${DateTime.now().microsecondsSinceEpoch}',
+      planCode: planCode,
+      planName: quote.planName,
+      amount: quote.amountDue,
+      currency: quote.currency,
+      months: months,
+      status: 'AWAITING_TRANSFER',
+      reference: 'DEMO-NO-PAGAR',
+      createdAt: DateTime.now(),
+      expiresAt: DateTime.now().add(const Duration(days: 2)),
+    );
+    ref.read(_demoOrdersProvider.notifier).state = [
+      order,
+      ...ref.read(_demoOrdersProvider),
+    ];
+    return order;
+  }
+
+  @override
+  Future<void> cancelOrder(String orderId) async {
+    ref.read(_demoOrdersProvider.notifier).state = ref
+        .read(_demoOrdersProvider)
+        .map(
+          (order) =>
+              order.id == orderId ? _withStatus(order, 'CANCELLED') : order,
+        )
+        .toList();
+  }
+
+  @override
+  Future<EvidenceUploadResult> uploadEvidence({
+    required String orderId,
+    String? filePath,
+    Uint8List? fileBytes,
+    required String fileName,
+  }) async {
+    final order = _withStatus(
+      ref.read(_demoOrdersProvider).firstWhere((order) => order.id == orderId),
+      'EVIDENCE_RECEIVED',
+    );
+    ref.read(_demoOrdersProvider.notifier).state = ref
+        .read(_demoOrdersProvider)
+        .map((existing) => existing.id == orderId ? order : existing)
+        .toList();
+    return EvidenceUploadResult(
+      activated: false,
+      message: 'Simulación: archivo no enviado.',
+      order: order,
+    );
+  }
+
+  LicenseOrder _withStatus(LicenseOrder order, String status) => LicenseOrder(
+    id: order.id,
+    planCode: order.planCode,
+    planName: order.planName,
+    amount: order.amount,
+    currency: order.currency,
+    months: order.months,
+    status: status,
+    reference: order.reference,
+    expiresAt: order.expiresAt,
+    createdAt: order.createdAt,
+    periodStart: order.periodStart,
+    periodEnd: order.periodEnd,
+    evidences: order.evidences,
+  );
+}

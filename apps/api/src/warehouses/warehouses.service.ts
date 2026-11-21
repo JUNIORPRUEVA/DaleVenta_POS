@@ -103,7 +103,7 @@ export class WarehousesService {
     await this.assertMultiWarehouseEnabled(companyId);
     const name = this.cleanName(dto.name);
     const code = this.cleanCode(dto.code);
-    return this.prisma.$transaction(async (tx) => {
+    const warehouse = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM companies WHERE id = ${companyId}::uuid FOR UPDATE`;
       // Limite del plan dentro de la transaccion: dos altas simultaneas no
       // pueden pasarse del tope de almacenes.
@@ -117,16 +117,15 @@ export class WarehousesService {
           isDefault: false,
         },
       });
-      await this.telemetry?.enqueueBusinessEvent(tx, {
-        companyId,
-        actorUserId: user.id ?? null,
-        eventType: "WAREHOUSE_CREATED",
-        entityType: "warehouse",
-        entityId: warehouse.id,
-        feature: "WAREHOUSES",
-      });
       return warehouse;
     });
+    // Telemetry uses a separate connection. Awaiting its FK insert while the
+    // company FOR UPDATE lock is held makes that transaction wait on itself.
+    await this.telemetry?.enqueueBusinessEvent(this.prisma, {
+      companyId, actorUserId: user.id ?? null, eventType: "WAREHOUSE_CREATED",
+      entityType: "warehouse", entityId: warehouse.id, feature: "WAREHOUSES",
+    });
+    return warehouse;
   }
 
   async update(user: TenantUser, id: string, dto: UpdateWarehouseDto) {

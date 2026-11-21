@@ -1611,7 +1611,7 @@ export class CotizacionesService {
     }> = [];
     if (productIds.length) {
       products = await this.prisma.product.findMany({
-        where: { id: { in: productIds }, companyId },
+        where: { id: { in: productIds }, companyId, archivedAt:null },
         select: {
           id: true,
           nombre: true,

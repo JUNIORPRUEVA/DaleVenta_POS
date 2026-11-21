@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../debug/trace_log.dart';
 import '../theme/app_colors.dart';
 import '../widgets/fulltech_dialog.dart';
+import 'customer_visible_text.dart';
 
 enum AppFeedbackKind { success, warning, error, info }
 
@@ -354,10 +355,14 @@ class AppFeedbackNotice extends StatelessWidget {
     super.key,
     required this.notification,
     required this.onClose,
+    this.bottomRight = false,
+    this.animationProgress = 1,
   });
 
   final AppFeedbackNotification notification;
   final VoidCallback onClose;
+  final bool bottomRight;
+  final double animationProgress;
 
   @override
   Widget build(BuildContext context) {
@@ -367,7 +372,13 @@ class AppFeedbackNotice extends StatelessWidget {
     // responsiva y segura en pantallas angostas. La tarjeta se coloca debajo
     // de la barra superior estándar (kToolbarHeight) para no tapar encabezados
     // ni AppBars, con separación segura de los bordes superior y derecho.
-    final rightMargin = (isNarrow ? 12.0 : 24.0) + media.padding.right;
+    final rightMargin =
+        (bottomRight || notification.paragraph
+            ? 12.0
+            : isNarrow
+            ? 12.0
+            : 24.0) +
+        media.padding.right;
     final leftMargin = isNarrow ? 12.0 : 24.0;
     final top =
         media.padding.top +
@@ -385,117 +396,132 @@ class AppFeedbackNotice extends StatelessWidget {
     final background = _backgroundFor(notification.kind);
 
     return Positioned(
-      right: rightMargin,
-      top: top,
+      right: rightMargin - (1 - animationProgress) * 20,
+      top: bottomRight ? null : top,
+      bottom: bottomRight
+          ? media.padding.bottom + media.viewInsets.bottom + 12
+          : null,
       width: cardWidth,
-      child: Material(
-        key: const ValueKey('persistent_feedback_card'),
-        color: AppColors.surface,
-        elevation: 10,
-        shadowColor: AppColors.shadow,
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          decoration: BoxDecoration(
-            color: background,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: color.withValues(alpha: 0.34)),
-          ),
-          padding: notification.compact
-              ? const EdgeInsets.fromLTRB(10, 7, 4, 7)
-              : const EdgeInsets.fromLTRB(14, 12, 8, 14),
-          child: Row(
-            crossAxisAlignment: notification.compact
-                ? CrossAxisAlignment.center
-                : CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: EdgeInsets.only(top: notification.compact ? 0 : 2),
-                child: Icon(
-                  AppFeedback._iconFor(notification.kind),
-                  color: color,
-                  size: notification.compact ? 16 : 22,
+      child: Opacity(
+        opacity: animationProgress,
+        child: Material(
+          key: const ValueKey('persistent_feedback_card'),
+          color: AppColors.surface,
+          elevation: 10,
+          shadowColor: AppColors.shadow,
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            decoration: BoxDecoration(
+              color: background,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: color.withValues(alpha: 0.34)),
+            ),
+            padding: notification.compact
+                ? const EdgeInsets.fromLTRB(10, 7, 4, 7)
+                : const EdgeInsets.fromLTRB(14, 12, 8, 14),
+            child: Row(
+              crossAxisAlignment: notification.compact
+                  ? CrossAxisAlignment.center
+                  : CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: EdgeInsets.only(top: notification.compact ? 0 : 2),
+                  child: Icon(
+                    AppFeedback._iconFor(notification.kind),
+                    color: color,
+                    size: notification.compact ? 16 : 22,
+                  ),
                 ),
-              ),
-              SizedBox(width: notification.compact ? 7 : 10),
-              Expanded(
-                child: notification.paragraph
-                    ? Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text.rich(
-                            TextSpan(
-                              children: [
-                                TextSpan(
-                                  text: '${notification.title}. ',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w700,
+                SizedBox(width: notification.compact ? 7 : 10),
+                Expanded(
+                  child: notification.paragraph
+                      ? Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text.rich(
+                              TextSpan(
+                                children: [
+                                  TextSpan(
+                                    text:
+                                        '${customerVisibleText(notification.title, fallback: 'Aviso')}. ',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                    ),
                                   ),
-                                ),
-                                TextSpan(text: notification.body),
-                              ],
+                                  TextSpan(
+                                    text: customerVisibleText(
+                                      notification.body,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: AppColors.textPrimary,
+                                    height: 1.45,
+                                  ),
                             ),
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(
-                                  color: AppColors.textPrimary,
-                                  height: 1.45,
+                            if (notification.actionLabel != null &&
+                                notification.onAction != null)
+                              TextButton(
+                                style: TextButton.styleFrom(
+                                  shape: const RoundedRectangleBorder(),
                                 ),
-                          ),
-                          if (notification.actionLabel != null &&
-                              notification.onAction != null)
-                            TextButton(
-                              onPressed: notification.onAction,
-                              child: Text(notification.actionLabel!),
+                                onPressed: notification.onAction,
+                                child: Text(notification.actionLabel!),
+                              ),
+                          ],
+                        )
+                      : notification.compact
+                      ? Text(
+                          '${notification.title}: ${notification.body}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(
+                                color: AppColors.textSecondary,
+                                fontWeight: FontWeight.w700,
+                              ),
+                        )
+                      : Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              notification.title,
+                              style: Theme.of(context).textTheme.titleSmall
+                                  ?.copyWith(
+                                    color: AppColors.textPrimary,
+                                    fontWeight: FontWeight.w800,
+                                  ),
                             ),
-                        ],
-                      )
-                    : notification.compact
-                    ? Text(
-                        '${notification.title}: ${notification.body}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: AppColors.textSecondary,
-                          fontWeight: FontWeight.w700,
+                            const SizedBox(height: 5),
+                            Text(
+                              notification.body,
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(color: AppColors.textSecondary),
+                            ),
+                          ],
                         ),
-                      )
-                    : Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            notification.title,
-                            style: Theme.of(context).textTheme.titleSmall
-                                ?.copyWith(
-                                  color: AppColors.textPrimary,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                          ),
-                          const SizedBox(height: 5),
-                          Text(
-                            notification.body,
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(color: AppColors.textSecondary),
-                          ),
-                        ],
-                      ),
-              ),
-              IconButton(
-                icon: const Icon(
-                  Icons.close_rounded,
-                  semanticLabel: 'Cerrar notificación',
                 ),
-                color: AppColors.textMuted,
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: BoxConstraints.tightFor(
-                  width: notification.compact ? 28 : 40,
-                  height: notification.compact ? 28 : 40,
+                IconButton(
+                  icon: const Icon(
+                    Icons.close_rounded,
+                    semanticLabel: 'Cerrar notificación',
+                  ),
+                  color: AppColors.textMuted,
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: BoxConstraints.tightFor(
+                    width: notification.compact ? 28 : 40,
+                    height: notification.compact ? 28 : 40,
+                  ),
+                  iconSize: notification.compact ? 16 : 24,
+                  onPressed: onClose,
                 ),
-                iconSize: notification.compact ? 16 : 24,
-                onPressed: onClose,
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -603,11 +629,10 @@ class _ToastStackState extends State<_ToastStack> {
     if (items.isEmpty) return const SizedBox.shrink();
     final media = MediaQuery.of(context);
     final narrow = media.size.width < 640;
-    // Pegado a la esquina superior derecha, dejando aire sobre el borde y sin
-    // tapar la barra superior de la pantalla.
-    final rightMargin = (narrow ? 12.0 : 16.0) + media.padding.right;
-    final leftMargin = narrow ? 12.0 : 16.0;
-    final top = media.padding.top + kToolbarHeight + (narrow ? 6.0 : 8.0);
+    // Corner notices share the same compact paragraph position.
+    final rightMargin = 12.0 + media.padding.right;
+    const leftMargin = 12.0;
+    final top = media.padding.top + 12.0;
     final available = media.size.width - rightMargin - leftMargin;
     final width = (narrow ? available : 360.0).clamp(200.0, 360.0).toDouble();
 
@@ -654,14 +679,14 @@ class _ToastCard extends StatelessWidget {
         color: AppColors.surface,
         elevation: 8,
         shadowColor: AppColors.shadow,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
         child: Container(
           decoration: BoxDecoration(
             color: _softBackgroundFor(notification.kind),
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(8),
             border: Border.all(color: color.withValues(alpha: 0.32)),
           ),
-          padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+          padding: const EdgeInsets.fromLTRB(10, 8, 6, 8),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -670,34 +695,28 @@ class _ToastCard extends StatelessWidget {
                 child: Icon(
                   AppFeedback._iconFor(notification.kind),
                   color: color,
-                  size: 18,
+                  size: 16,
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      notification.title,
-                      style: theme.textTheme.labelLarge?.copyWith(
-                        color: AppColors.textPrimary,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 12.5,
+                child: Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(
+                        text:
+                            '${customerVisibleText(notification.title, fallback: 'Aviso')}. ',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
                       ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      notification.body,
-                      softWrap: true,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: AppColors.textSecondary,
-                        height: 1.3,
-                        fontSize: 11.5,
-                      ),
-                    ),
-                  ],
+                      TextSpan(text: customerVisibleText(notification.body)),
+                    ],
+                  ),
+                  softWrap: true,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: AppColors.textPrimary,
+                    height: 1.3,
+                    fontSize: 12,
+                  ),
                 ),
               ),
               IconButton(

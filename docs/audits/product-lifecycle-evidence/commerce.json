@@ -1,0 +1,12 @@
+{
+  "result": "PASS",
+  "companyId": "ce9dd935-abd6-4ff1-ba6f-9094091eabac",
+  "saleId": "af08b968-c892-45d0-bb36-1821fa133bda",
+  "orderId": "5fe69b2e-6721-4ffe-a750-c4fa0b8c37df",
+  "scenarios": [
+    "real sale protects identity; archive preserves sale/item snapshots; new archived sale rejected; historical return restores inventory",
+    "real purchase order and receipt protect product and remain byte-equivalent after archive",
+    "real transfer conserves principal/warehouse total and blocks delete and annulment",
+    "opposite warehouse quantities cannot conceal nonzero stock behind a zero principal balance"
+  ]
+}
