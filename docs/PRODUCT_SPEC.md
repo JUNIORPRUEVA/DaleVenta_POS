@@ -6,6 +6,13 @@ This document describes confirmed product behavior from repository evidence only
 
 ## Product Purpose
 
+Web access after registration (local correction, 2026-11-20): successful account
+creation opens the operational app through a one-use ticket. Updates cannot
+interrupt that preparation. Failed access preserves the created account and
+shows an explanation on login; it does not silently return to the public home
+or repeat registration. Publication state and evidence are recorded in
+`WEB_REGISTRO_ACCESO_AUDITORIA_2026-11-20.md`.
+
 FullPOS Cloud is a cloud-connected point-of-sale and business operations product for companies that need sales, inventory, clients, cash, purchasing, accounting/fiscal documents, staff, and operational workflows in one system.
 
 Evidence: `apps/fulltech_app/README.md`, `apps/fulltech_app/lib/core/routing/routes.dart`, `apps/api/src/app.module.ts`, and `apps/api/prisma/schema.prisma`.

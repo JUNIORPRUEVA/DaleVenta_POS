@@ -1,5 +1,17 @@
 # Execution State
 
+## Registro web: entrada automática — 2026-11-20
+
+Recuperación guardada en commit local `d5986236`, sin push/despliegue.
+Trabajo web en `C:/src/fp-signup-20261120`, rama
+`agent/signup-auto-entry-20261120`. Se reprodujo la carrera entre actualización
+PWA y preparación del acceso; se añadió espera al primer frame y recuperación
+explícita del canje fallido. 16 pruebas web y 22 Flutter PASS, análisis sin
+incidencias, compilaciones Astro/Web y registro real en Chrome con API/SQL
+aislados. Una sola cuenta y ningún login manual o movimiento financiero.
+Informe: `docs/WEB_REGISTRO_ACCESO_AUDITORIA_2026-11-20.md`.
+Corrección local, no desplegada. El contenido inferior es historial.
+
 ## Entrega automática de incidencias entre usuarios — 2026-11-20
 
 Copia actual: `C:/Users/pc/.codex/worktrees/fullpos-recovery-courier-20261120`,

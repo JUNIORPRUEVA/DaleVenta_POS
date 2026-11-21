@@ -20,6 +20,10 @@ FullPOS Cloud contains the operational apps and a public static website:
   existing Flutter SplashScreen owns company/session loading and its recovery
   actions. Astro login keeps its busy submit button without a second full-screen
   handoff cover; ticket creation and consumption are unchanged.
+  PWA updates wait for the first frame before activating/reloading. An incoming
+  handoff clears the previous local identity and verifies the stored new
+  user/company/token; failure opens public login with an explicit recovery
+  notice before runApp, without replaying the ticket or registration.
   company/fiscal setup remains available through its real configuration routes.
   The old questionnaire is retired from routing (`/onboarding` redirects to
   `/home`). Legacy status fields remain for old clients; the new progress is
