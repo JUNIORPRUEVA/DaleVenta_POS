@@ -1,0 +1,18 @@
+{
+  "passed": true,
+  "viewport": "mobile",
+  "realFrontend": true,
+  "realFullposApi": true,
+  "realAppyra": true,
+  "externalOpenAi": true,
+  "sourcesHidden": true,
+  "entryWidth": 60,
+  "networkFault": "response lost after actual backend processing (Playwright simulation)",
+  "automaticRetries": 0,
+  "userRetry": true,
+  "sameMessage": true,
+  "sameClientMessageId": true,
+  "sameResponse": true,
+  "noDuplicateUserBubble": true,
+  "productionConnected": false
+}

@@ -1,0 +1,11 @@
+{
+  "passed": true,
+  "realRecoveryHttp": true,
+  "networkLoss": "simulated browser abort",
+  "postAttempts": 1,
+  "viewport": [
+    390,
+    844
+  ],
+  "productionConnected": false
+}

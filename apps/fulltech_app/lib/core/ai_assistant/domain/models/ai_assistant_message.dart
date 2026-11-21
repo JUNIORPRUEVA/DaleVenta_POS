@@ -1,4 +1,6 @@
 import 'ai_assistant_citation.dart';
+import 'ai_assistant_resource.dart';
+import 'ai_support_case.dart';
 
 /// Archivo que viaja con un mensaje del chat.
 ///
@@ -28,7 +30,11 @@ class AiAssistantMessage {
   final String content;
   final DateTime createdAt;
   final List<AiAssistantCitation> citations;
+  final List<AiAssistantResource> resources;
   final AiAssistantAttachment? attachment;
+  final AiSupportIncident? incident;
+  final AiSupportCase? supportCase;
+  final bool requiresHumanReview;
 
   const AiAssistantMessage({
     required this.id,
@@ -36,10 +42,48 @@ class AiAssistantMessage {
     required this.content,
     required this.createdAt,
     this.citations = const [],
+    this.resources = const [],
     this.attachment,
+    this.incident,
+    this.supportCase,
+    this.requiresHumanReview = false,
   });
 
   bool get isUser => role == AiAssistantMessageRole.user;
+}
+
+class AiSupportIncident {
+  final String reference;
+  final String status;
+  final bool duplicate;
+
+  const AiSupportIncident({
+    required this.reference,
+    required this.status,
+    this.duplicate = false,
+  });
+
+  static AiSupportIncident? fromMap(dynamic value) {
+    if (value is! Map) return null;
+    final reference = value['reference'];
+    final status = value['status'];
+    if (reference is! String ||
+        !RegExp(r'^FPS-\d{4}-\d{6,}$').hasMatch(reference) ||
+        !const {
+          'OPEN',
+          'IN_PROGRESS',
+          'WAITING_CUSTOMER',
+          'RESOLVED',
+          'CLOSED',
+        }.contains(status)) {
+      return null;
+    }
+    return AiSupportIncident(
+      reference: reference,
+      status: status as String,
+      duplicate: value['duplicate'] == true,
+    );
+  }
 }
 
 enum AiAssistantMessageRole { user, assistant }

@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException, Optional, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { CompanyManualAudience, CompanyManualEntry, CompanyManualEntryKind, DepositOrderStatus, Prisma, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -6,6 +6,10 @@ import { CatalogProductsService } from '../products/catalog-products.service';
 import { AppyraIaClient, AppyraIaError, toFullPosChatResponse } from './appyra-ia.client';
 import { CONTEXT_SECRET_ENV, signCompanyContext } from './appyra-context';
 import { ChatAiAssistantDto } from './dto/chat-ai-assistant.dto';
+import { isForbiddenAssistantSecretRequest } from './secret-request.policy';
+import { requireTenant } from '../auth/tenant-context';
+import { FullposSupportClient, supportIntent } from './fullpos-support.client';
+import { asksFiscalProvider, containsFiscalProvider, FISCAL_PROVIDER_SUPPORT_REPLY } from './fiscal-provider.policy';
 
 type AiRuntimeConfig = {
   apiKey: string;
@@ -62,6 +66,7 @@ type AiAssistantChatResponse = {
   conversationId?: string;
   agentName?: string;
   agentVersion?: number;
+  resetConversation?: boolean;
 };
 
 type PersistedAssistantMemoryRow = {
@@ -130,6 +135,24 @@ type CrmCommercialAiSuggestOutput = {
 
 @Injectable()
 export class AiAssistantService {
+  async supportCase(user: { id: string; role: Role; companyId?: string | null }, ticketId: string,
+    reply?: { message: string; requestId: string }) {
+    const companyId = requireTenant(user);
+    if (!/^[\w-]{1,80}$/.test(ticketId)) throw new BadRequestException('Referencia de soporte inválida');
+    if (!this.support) throw new ServiceUnavailableException('Soporte no está disponible');
+    return this.support.request({ action: reply ? 'reply' : 'read', companyId, userId: user.id, ticketId,
+      ...(reply ? { message: reply.message, requestId: reply.requestId } : {}) });
+  }
+
+  async libraryResource(user: { id: string; role: Role; companyId?: string | null }, resourceId: string) {
+    requireTenant(user);
+    try { return await this.appyraIa.libraryResource(resourceId); }
+    catch (error) {
+      if (error instanceof AppyraIaError && error.status === 404) throw new NotFoundException('Este recurso ya no está disponible.');
+      this.logger.warn('No se pudo obtener un recurso autorizado del asistente.');
+      throw new ServiceUnavailableException('No se pudo abrir el recurso. Inténtalo de nuevo.');
+    }
+  }
   private readonly logger = new Logger(AiAssistantService.name);
 
   private static readonly unauthorizedMessage =
@@ -143,6 +166,7 @@ export class AiAssistantService {
     private readonly config: ConfigService,
     private readonly catalogProducts: CatalogProductsService,
     private readonly appyraIa: AppyraIaClient,
+    @Optional() private readonly support?: FullposSupportClient,
   ) {}
 
   async suggestCommercialOrthography(input: {
@@ -569,6 +593,12 @@ export class AiAssistantService {
     const currentUserName = await this.getCurrentUserPreferredName(user.id);
     const effectiveDto = { ...dto, context };
 
+    if (asksFiscalProvider(message)) {
+      return this.finalizeChatResponse(user, effectiveDto, {
+        source: 'policy', content: FISCAL_PROVIDER_SUPPORT_REPLY, citations: [], requiresHumanReview: true,
+      }, []);
+    }
+
     if (!this.canAccessContext(user.role, context)) {
       return this.finalizeChatResponse(user, effectiveDto, {
         source: 'policy',
@@ -598,6 +628,19 @@ export class AiAssistantService {
     }
 
     // Las barreras de política de arriba son la primera línea y no se delegan nunca.
+    const requestedSupport = supportIntent(message);
+    if (requestedSupport) {
+      const companyId = requireTenant(user);
+      if (!dto.clientMessageId || !this.support) throw new ServiceUnavailableException('Soporte no está disponible. Reintenta este mismo envío.');
+      const company = await this.prisma.company.findUnique({ where: { id: companyId }, select: { name: true } });
+      if (!company) throw new NotFoundException('Empresa no encontrada');
+      const ticket = await this.support.request({ action: 'open', kind: requestedSupport,
+        companyId, companyName: company.name, userId: user.id, requestId: dto.clientMessageId,
+        message: message.slice(0, 4000), history: (dto.history ?? []).slice(-12).map(turn => ({ role: turn.role, content: turn.content.slice(0, 1500) })) });
+      return { source: 'policy', content: `Tu ${requestedSupport === 'incident' ? 'avería' : 'solicitud de atención'} quedó registrada en soporte con la referencia ${ticket.reference}. Puedes seguir aquí, sin salir de FullPOS.`,
+        citations: [], supportCase: ticket };
+    }
+
     // A partir de aquí, si el puente está activo, el turno lo responde APPYRA IA.
     if (this.appyraIa.isEnabled()) {
       return this.tryAppyraIa(user, effectiveDto, message, context, currentUserName);
@@ -790,7 +833,9 @@ export class AiAssistantService {
         {
           ...fallback,
           source: 'appyra-ia-rules',
-          content: `${fallback.content}\n\n(APPYRA IA no respondió; esta respuesta se generó con el conocimiento interno de FullPOS.)`,
+          ...(dto.conversationId && (status === 404 || status === 409)
+            ? { resetConversation: true, content: 'La conversación anterior ya no está disponible. Puedes enviar de nuevo tu consulta para iniciar una nueva. Si estabas registrando una avería, comprueba primero si recibiste su referencia.' }
+            : { content: `${fallback.content}\n\nEl asistente no pudo completar la consulta en línea. Esta orientación usa la información disponible en FullPOS; no confirma ninguna operación.` }),
         },
         knowledge,
       );
@@ -841,15 +886,7 @@ export class AiAssistantService {
   }
 
   private isForbiddenSecretRequest(message: string) {
-    const text = message.toLowerCase();
-    return (
-      text.includes('api key') ||
-      text.includes('apikey') ||
-      text.includes('token') ||
-      text.includes('password') ||
-      text.includes('contraseña') ||
-      text.includes('clave') && text.includes('openai')
-    );
+    return isForbiddenAssistantSecretRequest(message);
   }
 
   private normalizeContext(raw: ChatAiAssistantDto['context']): NormalizedAiContext {
@@ -858,7 +895,10 @@ export class AiAssistantService {
     const module = this.normalizeModuleKey(
       this.normalizeOptionalString(raw?.module) ?? routeContext.module ?? 'general',
     ) || 'general';
-    const screenName = this.normalizeOptionalString(raw?.screenName) ?? routeContext.screenName ?? undefined;
+    // Older clients named the POS after its technical /cotizaciones route.
+    const screenName = routeContext.module === 'cotizaciones' || routeContext.screenName === 'Facturación'
+      ? routeContext.screenName
+      : this.normalizeOptionalString(raw?.screenName) ?? routeContext.screenName ?? undefined;
     const entityType = this.normalizeOptionalString(raw?.entityType) ?? routeContext.entityType ?? undefined;
     const entityId = this.normalizeOptionalString(raw?.entityId) ?? routeContext.entityId ?? undefined;
 
@@ -959,7 +999,7 @@ export class AiAssistantService {
     }
 
     if (path.startsWith('/catalogo')) return { module: 'catalogo', screenName: 'Catálogo' };
-    if (path === '/ventas/nueva') return { module: 'ventas', screenName: 'Registrar venta' };
+    if (path === '/ventas/nueva') return { module: 'ventas', screenName: 'Facturación' };
     if (path.startsWith('/ventas')) return { module: 'ventas', screenName: 'Ventas' };
     if (path === '/service-orders') return { module: 'service-orders', screenName: 'Operaciones' };
     if (path === '/service-orders/nueva') return { module: 'service-orders', screenName: 'Crear orden' };
@@ -991,7 +1031,7 @@ export class AiAssistantService {
         ...(!quoteId && customerPhone ? { entityType: 'client-phone', entityId: customerPhone } : {}),
       };
     }
-    if (path.startsWith('/cotizaciones')) return { module: 'cotizaciones', screenName: 'Cotizaciones' };
+    if (path.startsWith('/cotizaciones')) return { module: 'cotizaciones', screenName: 'Facturación' };
     if (path.startsWith('/users/')) {
       return {
         module: 'administracion',
@@ -1204,8 +1244,8 @@ export class AiAssistantService {
     }
   }
 
-  private async buildKnowledge(user: { id: string; role: Role }, dto: ChatAiAssistantDto): Promise<KnowledgeRecord[]> {
-    const ownerId = await this.resolveCompanyOwnerId(user.id);
+  private async buildKnowledge(user: { id: string; role: Role; companyId?: string | null }, dto: ChatAiAssistantDto): Promise<KnowledgeRecord[]> {
+    const ownerId = await this.resolveCompanyOwnerId(user.id, requireTenant(user));
 
     const manualEntries = await this.prisma.companyManualEntry.findMany({
       where: {
@@ -1333,8 +1373,8 @@ export class AiAssistantService {
         'app-help:cotizaciones',
         'cotizaciones',
         'guia-app',
-        'Uso del módulo de cotizaciones',
-        'En Cotizaciones puedes preparar propuestas, revisar historial y validar reglas comerciales del Manual Interno. Si ya tienes una cotización abierta o un cliente seleccionado, el asistente prioriza ese contexto.',
+        'Facturación: ventas, precuentas y cotizaciones',
+        'Facturación es el punto de venta: permite preparar tickets o precuentas, cobrar ventas y usar Cotizar para guardar una propuesta. Su ruta técnica /cotizaciones no es el nombre de la pantalla. Historial de cotizaciones (/cotizaciones/historial) permite consultar propuestas guardadas; Pasar a ticket las lleva a Facturación y no cobra por sí solo.',
       ),
       this.createAppKnowledgeRecord(
         'app-help:service-orders',
@@ -1403,7 +1443,7 @@ export class AiAssistantService {
   }
 
   private async buildAuthorizedDataKnowledge(
-    user: { id: string; role: Role },
+    user: { id: string; role: Role; companyId?: string | null },
     dto: ChatAiAssistantDto,
   ): Promise<KnowledgeRecord[]> {
     const contextText = [
@@ -1649,8 +1689,8 @@ export class AiAssistantService {
         );
       case 'cotizaciones':
         return (
-          'Este módulo se usa para crear y revisar cotizaciones.\n' +
-          'Puedes preparar propuestas, ver historial por cliente y validar reglas comerciales del Manual Interno.'
+          'Facturación es la pantalla para preparar tickets, gestionar precuentas y cobrar ventas.\n' +
+          'También permite guardar cotizaciones con Cotizar. Historial de cotizaciones consulta las propuestas guardadas; no es la pantalla principal de Facturación.'
         );
       case 'service-orders':
         return (
@@ -1703,8 +1743,8 @@ export class AiAssistantService {
       if (screen.includes('historial')) {
         return 'En Historial de cotizaciones puedes ver cotizaciones anteriores por cliente y seleccionar una para revisar/usar.';
       }
-      if (screen.includes('cotizacion')) {
-        return 'En Cotizaciones puedes crear o revisar propuestas. Si ya tienes un cliente, abre su historial para reutilizar información.';
+      if (screen.includes('factur') || screen.includes('cotizacion')) {
+        return 'En Facturación preparas tickets y precuentas, cobras ventas o guardas propuestas con Cotizar. Para consultar las guardadas abre Historial de cotizaciones; Pasar a ticket vuelve a Facturación sin cobrar automáticamente.';
       }
     }
 
@@ -1870,8 +1910,8 @@ export class AiAssistantService {
     ]);
   }
 
-  private async buildAdaptiveKnowledge(user: { id: string; role: Role }): Promise<KnowledgeRecord[]> {
-    const ownerId = await this.resolveCompanyOwnerId(user.id);
+  private async buildAdaptiveKnowledge(user: { id: string; role: Role; companyId?: string | null }): Promise<KnowledgeRecord[]> {
+    const ownerId = await this.resolveCompanyOwnerId(user.id, requireTenant(user));
 
     const clientWhere: Prisma.ClientWhereInput =
       user.role === Role.TECNICO
@@ -1883,8 +1923,9 @@ export class AiAssistantService {
             ],
           }
         : { isDeleted: false };
-    const salesWhere: Prisma.SaleWhereInput = user.role === Role.ADMIN ? {} : { userId: user.id };
-    const quotesWhere: Prisma.CotizacionWhereInput = user.role === Role.ADMIN ? {} : { createdByUserId: user.id };
+    clientWhere.companyId = requireTenant(user);
+    const salesWhere: Prisma.SaleWhereInput = { companyId: requireTenant(user), ...(user.role === Role.ADMIN ? {} : { userId: user.id }) };
+    const quotesWhere: Prisma.CotizacionWhereInput = { companyId: requireTenant(user), ...(user.role === Role.ADMIN ? {} : { createdByUserId: user.id }) };
 
     const [
       manualCount,
@@ -1921,12 +1962,12 @@ export class AiAssistantService {
         orderBy: { updatedAt: 'desc' },
         select: { customerName: true, updatedAt: true },
       }),
-      this.prisma.product.count(),
+      this.prisma.product.count({ where: { companyId: requireTenant(user) } }),
     ]);
 
     let productCount = fallbackProductCount;
     try {
-      const liveCatalog = await this.catalogProducts.findAll();
+      const liveCatalog = await this.catalogProducts.findAll({ companyId: requireTenant(user), fullposCompanyId: requireTenant(user) });
       if (liveCatalog.total > 0) {
         productCount = liveCatalog.total;
       }
@@ -2012,11 +2053,12 @@ export class AiAssistantService {
   }
 
   private async buildPersistentMemoryKnowledge(
-    user: { id: string; role: Role },
+    user: { id: string; role: Role; companyId?: string | null },
     dto: ChatAiAssistantDto,
   ): Promise<KnowledgeRecord[]> {
+    if (!user.companyId) return [];
     try {
-      const ownerId = await this.resolveCompanyOwnerId(user.id);
+      const ownerId = await this.resolveCompanyOwnerId(user.id, requireTenant(user));
       const memoryRows = await this.prisma.$queryRaw<PersistedAssistantMemoryRow[]>(Prisma.sql`
         SELECT
           id::text AS id,
@@ -2031,8 +2073,9 @@ export class AiAssistantService {
           "createdAt",
           "updatedAt"
         FROM ai_assistant_memories
-        WHERE owner_id = ${ownerId}
-          AND user_id = ${user.id}
+        WHERE owner_id = CAST(${ownerId} AS UUID)
+          AND user_id = CAST(${user.id} AS UUID)
+          AND company_id = CAST(${user.companyId} AS UUID)
         ORDER BY last_source_at DESC
         LIMIT 24
       `);
@@ -2044,8 +2087,9 @@ export class AiAssistantService {
           module,
           "createdAt"
         FROM ai_assistant_conversation_turns
-        WHERE owner_id = ${ownerId}
-          AND user_id = ${user.id}
+        WHERE owner_id = CAST(${ownerId} AS UUID)
+          AND user_id = CAST(${user.id} AS UUID)
+          AND company_id = CAST(${user.companyId} AS UUID)
         ORDER BY "createdAt" DESC
         LIMIT 4
       `);
@@ -2102,28 +2146,34 @@ export class AiAssistantService {
   }
 
   private async finalizeChatResponse(
-    user: { id: string; role: Role },
+    user: { id: string; role: Role; companyId?: string | null },
     dto: ChatAiAssistantDto & { context: NormalizedAiContext },
     response: AiAssistantChatResponse,
     knowledge: KnowledgeRecord[],
   ) {
+    if (containsFiscalProvider(response.content)) {
+      response = { source: 'policy', content: FISCAL_PROVIDER_SUPPORT_REPLY, citations: [],
+        requiresHumanReview: true, ...(response.conversationId ? { conversationId: response.conversationId } : {}) };
+    }
     await this.persistLearningArtifacts(user, dto, response, knowledge);
     return response;
   }
 
   private async persistLearningArtifacts(
-    user: { id: string; role: Role },
+    user: { id: string; role: Role; companyId?: string | null },
     dto: ChatAiAssistantDto & { context: NormalizedAiContext },
     response: AiAssistantChatResponse,
     knowledge: KnowledgeRecord[],
   ) {
+    if (!user.companyId || response.denied) return;
     try {
-      const ownerId = await this.resolveCompanyOwnerId(user.id);
+      const ownerId = await this.resolveCompanyOwnerId(user.id, requireTenant(user));
       const citationsJson = JSON.stringify(response.citations ?? []);
 
       await this.prisma.$executeRaw(Prisma.sql`
         INSERT INTO ai_assistant_conversation_turns (
           id,
+          company_id,
           owner_id,
           user_id,
           module,
@@ -2138,8 +2188,9 @@ export class AiAssistantService {
           "createdAt"
         ) VALUES (
           gen_random_uuid(),
-          ${ownerId},
-          ${user.id},
+          CAST(${user.companyId} AS UUID),
+          CAST(${ownerId} AS UUID),
+          CAST(${user.id} AS UUID),
           ${dto.context.module || 'general'},
           ${dto.context.route ?? null},
           ${dto.context.entityType ?? null},
@@ -2147,7 +2198,7 @@ export class AiAssistantService {
           ${dto.message},
           ${response.content},
           ${response.source},
-          ${response.denied === true},
+          false,
           CAST(${citationsJson} AS JSONB),
           CURRENT_TIMESTAMP
         )
@@ -2155,7 +2206,7 @@ export class AiAssistantService {
 
       const notes = this.buildPersistentMemoryNotes(dto, response, knowledge);
       for (const note of notes) {
-        await this.upsertPersistentMemory(ownerId, user.id, note);
+        await this.upsertPersistentMemory(ownerId, user.id, { ...note, topicKey: `${user.companyId}:${note.topicKey}` }, user.companyId);
       }
     } catch (error) {
       this.logDebug('ai.memory.persist_skip', {
@@ -2218,7 +2269,7 @@ export class AiAssistantService {
     return filtered.slice(0, 3);
   }
 
-  private async upsertPersistentMemory(ownerId: string, userId: string, note: AssistantMemoryNote) {
+  private async upsertPersistentMemory(ownerId: string, userId: string, note: AssistantMemoryNote, companyId: string) {
     const existing = await this.prisma.$queryRaw<Array<{
       summary: string;
       keywords: Prisma.JsonValue | null;
@@ -2226,8 +2277,9 @@ export class AiAssistantService {
     }>>(Prisma.sql`
       SELECT summary, keywords, source_count AS "sourceCount"
       FROM ai_assistant_memories
-      WHERE owner_id = ${ownerId}
-        AND user_id = ${userId}
+      WHERE owner_id = CAST(${ownerId} AS UUID)
+        AND user_id = CAST(${userId} AS UUID)
+        AND company_id = CAST(${companyId} AS UUID)
         AND scope = ${note.scope}
         AND topic_key = ${note.topicKey}
       LIMIT 1
@@ -2248,8 +2300,9 @@ export class AiAssistantService {
           source_count = source_count + 1,
           last_source_at = CURRENT_TIMESTAMP,
           "updatedAt" = CURRENT_TIMESTAMP
-        WHERE owner_id = ${ownerId}
-          AND user_id = ${userId}
+        WHERE owner_id = CAST(${ownerId} AS UUID)
+          AND user_id = CAST(${userId} AS UUID)
+          AND company_id = CAST(${companyId} AS UUID)
           AND scope = ${note.scope}
           AND topic_key = ${note.topicKey}
       `);
@@ -2259,6 +2312,7 @@ export class AiAssistantService {
     await this.prisma.$executeRaw(Prisma.sql`
       INSERT INTO ai_assistant_memories (
         id,
+        company_id,
         owner_id,
         user_id,
         scope,
@@ -2273,8 +2327,9 @@ export class AiAssistantService {
         "updatedAt"
       ) VALUES (
         gen_random_uuid(),
-        ${ownerId},
-        ${userId},
+        CAST(${companyId} AS UUID),
+        CAST(${ownerId} AS UUID),
+        CAST(${userId} AS UUID),
         ${note.scope},
         ${note.module},
         ${note.topicKey},
@@ -2375,7 +2430,7 @@ export class AiAssistantService {
   }
 
   private isOtherUserSensitiveRequest(
-    user: { id: string; role: Role },
+    user: { id: string; role: Role; companyId?: string | null },
     message: string,
     context: NormalizedAiContext,
   ) {
@@ -2411,7 +2466,7 @@ export class AiAssistantService {
   }
 
   private async buildSelfKnowledge(
-    user: { id: string; role: Role },
+    user: { id: string; role: Role; companyId?: string | null },
     dto: ChatAiAssistantDto,
   ): Promise<KnowledgeRecord[]> {
     const record = await this.prisma.user.findUnique({
@@ -2577,12 +2632,13 @@ export class AiAssistantService {
       .map((item) => item.k);
   }
 
-  private buildServiceOrderWhereForUser(user: { id: string; role: Role }): Prisma.ServiceOrderWhereInput {
+  private buildServiceOrderWhereForUser(user: { id: string; role: Role; companyId?: string | null }): Prisma.ServiceOrderWhereInput {
     if (user.role === Role.ADMIN || user.role === Role.ASISTENTE) {
-      return {};
+      return { client: { companyId: requireTenant(user) } };
     }
     if (user.role === Role.TECNICO) {
       return {
+        client: { companyId: requireTenant(user) },
         OR: [
           { assignedToId: user.id },
           { technicianConfirmedById: user.id },
@@ -2591,10 +2647,10 @@ export class AiAssistantService {
       };
     }
 
-    return { createdById: user.id };
+    return { client: { companyId: requireTenant(user) }, createdById: user.id };
   }
 
-  private async buildServiceOrderKnowledge(user: { id: string; role: Role }, dto: ChatAiAssistantDto): Promise<KnowledgeRecord[]> {
+  private async buildServiceOrderKnowledge(user: { id: string; role: Role; companyId?: string | null }, dto: ChatAiAssistantDto): Promise<KnowledgeRecord[]> {
     const accessibleWhere = this.buildServiceOrderWhereForUser(user);
     const count = await this.prisma.serviceOrder.count({ where: accessibleWhere });
 
@@ -2784,7 +2840,7 @@ export class AiAssistantService {
     return normalized.charAt(0).toUpperCase() + normalized.slice(1);
   }
 
-  private async buildClientKnowledge(user: { id: string; role: Role }, dto: ChatAiAssistantDto): Promise<KnowledgeRecord[]> {
+  private async buildClientKnowledge(user: { id: string; role: Role; companyId?: string | null }, dto: ChatAiAssistantDto): Promise<KnowledgeRecord[]> {
     const isAdmin = user.role === Role.ADMIN;
 
     const accessibleWhere: Prisma.ClientWhereInput =
@@ -2798,6 +2854,7 @@ export class AiAssistantService {
           }
         : { isDeleted: false };
 
+    accessibleWhere.companyId = requireTenant(user);
     const count = await this.prisma.client.count({ where: accessibleWhere });
 
     const base = [
@@ -2924,24 +2981,24 @@ export class AiAssistantService {
         rankedClients.slice(0, 3).map(async (client) => {
           const [salesAgg, quotesAgg, latestSale, latestQuote] = await this.prisma.$transaction([
             this.prisma.sale.aggregate({
-              where: { customerId: client.id, isDeleted: false },
+              where: { companyId: requireTenant(user), customerId: client.id, isDeleted: false },
               _count: { _all: true },
               _sum: { totalSold: true },
               _max: { saleDate: true },
             }),
             this.prisma.cotizacion.aggregate({
-              where: { customerId: client.id },
+              where: { companyId: requireTenant(user), customerId: client.id },
               _count: { _all: true },
               _sum: { total: true },
               _max: { updatedAt: true },
             }),
             this.prisma.sale.findFirst({
-              where: { customerId: client.id, isDeleted: false },
+              where: { companyId: requireTenant(user), customerId: client.id, isDeleted: false },
               orderBy: { saleDate: 'desc' },
               select: { saleDate: true, totalSold: true },
             }),
             this.prisma.cotizacion.findFirst({
-              where: { customerId: client.id },
+              where: { companyId: requireTenant(user), customerId: client.id },
               orderBy: { updatedAt: 'desc' },
               select: { updatedAt: true, total: true, customerName: true },
             }),
@@ -3018,7 +3075,7 @@ export class AiAssistantService {
       return base;
     }
 
-    const saleCount = await this.prisma.sale.count({ where: { customerId: client.id, isDeleted: false } });
+    const saleCount = await this.prisma.sale.count({ where: { companyId: requireTenant(user), customerId: client.id, isDeleted: false } });
 
     base.push(
       this.createAppKnowledgeRecord(
@@ -3046,7 +3103,7 @@ export class AiAssistantService {
     return base;
   }
 
-  private async buildCatalogKnowledge(user: { id: string; role: Role }, dto: ChatAiAssistantDto): Promise<KnowledgeRecord[]> {
+  private async buildCatalogKnowledge(user: { id: string; role: Role; companyId?: string | null }, dto: ChatAiAssistantDto): Promise<KnowledgeRecord[]> {
     const searchTokens = this.extractMeaningfulQueryTerms(dto.message, {
       limit: 6,
       extraNoise: [
@@ -3093,7 +3150,7 @@ export class AiAssistantService {
     }> = [];
 
     try {
-      const catalog = await this.catalogProducts.findAll();
+      const catalog = await this.catalogProducts.findAll({ companyId: requireTenant(user), fullposCompanyId: requireTenant(user) });
       catalogSource = catalog.source;
       remoteProducts = catalog.items.map((item) => ({
         id: item.id,
@@ -3118,8 +3175,9 @@ export class AiAssistantService {
         .map(([category, count]) => `- ${category}: ${count}`)
         .join('\n');
     } catch {
-      total = await this.prisma.product.count();
+      total = await this.prisma.product.count({ where: { companyId: requireTenant(user) } });
       const topCategories = await this.prisma.product.groupBy({
+        where: { companyId: requireTenant(user) },
         by: ['categoria'],
         _count: { categoria: true },
         orderBy: { _count: { categoria: 'desc' } },
@@ -3155,6 +3213,7 @@ export class AiAssistantService {
       ? remoteProducts
       : await this.prisma.product.findMany({
           where: {
+            companyId: requireTenant(user),
             OR: [
               ...searchVariants.map((token) => ({ nombre: { contains: token, mode: 'insensitive' as const } })),
               ...searchVariants.map((token) => ({ categoria: { contains: token, mode: 'insensitive' as const } })),
@@ -3366,10 +3425,10 @@ export class AiAssistantService {
     ].includes(token);
   }
 
-  private async buildQuoteKnowledge(user: { id: string; role: Role }, dto: ChatAiAssistantDto): Promise<KnowledgeRecord[]> {
+  private async buildQuoteKnowledge(user: { id: string; role: Role; companyId?: string | null }, dto: ChatAiAssistantDto): Promise<KnowledgeRecord[]> {
     const where: Prisma.CotizacionWhereInput = user.role === Role.ADMIN
-      ? {}
-      : { createdByUserId: user.id };
+      ? { companyId: requireTenant(user) }
+      : { companyId: requireTenant(user), createdByUserId: user.id };
 
     const totalQuotes = await this.prisma.cotizacion.count({ where });
     const result: KnowledgeRecord[] = [
@@ -3440,10 +3499,10 @@ export class AiAssistantService {
     return result;
   }
 
-  private async buildSalesKnowledge(user: { id: string; role: Role }, dto: ChatAiAssistantDto): Promise<KnowledgeRecord[]> {
+  private async buildSalesKnowledge(user: { id: string; role: Role; companyId?: string | null }, dto: ChatAiAssistantDto): Promise<KnowledgeRecord[]> {
     const where: Prisma.SaleWhereInput = user.role === Role.ADMIN
-      ? { isDeleted: false }
-      : { userId: user.id, isDeleted: false };
+      ? { companyId: requireTenant(user), isDeleted: false }
+      : { companyId: requireTenant(user), userId: user.id, isDeleted: false };
 
     const [count, latest] = await this.prisma.$transaction([
       this.prisma.sale.count({ where }),
@@ -3505,16 +3564,17 @@ export class AiAssistantService {
     return result;
   }
 
-  private async buildAccountingKnowledge(user: { id: string; role: Role }, dto: ChatAiAssistantDto): Promise<KnowledgeRecord[]> {
+  private async buildAccountingKnowledge(user: { id: string; role: Role; companyId?: string | null }, dto: ChatAiAssistantDto): Promise<KnowledgeRecord[]> {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const todayEnd = new Date();
     todayEnd.setHours(23, 59, 59, 999);
 
     const [closeCount, pendingDepositOrders, latestClose] = await this.prisma.$transaction([
-      this.prisma.close.count({ where: { date: { gte: todayStart, lte: todayEnd } } }),
-      this.prisma.depositOrder.count({ where: { status: DepositOrderStatus.PENDING } }),
+      this.prisma.close.count({ where: { companyId: requireTenant(user), date: { gte: todayStart, lte: todayEnd } } }),
+      this.prisma.depositOrder.count({ where: { companyId: requireTenant(user), status: DepositOrderStatus.PENDING } }),
       this.prisma.close.findFirst({
+        where: { companyId: requireTenant(user) },
         orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
         select: {
           id: true,
@@ -3552,7 +3612,7 @@ export class AiAssistantService {
     return result;
   }
 
-  private async buildContractKnowledge(user: { id: string; role: Role }, dto: ChatAiAssistantDto): Promise<KnowledgeRecord[]> {
+  private async buildContractKnowledge(user: { id: string; role: Role; companyId?: string | null }, dto: ChatAiAssistantDto): Promise<KnowledgeRecord[]> {
     const base: KnowledgeRecord[] = [
       this.createAppKnowledgeRecord(
         'app-data:contracts-policy',
@@ -4116,13 +4176,18 @@ export class AiAssistantService {
       .filter((x): x is NonNullable<typeof x> => !!x);
   }
 
-  private async resolveCompanyOwnerId(fallbackUserId: string) {
+  private async resolveCompanyOwnerId(fallbackUserId: string, companyId: string) {
     const admin = await this.prisma.user.findFirst({
-      where: { role: Role.ADMIN },
+      where: { role: Role.ADMIN, companyId },
       orderBy: { createdAt: 'asc' },
       select: { id: true },
     });
-    return admin?.id ?? fallbackUserId;
+    if (admin) return admin.id;
+    const ownUser = await this.prisma.user.findFirst({
+      where: { id: fallbackUserId, companyId }, select: { id: true },
+    });
+    if (!ownUser) throw new BadRequestException('No se pudo determinar el contexto de esta empresa para el asistente.');
+    return ownUser.id;
   }
 
   /**

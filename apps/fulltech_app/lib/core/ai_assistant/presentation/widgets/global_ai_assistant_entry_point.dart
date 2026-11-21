@@ -1,5 +1,3 @@
-import 'dart:ui' show ImageFilter;
-
 import 'package:flutter/material.dart' hide GestureDetector;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -12,6 +10,9 @@ import '../../domain/models/ai_chat_context.dart';
 import '../ai_chat_context_resolver.dart';
 import 'ai_assistant_dock_button.dart';
 import 'ai_assistant_sheet.dart';
+import 'ai_assistant_focus_backdrop.dart';
+
+final mobileAiAssistantSheetOpenProvider = StateProvider<bool>((ref) => false);
 
 class GlobalAiAssistantEntryPoint extends ConsumerWidget {
   const GlobalAiAssistantEntryPoint({super.key, required this.child});
@@ -25,6 +26,7 @@ class GlobalAiAssistantEntryPoint extends ConsumerWidget {
 
     final hiddenByScreen = ref.watch(hideGlobalAiAssistantEntryPointProvider);
     if (hiddenByScreen) return child;
+    final mobileSheetOpen = ref.watch(mobileAiAssistantSheetOpenProvider);
 
     final router = ref.watch(routerProvider);
     final location = _safeLocation(context, router);
@@ -35,14 +37,14 @@ class GlobalAiAssistantEntryPoint extends ConsumerWidget {
     return Stack(
       children: [
         child,
-        if (!isDesktop)
+        if (!isDesktop && !mobileSheetOpen)
           Positioned(
             right: 14,
             // En layouts compactos el carrito ocupa el pie de la pantalla: el
             // botón del asistente se ancla al centro vertical del borde derecho
             // para no superponerse a Cobrar, Cotizar ni a las líneas del
             // carrito. Posición derivada del viewport, sin coordenadas fijas.
-            top: (MediaQuery.sizeOf(context).height * 0.5 - 32)
+            top: (MediaQuery.sizeOf(context).height * 0.5 - 30)
                 .clamp(70.0, double.infinity)
                 .toDouble(),
             child: Builder(
@@ -123,14 +125,24 @@ class GlobalAiAssistantEntryPoint extends ConsumerWidget {
       return;
     }
 
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      isDismissible: true,
-      enableDrag: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => const GlobalAiChatSheet(),
-    );
+    final openState = ref.read(mobileAiAssistantSheetOpenProvider.notifier);
+    if (openState.state) return;
+    openState.state = true;
+    showGeneralDialog<void>(
+      // Este acceso vive en MaterialApp.builder, por encima del Navigator.
+      // La hoja necesita el contexto de su Overlay, igual que los diálogos.
+      context: appRootNavigatorKey.currentState?.overlay?.context ?? context,
+      barrierDismissible: true,
+      barrierLabel: 'Cerrar FullPOS IA',
+      barrierColor: Colors.transparent,
+      transitionDuration: const Duration(milliseconds: 240),
+      pageBuilder: (dialogContext, _, __) => Stack(children: [
+        Positioned.fill(child: AiAssistantFocusBackdrop(
+          onDismiss: () => Navigator.of(dialogContext).maybePop())),
+        const Align(alignment: Alignment.bottomCenter, child: GlobalAiChatSheet()),
+      ]),
+      transitionBuilder: (_, animation, __, child) => FadeTransition(opacity: animation, child: child),
+    ).whenComplete(() => openState.state = false);
   }
 
   /// Abre el panel lateral del asistente en escritorio.
@@ -158,15 +170,8 @@ class GlobalAiAssistantEntryPoint extends ConsumerWidget {
         return Stack(
           children: [
             Positioned.fill(
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 3, sigmaY: 3),
-                child: ModalBarrier(
-                  color: Colors.black.withValues(alpha: 0.12),
-                  dismissible: true,
-                  semanticsLabel: 'Cerrar FullPOS IA',
-                  onDismiss: () => Navigator.of(dialogContext).maybePop(),
-                ),
-              ),
+              child: AiAssistantFocusBackdrop(
+                onDismiss: () => Navigator.of(dialogContext).maybePop()),
             ),
             Align(
               alignment: Alignment.centerRight,
@@ -190,13 +195,7 @@ class GlobalAiAssistantEntryPoint extends ConsumerWidget {
           parent: animation,
           curve: Curves.easeOutCubic,
         );
-        return SlideTransition(
-          position: Tween<Offset>(
-            begin: const Offset(1, 0),
-            end: Offset.zero,
-          ).animate(curved),
-          child: child,
-        );
+        return FadeTransition(opacity: curved, child: child);
       },
     ).whenComplete(() {
       ref.read(desktopAiAssistantPanelOpenProvider.notifier).state = false;

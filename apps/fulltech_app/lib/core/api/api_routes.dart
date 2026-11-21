@@ -483,6 +483,7 @@ class ApiRoutes {
 
   // Asistente IA (global)
   static const aiChat = '/ai/chat';
+  static String aiResourceFile(String id) => '/ai/resources/${Uri.encodeComponent(id)}';
 
   /// Subida de una captura o documento para que el asistente lo lea.
   static const aiAttachments = '/ai/attachments';

@@ -4,11 +4,12 @@ import { AiAccountController } from './ai-account.controller';
 import { AiAssistantController } from './ai-assistant.controller';
 import { AiAssistantService } from './ai-assistant.service';
 import { AppyraIaClient } from './appyra-ia.client';
+import { FullposSupportClient } from './fullpos-support.client';
 
 @Module({
   imports: [ProductsModule],
   controllers: [AiAssistantController, AiAccountController],
-  providers: [AiAssistantService, AppyraIaClient],
+  providers: [AiAssistantService, AppyraIaClient, FullposSupportClient],
   exports: [AiAssistantService],
 })
 export class AiAssistantModule {}
