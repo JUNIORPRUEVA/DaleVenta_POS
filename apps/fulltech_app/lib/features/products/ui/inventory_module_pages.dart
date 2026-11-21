@@ -51,6 +51,7 @@ import '../../warehouses/data/warehouse_repository.dart';
 import 'product_lifecycle_dialog.dart';
 import 'product_lifecycle_feedback.dart';
 import 'product_artwork.dart';
+import '../../../core/utils/customer_visible_text.dart';
 import '../../../core/realtime/operations_refresh_signals.dart';
 
 const _primaryBlue = AppColors.secondary;
@@ -187,6 +188,9 @@ String _productReference(ProductModel product) {
   if (rawReference.toLowerCase() == product.id.trim().toLowerCase()) return '';
   return _looksLikeInternalProductId(rawReference) ? '' : rawReference;
 }
+
+String _productNameForCustomer(ProductModel product) =>
+    product.nombre == product.id ? 'Producto' : customerVisibleText(product.nombre, fallback: 'Producto');
 
 bool _looksLikeInternalProductId(String value) {
   if (value.isEmpty) return false;
@@ -1242,9 +1246,7 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
         .fetchProducts(forceRefresh: true, silent: true);
     if (!mounted) return;
     if (products.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No hay productos para exportar')),
-      );
+      ProductLifecycleFeedback.notice(context, 'No hay productos para exportar', warning: true);
       return;
     }
 
@@ -1261,30 +1263,16 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            saved ? 'Inventario exportado en Excel' : 'Exportación cancelada',
-          ),
-        ),
-      );
+      ProductLifecycleFeedback.notice(context, saved ? 'Inventario exportado en Excel' : 'Exportación cancelada');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'No se pudo exportar el catálogo. Inténtalo nuevamente.',
-          ),
-        ),
-      );
+      ProductLifecycleFeedback.notice(context, 'No se pudo exportar el catálogo. Inténtalo nuevamente.', warning: true);
     }
   }
 
   Future<void> _exportProductsSelection(List<ProductModel> products) async {
     if (products.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Selecciona productos para exportar')),
-      );
+      ProductLifecycleFeedback.notice(context, 'Selecciona productos para exportar', warning: true);
       return;
     }
     final saved = await saveMediaBytes(
@@ -1299,18 +1287,12 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
           'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     );
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(saved ? 'Selección exportada' : 'Exportación cancelada'),
-      ),
-    );
+    ProductLifecycleFeedback.notice(context, saved ? 'Selección exportada' : 'Exportación cancelada');
   }
 
   Future<void> _showProductsPdf(List<ProductModel> products) async {
     if (products.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Selecciona productos para ver el PDF')),
-      );
+      ProductLifecycleFeedback.notice(context, 'Selecciona productos para ver el PDF', warning: true);
       return;
     }
     final bytes = await _buildProductsPdf(products);
@@ -1378,9 +1360,7 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
 
   Future<void> _deleteProductsSelection(List<ProductModel> products, {bool archive = false}) async {
     if (products.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Selecciona productos para eliminar')),
-      );
+      ProductLifecycleFeedback.notice(context, 'Selecciona productos para eliminar', warning: true);
       return;
     }
     final allowed = await ensureAdminAuthorization(
@@ -1451,11 +1431,7 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
     String category,
   ) async {
     if (products.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Selecciona productos para cambiar categoría'),
-        ),
-      );
+      ProductLifecycleFeedback.notice(context, 'Selecciona productos para cambiar categoría', warning: true);
       return;
     }
     final allowed = await ensureAdminAuthorization(
@@ -1506,11 +1482,7 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
       final bytes = await _readPickedFileBytes(file);
       if (!mounted) return;
       if (bytes == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No se pudo leer el archivo seleccionado'),
-          ),
-        );
+        ProductLifecycleFeedback.notice(context, 'No se pudo leer el archivo seleccionado', warning: true);
         return;
       }
       final extension = (file.extension ?? '').trim().toLowerCase();
@@ -1522,11 +1494,7 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
       if (bundle.products.isEmpty &&
           bundle.categories.isEmpty &&
           bundle.suppliers.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No se encontraron datos válidos para importar'),
-          ),
-        );
+        ProductLifecycleFeedback.notice(context, 'No se encontraron datos válidos para importar', warning: true);
         return;
       }
 
@@ -1583,22 +1551,10 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
         progress.dispose();
       }
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Importación lista: ${imported.created} nuevos, ${imported.updated} actualizados, ${imported.skippedExisting} existentes omitidos, ${imported.skippedFileDuplicates} repetidos del archivo omitidos.',
-          ),
-        ),
-      );
+      ProductLifecycleFeedback.notice(context, 'Importación lista: ${imported.created} nuevos, ${imported.updated} actualizados, ${imported.skippedExisting} existentes omitidos, ${imported.skippedFileDuplicates} repetidos del archivo omitidos.');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'No se pudo importar el catálogo. Revisa el archivo e inténtalo nuevamente.',
-          ),
-        ),
-      );
+      ProductLifecycleFeedback.notice(context, 'No se pudo importar el catálogo. Revisa el archivo e inténtalo nuevamente.', warning: true);
     }
   }
 
@@ -2971,11 +2927,7 @@ class _CatalogTabState extends State<CatalogTab> {
   Future<void> _changeSelectedCategory() async {
     final selected = _selectedProducts;
     if (selected.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Selecciona productos para cambiar categoría'),
-        ),
-      );
+      ProductLifecycleFeedback.notice(context, 'Selecciona productos para cambiar categoría', warning: true);
       return;
     }
     final category = await _showBulkCategoryPicker(context, _categories);
@@ -2983,11 +2935,7 @@ class _CatalogTabState extends State<CatalogTab> {
     await widget.onBulkChangeCategory(selected, category);
     if (!mounted) return;
     setState(() => _selectedIds.clear());
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${selected.length} productos movidos a "$category"'),
-      ),
-    );
+    ProductLifecycleFeedback.notice(context, '${selected.length} productos movidos a "$category"');
   }
 
   Future<void> _handleBulkAction(_CatalogBulkAction action) async {
@@ -5380,7 +5328,7 @@ class _SelectedStockProduct extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  product.nombre,
+                  _productNameForCustomer(product),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -5594,7 +5542,7 @@ class _StockProductRow extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        product.nombre,
+                        _productNameForCustomer(product),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
@@ -6440,15 +6388,8 @@ class _CategoryEditorDialogState extends State<_CategoryEditorDialog> {
       if (!mounted) return;
       setState(() => _error = mobileProductImageErrorMessage(e));
       if (isMobilePermissionError(e)) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(mobileProductImageErrorMessage(e)),
-            action: SnackBarAction(
-              label: 'Configuración',
-              onPressed: () => unawaited(openAppSettings()),
-            ),
-          ),
-        );
+        ProductLifecycleFeedback.notice(context, mobileProductImageErrorMessage(e), warning: true,
+          actionLabel: 'Configuración', onAction: () => unawaited(openAppSettings()));
       }
     }
   }
@@ -7041,7 +6982,7 @@ class _CompactProductInfo extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Text(
-          product.nombre,
+          _productNameForCustomer(product),
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(
@@ -7117,7 +7058,7 @@ class _ProductDetailPage extends StatelessWidget {
                   imageUrl: product.displayFotoUrl,
                 ),
                 productId: product.id,
-                productName: product.nombre,
+                productName: _productNameForCustomer(product),
                 originalUrl: product.displayFotoUrl,
                 fit: BoxFit.contain,
                 fallback: const Icon(
@@ -7129,7 +7070,7 @@ class _ProductDetailPage extends StatelessWidget {
             ),
             const SizedBox(height: 14),
             Text(
-              product.nombre,
+              _productNameForCustomer(product),
               style: const TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.w900,
@@ -7309,7 +7250,7 @@ class ProductThumbnail extends StatelessWidget {
           : ProductNetworkImage(
               imageUrl: imageUrl,
               productId: product.id,
-              productName: product.nombre,
+              productName: _productNameForCustomer(product),
               originalUrl: product.originalFotoUrl,
               fit: BoxFit.contain,
               loading: const SizedBox.shrink(),
@@ -7430,7 +7371,7 @@ class _ProductNameCell extends StatelessWidget {
         SizedBox(
           width: (MediaQuery.sizeOf(context).width * .25).clamp(180.0, 480.0),
           child: Text(
-            product.nombre,
+            _productNameForCustomer(product),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontWeight: FontWeight.w800),
@@ -8664,17 +8605,8 @@ class _InventoryProductEditorPageState
     if (!mounted) return;
     setState(() => _formError = mobileProductImageErrorMessage(error));
     if (isMobilePermissionError(error)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(mobileProductImageErrorMessage(error)),
-          action: SnackBarAction(
-            label: 'Configuración',
-            onPressed: () {
-              unawaited(openAppSettings());
-            },
-          ),
-        ),
-      );
+      ProductLifecycleFeedback.notice(context, mobileProductImageErrorMessage(error), warning: true,
+        actionLabel: 'Configuración', onAction: () => unawaited(openAppSettings()));
     }
   }
 
@@ -9546,7 +9478,7 @@ class _InventoryProductEditorPageState
                       ? ProductNetworkImage(
                           imageUrl: existingImageUrl,
                           productId: product.id,
-                          productName: product.nombre,
+                          productName: _productNameForCustomer(product),
                           originalUrl: product.originalFotoUrl,
                           fit: BoxFit.cover,
                           fallback: const Icon(

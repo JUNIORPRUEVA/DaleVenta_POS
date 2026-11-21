@@ -52,6 +52,13 @@ Role-specific branding can change primary/secondary/tertiary colors. Check `role
 
 ## Buttons and Inputs
 
+Action notices (owner clarification, 2026-11-21): AppFeedback transient notices
+use a compact paragraph with a bold short title, icon and close action, at 12 px
+from the top and right safe edges. Product lifecycle notices use the same upper
+right position; the previous lower corner instruction is superseded. Technical
+record identifiers are hidden in customer-facing product labels and these
+notices; persisted identifiers and commercial product codes remain unchanged.
+
 - Elevated/Filled buttons use role primary color and white foreground.
 - Outlined/Text buttons use role primary color.
 - Buttons use Manrope label styling and minimum 40px size.

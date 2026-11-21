@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../../core/errors/user_safe_error_text.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/utils/customer_visible_text.dart';
 import 'product_lifecycle_feedback.dart';
 import 'product_artwork.dart';
 import '../../catalogo/data/catalog_repository.dart';
@@ -150,7 +151,12 @@ class _ProductLifecycleDialogState
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(widget.name, style: Theme.of(context).textTheme.titleSmall),
+              Text(
+                widget.name == widget.productId
+                    ? 'Producto'
+                    : customerVisibleText(widget.name, fallback: 'Producto'),
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
               if (_busy)
                 const Padding(
                   padding: EdgeInsets.all(16),
@@ -167,7 +173,7 @@ class _ProductLifecycleDialogState
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  state.reason,
+                  customerVisibleText(state.reason),
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 if (state.canAnnul) ...[
@@ -365,9 +371,16 @@ class _ArchivedProductsDialogState
                           size: 20,
                           color: AppColors.primary,
                         ),
-                        title: Text('${item['nombre']}'),
+                        title: Text(
+                          item['nombre'] == item['id']
+                              ? 'Producto'
+                              : customerVisibleText(
+                                  '${item['nombre'] ?? ''}',
+                                  fallback: 'Producto',
+                                ),
+                        ),
                         subtitle: Text(
-                          '${item['codigo'] ?? 'Sin código'} · ${annulled ? 'Alta anulada' : 'Archivado'}',
+                          '${item['codigo'] == item['id'] ? 'Sin código' : customerVisibleText('${item['codigo'] ?? ''}', fallback: 'Sin código')} · ${annulled ? 'Alta anulada' : 'Archivado'}',
                         ),
                         trailing: const Icon(Icons.chevron_right),
                         onTap: _busy

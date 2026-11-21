@@ -42,7 +42,7 @@ void main() {
           expect(find.byType(SnackBar), findsNothing);
           final rect = tester.getRect(card);
           expect(size.width - rect.right, closeTo(12, 1));
-          expect(size.height - rect.bottom, closeTo(12, 1));
+          expect(rect.top, closeTo(12, 1));
         }
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pump();
@@ -140,11 +140,20 @@ void main() {
       }
       await tester.tap(find.widgetWithText(OutlinedButton, flow.$2));
       await tester.pumpAndSettle();
-      expect(find.text(flow.$4), findsNothing);
+      expect(
+        find.byKey(const ValueKey('persistent_feedback_card')),
+        findsNothing,
+      );
       await tester.tap(find.widgetWithText(ElevatedButton, flow.$3));
       await tester.pumpAndSettle();
       expect(find.byType(AlertDialog), findsNothing);
-      expect(find.textContaining(flow.$4), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('persistent_feedback_card')),
+          matching: find.textContaining(flow.$4),
+        ),
+        findsOneWidget,
+      );
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump();

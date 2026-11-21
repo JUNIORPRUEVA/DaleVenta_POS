@@ -2,6 +2,13 @@
 
 ## Ciclo de vida de productos — cierre técnico y revisión visual
 
+Aclaración visual posterior a `30e030db`: avisos en párrafo compacto arriba a la
+derecha (12 px de la zona segura); IDs técnicos ocultos en etiquetas de producto
+y avisos, sin cambiar identificadores guardados ni códigos comerciales. También
+se retiraron las barras inferiores de avisos en Productos. 184 pruebas de
+interfaz aprobadas, análisis sin incidencias, Windows local aprobado y preview
+Flutter actualizado en 4493. Se conserva el diseño rectangular ya aprobado.
+
 Copia privada `C:/t/fppl-7e92-20261120`, rama
 `agent/product-lifecycle-private-20261120`, base `a4ebdf1e`. No editar las copias
 anteriores que siguen expuestas a otra sesión. API local 4017, PostgreSQL

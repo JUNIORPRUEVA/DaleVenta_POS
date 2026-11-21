@@ -63,7 +63,7 @@ void main() {
           'continuar cuando corresponda.',
     );
 
-    expect(find.text('Expediente guardado'), findsOneWidget);
+    expect(find.textContaining('Expediente guardado'), findsOneWidget);
     expect(find.byType(SnackBar), findsNothing);
     expect(find.byType(MaterialBanner), findsNothing);
 
@@ -74,10 +74,12 @@ void main() {
     expect(box.left, greaterThan(1200 / 2));
     expect(box.top, lessThan(200));
     expect(box.right, lessThanOrEqualTo(1200));
+    expect(box.top, closeTo(12, 1));
+    expect(1200 - box.right, closeTo(12, 1));
 
     // Los avisos de éxito desaparecen solos.
     await tester.pump(const Duration(seconds: 5));
-    expect(find.text('Expediente guardado'), findsNothing);
+    expect(find.textContaining('Expediente guardado'), findsNothing);
   });
 
   testWidgets('el mismo aviso repetido no se duplica', (tester) async {
@@ -95,9 +97,9 @@ void main() {
       duration: const Duration(seconds: 4),
     );
 
-    expect(find.text('Borrador guardado'), findsOneWidget);
+    expect(find.textContaining('Borrador guardado'), findsOneWidget);
     await tester.pump(const Duration(seconds: 5));
-    expect(find.text('Borrador guardado'), findsNothing);
+    expect(find.textContaining('Borrador guardado'), findsNothing);
   });
 
   testWidgets('varios avisos se apilan con un límite', (tester) async {
@@ -112,10 +114,10 @@ void main() {
     }
 
     // El límite evita tapar la pantalla: el más antiguo deja de mostrarse.
-    expect(find.text('Uno'), findsNothing);
-    expect(find.text('Dos'), findsOneWidget);
-    expect(find.text('Tres'), findsOneWidget);
-    expect(find.text('Cuatro'), findsOneWidget);
+    expect(find.textContaining('Uno.'), findsNothing);
+    expect(find.textContaining('Dos.'), findsOneWidget);
+    expect(find.textContaining('Tres.'), findsOneWidget);
+    expect(find.textContaining('Cuatro.'), findsOneWidget);
     await tester.pump(const Duration(seconds: 5));
   });
 
@@ -132,11 +134,11 @@ void main() {
 
     // A los 5 s un error sigue visible (un éxito ya habría desaparecido).
     await tester.pump(const Duration(seconds: 5));
-    expect(find.text('No se pudieron guardar los datos'), findsOneWidget);
+    expect(find.textContaining('No se pudieron guardar los datos'), findsOneWidget);
 
     await tester.tap(find.byTooltip('Cerrar aviso'));
     await tester.pump();
-    expect(find.text('No se pudieron guardar los datos'), findsNothing);
+    expect(find.textContaining('No se pudieron guardar los datos'), findsNothing);
   });
 
   testWidgets('un texto largo se adapta sin desbordar en móvil', (

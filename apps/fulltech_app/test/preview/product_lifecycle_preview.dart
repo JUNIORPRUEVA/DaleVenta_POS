@@ -3,6 +3,7 @@ import 'package:daleventa_pos/core/auth/token_storage.dart';
 import 'package:daleventa_pos/core/models/product_model.dart';
 import 'package:daleventa_pos/core/models/user_model.dart';
 import 'package:daleventa_pos/core/theme/app_theme.dart';
+import 'package:daleventa_pos/core/utils/customer_visible_text.dart';
 import 'package:daleventa_pos/features/catalogo/data/catalog_repository.dart';
 import 'package:daleventa_pos/features/products/ui/product_lifecycle_dialog.dart';
 import 'package:dio/dio.dart';
@@ -57,7 +58,7 @@ class _PreviewState extends ConsumerState<_Preview> {
           icon:const Icon(Icons.archive_outlined),label:const Text('Archivados'))]),
         if(_error!=null)Text(_error!),
         Expanded(child:ListView.separated(itemCount:_items.length,separatorBuilder:(_,_)=>const Divider(height:1),itemBuilder:(context,index){
-          final product=_items[index];return ListTile(dense:true,title:Text(product.nombre),subtitle:Text('Existencias: ${product.stock}'),
+          final product=_items[index];return ListTile(dense:true,title:Text(customerVisibleText(product.nombre, fallback: 'Producto')),subtitle:Text('Existencias: ${product.stock}'),
             trailing:const Icon(Icons.chevron_right),onTap:()=>showDialog<void>(context:context,builder:(_)=>ProductLifecycleDialog(
               productId:product.id,name:product.nombre,onChanged:_load)));
         })),

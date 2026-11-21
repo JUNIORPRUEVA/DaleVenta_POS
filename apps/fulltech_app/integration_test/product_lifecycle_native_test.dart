@@ -82,7 +82,7 @@ void main() {
       image.dispose();
     }
     Future<Map> create(String label, double stock) async {
-      final response = await dio.post('/products', data: {'nombre':'Native $label ${const Uuid().v4()}',
+      final response = await dio.post('/products', data: {'nombre':'Producto de prueba $label · ${DateTime.now().toIso8601String().substring(11, 19)}',
         'categoria':'UAT', 'precio':10, 'costo':5, 'stock':stock, 'operationId':const Uuid().v4()});
       return response.data as Map;
     }

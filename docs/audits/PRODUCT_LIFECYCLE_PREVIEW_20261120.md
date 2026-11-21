@@ -13,8 +13,24 @@ alterar en `assets/image/product_{filter,delete,add}.png`.
 - Archivados: cuadro de hasta 820 px de ancho y 640 px de contenido alto,
   limitado por el espacio disponible; búsqueda rectangular separada de la lista.
 - Avisos del ciclo de vida: párrafo compacto con el estilo compartido,
-  a 12 px del borde inferior derecho, respetando teclado y zona segura.
+  a 12 px del borde superior derecho, respetando la zona segura. Esta ubicación
+  corrige la indicación anterior por aclaración expresa del propietario.
   Entrada de 220 ms; respeta la preferencia de reducir movimiento.
+
+Los avisos generales de AppFeedback también usan párrafo compacto arriba a la
+derecha. Se ocultan identificadores técnicos en los avisos y en nombres/detalles
+visibles de productos, sin cambiar los datos originales. Archivados no usa el ID
+como código comercial; conserva referencias como AUD-001 y códigos de barras.
+La galería conserva los 39 números y retira los nombres técnicos de sus rutas.
+
+La corrección de ubicación y texto pasó 184 pruebas de Productos, avisos y
+login, análisis focalizado sin incidencias y una ejecución real en Windows con
+API/SQLite locales. Incluye comprobación de esquina superior a 12 px, ocultación
+de IDs en detalles/archivados y aviso, y acción Configuración operativa. Se
+retiraron las barras inferiores de importar/exportar/categorías/permisos de
+imagen en Productos. Las 78 capturas web verifican móvil y escritorio.
+Logs: `.uat/product-lifecycle/top-notices-*`. No se cambian datos persistidos,
+reglas financieras ni permisos. El preview se recompila con esta corrección.
 
 Comprobación de esta revisión: 145 pruebas de interfaz aprobadas, incluidas
 las 39 vistas en 390×844 y 1280×900, radios de los diálogos, iconos, alturas y

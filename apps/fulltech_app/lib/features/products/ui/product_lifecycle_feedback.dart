@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import '../../../core/utils/app_feedback.dart';
+import '../../../core/utils/customer_visible_text.dart';
 
 class ProductLifecycleFeedback {
   static OverlayEntry? _notice;
@@ -56,6 +57,8 @@ class ProductLifecycleFeedback {
     BuildContext context,
     String text, {
     bool warning = false,
+    String? actionLabel,
+    VoidCallback? onAction,
   }) {
     dismissNotice();
     final overlay = Overlay.maybeOf(context, rootOverlay: true);
@@ -72,13 +75,17 @@ class ProductLifecycleFeedback {
         builder: (context, progress, _) => AppFeedbackNotice(
           notification: AppFeedbackNotification(
             title: warning ? 'Atención' : 'Listo',
-            body: text,
+            body: customerVisibleText(
+              text,
+              fallback: 'Comprueba el estado del producto.',
+            ),
             kind: warning ? AppFeedbackKind.warning : AppFeedbackKind.success,
             compact: true,
             paragraph: true,
+            actionLabel: actionLabel,
+            onAction: onAction,
           ),
           onClose: dismissNotice,
-          bottomRight: true,
           animationProgress: progress,
         ),
       ),
@@ -139,7 +146,18 @@ class ProductLifecycleResultsDialog extends StatelessWidget {
     title: const Text('Resultado por producto'),
     content: SizedBox(
       width: 540,
-      child: SingleChildScrollView(child: Text(results.join('\n\n'))),
+      child: SingleChildScrollView(
+        child: Text(
+          results
+              .map(
+                (text) => customerVisibleText(
+                  text,
+                  fallback: 'Comprueba el producto.',
+                ),
+              )
+              .join('\n\n'),
+        ),
+      ),
     ),
     actions: [
       TextButton(

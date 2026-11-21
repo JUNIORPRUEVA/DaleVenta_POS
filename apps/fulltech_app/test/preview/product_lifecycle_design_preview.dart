@@ -394,7 +394,6 @@ class _GalleryState extends State<_Gallery> {
                 dense: true,
                 leading: Text('${row.$1 + 1}'.padLeft(2, '0')),
                 title: Text(row.$2.$2),
-                subtitle: Text(row.$2.$1),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => _open(row.$2.$1),
               ),

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../debug/trace_log.dart';
 import '../theme/app_colors.dart';
 import '../widgets/fulltech_dialog.dart';
+import 'customer_visible_text.dart';
 
 enum AppFeedbackKind { success, warning, error, info }
 
@@ -372,7 +373,7 @@ class AppFeedbackNotice extends StatelessWidget {
     // de la barra superior estándar (kToolbarHeight) para no tapar encabezados
     // ni AppBars, con separación segura de los bordes superior y derecho.
     final rightMargin =
-        (bottomRight
+        (bottomRight || notification.paragraph
             ? 12.0
             : isNarrow
             ? 12.0
@@ -442,12 +443,17 @@ class AppFeedbackNotice extends StatelessWidget {
                               TextSpan(
                                 children: [
                                   TextSpan(
-                                    text: '${notification.title}. ',
+                                    text:
+                                        '${customerVisibleText(notification.title, fallback: 'Aviso')}. ',
                                     style: const TextStyle(
                                       fontWeight: FontWeight.w700,
                                     ),
                                   ),
-                                  TextSpan(text: notification.body),
+                                  TextSpan(
+                                    text: customerVisibleText(
+                                      notification.body,
+                                    ),
+                                  ),
                                 ],
                               ),
                               style: Theme.of(context).textTheme.bodySmall
@@ -459,6 +465,9 @@ class AppFeedbackNotice extends StatelessWidget {
                             if (notification.actionLabel != null &&
                                 notification.onAction != null)
                               TextButton(
+                                style: TextButton.styleFrom(
+                                  shape: const RoundedRectangleBorder(),
+                                ),
                                 onPressed: notification.onAction,
                                 child: Text(notification.actionLabel!),
                               ),
@@ -620,11 +629,10 @@ class _ToastStackState extends State<_ToastStack> {
     if (items.isEmpty) return const SizedBox.shrink();
     final media = MediaQuery.of(context);
     final narrow = media.size.width < 640;
-    // Pegado a la esquina superior derecha, dejando aire sobre el borde y sin
-    // tapar la barra superior de la pantalla.
-    final rightMargin = (narrow ? 12.0 : 16.0) + media.padding.right;
-    final leftMargin = narrow ? 12.0 : 16.0;
-    final top = media.padding.top + kToolbarHeight + (narrow ? 6.0 : 8.0);
+    // Corner notices share the same compact paragraph position.
+    final rightMargin = 12.0 + media.padding.right;
+    const leftMargin = 12.0;
+    final top = media.padding.top + 12.0;
     final available = media.size.width - rightMargin - leftMargin;
     final width = (narrow ? available : 360.0).clamp(200.0, 360.0).toDouble();
 
@@ -671,14 +679,14 @@ class _ToastCard extends StatelessWidget {
         color: AppColors.surface,
         elevation: 8,
         shadowColor: AppColors.shadow,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
         child: Container(
           decoration: BoxDecoration(
             color: _softBackgroundFor(notification.kind),
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(8),
             border: Border.all(color: color.withValues(alpha: 0.32)),
           ),
-          padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+          padding: const EdgeInsets.fromLTRB(10, 8, 6, 8),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -687,34 +695,28 @@ class _ToastCard extends StatelessWidget {
                 child: Icon(
                   AppFeedback._iconFor(notification.kind),
                   color: color,
-                  size: 18,
+                  size: 16,
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      notification.title,
-                      style: theme.textTheme.labelLarge?.copyWith(
-                        color: AppColors.textPrimary,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 12.5,
+                child: Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(
+                        text:
+                            '${customerVisibleText(notification.title, fallback: 'Aviso')}. ',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
                       ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      notification.body,
-                      softWrap: true,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: AppColors.textSecondary,
-                        height: 1.3,
-                        fontSize: 11.5,
-                      ),
-                    ),
-                  ],
+                      TextSpan(text: customerVisibleText(notification.body)),
+                    ],
+                  ),
+                  softWrap: true,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: AppColors.textPrimary,
+                    height: 1.3,
+                    fontSize: 12,
+                  ),
                 ),
               ),
               IconButton(
