@@ -1,5 +1,21 @@
 # Execution State
 
+## Preparación específica de FullPOS — 2026-11-21
+
+Código de 0850d932 revalidado sin cambios funcionales. Build API y lock Docker
+PASS; E2E HTTP 56 PASS; contrato soporte CRM 4 PASS; imágenes API y web/PWA
+compiladas y ejecutadas localmente; smoke web combinado 10 PASS. Upgrade desde
+la base remota ensayado con datos ficticios en PostgreSQL 16 y 17.11, conservando
+licencias, concesiones, stock y numeración examinados. Repetición idempotente.
+Auditoría productiva SSH/BD exclusivamente READ ONLY: PostgreSQL17.11, siete
+migraciones pendientes exactas, sin intentos fallidos ni diferencias SQL más
+allá de las 43 variantes históricas LF/CRLF. Fuente efectiva de API/PWA: GHCR
+por digest. Soporte interno no está configurado en producción.
+Procedimiento y pendientes en docs/audits/PREPARACION_FULLPOS_RELEASE_20261121.md.
+PASS local no equivale a deploy autorizado: sin push, merge, cambios de entorno,
+migraciones ni despliegue productivo en este checkpoint. Las imágenes de QA
+contienen argumentos ficticios y no son artefactos para producción.
+
 ## Seguimiento de bloqueos de consolidación — 2026-11-21
 
 Trabajo exclusivo en candidatos locales. Las dos causas originales de CRM se
