@@ -142,13 +142,22 @@ Future<void> _pumpEditor(
 /// necesita que el evento de IO real se dispare (runAsync) y que después se
 /// vacíen los microtasks del fake (pump). Este helper alterna ambos para dejar
 /// que el pipeline móvil (detección/copia/limpieza/subida) complete.
-Future<void> pumpRealIo(WidgetTester tester, {int rounds = 15}) async {
-  for (var i = 0; i < rounds; i++) {
+Future<void> pumpRealIo(
+  WidgetTester tester, {
+  required bool Function() completed,
+}) async {
+  for (var i = 0; i < 80 && !completed(); i++) {
     await tester.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 120)),
     );
     await tester.pump();
   }
+  expect(
+    completed(),
+    isTrue,
+    reason: 'La subida debe terminar antes de comprobar su unicidad.',
+  );
+  await tester.pump(const Duration(milliseconds: 200));
 }
 
 Future<Finder> _pumpUntilHitTestable(
@@ -235,7 +244,7 @@ void main() {
         await tester.tap(galleryOption);
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 300));
-        await pumpRealIo(tester);
+        await pumpRealIo(tester, completed: () => repo.uploads > 0);
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 200));
 
@@ -302,7 +311,7 @@ void main() {
         // Completar la selección: se produce exactamente un upload.
         gate.complete(XFile(jpegFile2.path));
         await tester.pump();
-        await pumpRealIo(tester);
+        await pumpRealIo(tester, completed: () => repo.uploads > 0);
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 200));
 
