@@ -1,5 +1,24 @@
 # Execution State
 
+## Ciclo de vida de productos — cierre técnico y revisión visual
+
+Copia privada `C:/t/fppl-7e92-20261120`, rama
+`agent/product-lifecycle-private-20261120`, base `a4ebdf1e`. No editar las copias
+anteriores que siguen expuestas a otra sesión. API local 4017, PostgreSQL
+exclusivo 56562, datos sintéticos. Producción únicamente consultada para hashes
+de artefactos; ninguna mutación, migración, reinicio o publicación remota.
+
+El commit web previo solicitado quedó en `a4ebdf1e`; recuperación en `d5986236`.
+Backend e interfaz implementados: 121 pruebas backend, 214 Flutter y análisis
+focalizado sin incidencias. Windows y Android emulado aprobaron la ejecución con
+API/SQLite reales, reconexión y archivo de incidencia sin borrar evidencia.
+PostgreSQL confirmó compensación/replay únicos y stock conservado. Backup y
+restauración aprobados. Manifest de 66 archivos de código/pruebas sin cambios.
+Galería Flutter: http://127.0.0.1:4493/ — 39 vistas y 78 capturas, sin API.
+Estado técnico del alcance: GO WITH ISSUES. Pendientes: aprobación visual del
+propietario e iOS físico no disponible. No hay autorización de despliegue.
+Documentos y ledger en `docs/audits/PRODUCT_LIFECYCLE_*_20261120.md`.
+
 ## Registro web: entrada automática — 2026-11-20
 
 Recuperación guardada en commit local `d5986236`, sin push/despliegue.

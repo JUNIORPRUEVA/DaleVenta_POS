@@ -1,0 +1,16 @@
+{
+  "run": 1795226209022,
+  "scenarios": [
+    "five debug purge routes unavailable to company administrator",
+    "zero stock without references physically deleted",
+    "initial stock cannot be physically deleted; original snapshot unchanged",
+    "initial stock compensated atomically; original movement preserved",
+    "lost-response replay does not duplicate compensation; annulled cannot restore",
+    "foreign company, missing authentication and malformed IDs rejected",
+    "archive conserves inventory; repeated archive idempotent; creation offers restoration; same ID restored",
+    "legacy positive stock without Kardex, mismatched and negative stocks protected",
+    "concurrent edit invalidates stale administrative confirmation"
+  ],
+  "result": "PASS",
+  "companyId": "906b8463-be82-4c70-904d-0172a3650449"
+}

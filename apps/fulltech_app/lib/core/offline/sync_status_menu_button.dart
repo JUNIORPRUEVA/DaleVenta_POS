@@ -7,10 +7,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../theme/app_colors.dart';
 import '../widgets/refined_topbar_controls.dart';
 
-import '../api/api_routes.dart';
+import '../../features/catalogo/data/catalog_repository.dart';
 import '../api/server_connection.dart';
-import '../auth/auth_repository.dart';
 import '../auth/token_storage.dart';
+import '../auth/auth_repository.dart';
 import '../errors/user_safe_error_text.dart';
 import '../errors/operation_error_message.dart';
 import '../../features/offline/sale_attempt_recovery_screen.dart';
@@ -717,8 +717,12 @@ class _OfflineConflictRow extends ConsumerWidget {
     final actionId = conflict.actionId;
     if (productId == null || actionId == null) return;
     try {
-      await ref.read(dioProvider).patch(ApiRoutes.archiveProduct(productId));
-      await ref.read(syncQueueServiceProvider.notifier).remove(actionId);
+      final user=await ref.read(tokenStorageProvider).getUserSnapshot();
+      if (user?.companyId==null) return;
+      final actions=await OfflineStore.instance.listPendingActions(companyId:user!.companyId,userId:user.id,limit:null);
+      final matching=actions.where((a)=>a.id==actionId);
+      if (matching.length!=1) return;
+      await ref.read(catalogRepositoryProvider).archivePendingDeleteConflict(matching.single);
       if (context.mounted) {
         ScaffoldMessenger.of(
           context,

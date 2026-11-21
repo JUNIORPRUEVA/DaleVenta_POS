@@ -163,6 +163,9 @@ flutter:
 
   assets:
     - assets/image/
+    - assets/image/product_add.png
+    - assets/image/product_delete.png
+    - assets/image/product_filter.png
     - assets/image/billing/
     - assets/image/logo.png
     - assets/iconos/

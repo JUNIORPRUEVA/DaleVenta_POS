@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
-import '../auth/app_role.dart';
 import '../models/user_model.dart';
 
 bool canUseDebugAdminAction(UserModel? user, {bool enabled = true}) {
-  return enabled && user?.appRole.isAdmin == true;
+  // Destructive fixture cleanup belongs to isolated test tooling, never the POS.
+  return false;
 }
 
 class DebugAdminActionButton extends StatelessWidget {

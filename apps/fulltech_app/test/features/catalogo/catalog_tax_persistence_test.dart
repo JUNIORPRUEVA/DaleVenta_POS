@@ -12,6 +12,14 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+// These two contract tests isolate HTTP mapping. Local queue/tenant decisions
+// are exercised with real persisted rows in product_lifecycle_repository_test.
+class _LifecycleContractRepository extends CatalogRepository {
+  _LifecycleContractRepository(Dio dio) : super(dio);
+  @override
+  Future<void> assertNoPendingProductReferences(String id, {String? ignoreActionId}) async {}
+}
+
 class _TaxFakeCatalogRepository extends CatalogRepository {
   _TaxFakeCatalogRepository(this.products) : super(Dio());
 
@@ -967,7 +975,7 @@ void main() {
             },
           );
         });
-      final repository = CatalogRepository(dio);
+      final repository = _LifecycleContractRepository(dio);
 
       await expectLater(
         repository.deleteProduct('p-1'),
@@ -1010,7 +1018,7 @@ void main() {
           },
         );
       });
-    final repository = CatalogRepository(dio);
+    final repository = _LifecycleContractRepository(dio);
 
     final archived = await repository.archiveProduct('p-1');
 

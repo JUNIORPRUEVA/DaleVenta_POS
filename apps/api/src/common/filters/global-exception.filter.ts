@@ -38,6 +38,18 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const method = req?.method ?? 'UNKNOWN';
     const url = req?.originalUrl ?? req?.url ?? 'UNKNOWN';
 
+    const databaseMessage=exception instanceof Prisma.PrismaClientKnownRequestError
+      ?safeString(exception.meta):exception instanceof Prisma.PrismaClientUnknownRequestError?exception.message:'';
+    const lifecycleSignal=databaseMessage.match(/PRODUCT_LIFECYCLE_(NOT_ACTIVE|ANNULLED|TENANT_MISMATCH)/)?.[1];
+    if(lifecycleSignal){
+      const forbidden=lifecycleSignal==='TENANT_MISMATCH';
+      res.status(forbidden?403:409).json({statusCode:forbidden?403:409,
+        code:forbidden?'PRODUCT_COMPANY_MISMATCH':lifecycleSignal==='ANNULLED'?'PRODUCT_ANNULLED':'PRODUCT_NOT_ACTIVE',
+        message:forbidden?'El producto no pertenece a esta empresa.':'El producto ya no está activo. Actualiza el catálogo antes de continuar.',
+      });
+      return;
+    }
+
     const isHttp = exception instanceof HttpException;
     const status = isHttp
       ? exception.getStatus()

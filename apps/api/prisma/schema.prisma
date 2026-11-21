@@ -3272,6 +3272,20 @@ model Punch {
   @@index([timestamp])
 }
 
+model ProductLifecycleEvent {
+  id String @id @default(uuid()) @db.Uuid
+  companyId String @map("company_id") @db.Uuid
+  productId String @map("product_id") @db.Uuid
+  actorUserId String? @map("actor_user_id") @db.Uuid
+  operationId String? @map("operation_id") @db.VarChar(160)
+  action String @db.VarChar(40)
+  details Json @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+  @@unique([companyId, operationId], map:"product_lifecycle_events_company_operation_key")
+  @@index([companyId,productId,createdAt])
+  @@map("product_lifecycle_events")
+}
+
 model Product {
   id                    String              @id @default(uuid()) @db.Uuid
   companyId             String              @map("company_id") @db.Uuid
@@ -3294,6 +3308,12 @@ model Product {
   imageOriginalFileName String?             @map("image_original_file_name")
   imageUpdatedAt        DateTime?           @map("image_updated_at")
   archivedAt            DateTime?           @map("archived_at")
+  annulledAt            DateTime?           @map("annulled_at")
+  annulledByUserId      String?             @map("annulled_by_user_id") @db.Uuid
+  annulmentReason       String?             @map("annulment_reason") @db.VarChar(500)
+  annulmentOperationId  String?             @map("annulment_operation_id") @db.VarChar(128)
+  annulledInitialMovementId String?         @map("annulled_initial_movement_id") @db.Uuid
+  lifecycleVersion      Int                 @default(0) @map("lifecycle_version")
   createPayloadHash     String?             @map("create_payload_hash") @db.VarChar(64)
 
   saleItems              SaleItem[]
@@ -3305,10 +3325,13 @@ model Product {
   inventoryMovements     InventoryMovement[]
   warehouseTransferItems WarehouseTransferItem[]
   priceListProductRules  PriceListProductRule[]
+  annulledInitialMovement InventoryMovement? @relation("ProductAnnulmentInitial", fields: [annulledInitialMovementId], references: [id], onDelete: Restrict)
 
   @@unique([companyId, id], map: "products_company_id_id_key")
   @@index([companyId])
   @@index([companyId, archivedAt], map: "products_company_archived_idx")
+  @@unique([companyId, annulmentOperationId], map: "products_company_annulment_operation_key")
+  @@index([companyId, annulledAt], map: "products_company_annulled_idx")
   @@index([unitOfMeasureId])
   @@index([companyId, nombre])
   @@index([companyId, imageKey])
@@ -3388,6 +3411,7 @@ model Terminal {
 
 model InventoryMovement {
   id                     String                @id @default(uuid()) @db.Uuid
+  annulledProducts       Product[]             @relation("ProductAnnulmentInitial")
   companyId              String                @map("company_id") @db.Uuid
   productId              String                @map("product_id") @db.Uuid
   warehouseId            String                @map("warehouse_id") @db.Uuid

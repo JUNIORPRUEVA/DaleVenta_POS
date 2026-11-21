@@ -1,0 +1,15 @@
+{
+  "run": 1795226210984,
+  "scenarios": [
+    "uncommitted quote locks product; annul waits and rejects after reference commits",
+    "stale document writer is rejected by PostgreSQL after annulment",
+    "two simultaneous identical annulments produce one compensation and one audit event",
+    "failure after stock compensation rolls back product, warehouses, movements and audit; retry succeeds once",
+    "additional stock adjustment blocks annulment",
+    "archived code reserved; plan-full restore changes nothing; restore and retry retain ID and one event",
+    "durable delete tombstone prevents replayed offline creation from resurrecting the identity",
+    "delete and offline create replay share a lock; identity cannot resurrect in the race window"
+  ],
+  "result": "PASS",
+  "companyId": "042be751-c6d4-42e6-b6cf-f9996b0c1408"
+}

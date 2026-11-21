@@ -1,12 +1,14 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
   Optional,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { AnnulProductDto } from './dto/product-lifecycle.dto';
 import {
   InventoryMovementType,
   Prisma,
@@ -644,19 +646,6 @@ export class ProductsService {
     };
   }
 
-  private async productReferenceCount(
-    tx: Prisma.TransactionClient,
-    productId: string,
-  ) {
-    const [saleItems, cotizacionItems, purchaseOrderItems, websiteOverrides] =
-      await Promise.all([
-        tx.saleItem.count({ where: { productId } }),
-        tx.cotizacionItem.count({ where: { productId } }),
-        tx.purchaseOrderItem.count({ where: { productId } }),
-        tx.websiteProductOverride.count({ where: { productId } }),
-      ]);
-    return saleItems + cotizacionItems + purchaseOrderItems + websiteOverrides;
-  }
 
   private productHasHistoryConflict(details?: Record<string, number>) {
     return new ConflictException({
@@ -756,6 +745,8 @@ export class ProductsService {
       cotizacionItems,
       purchaseOrderItems,
       purchaseReceiptItems,
+      priceRules,
+      websiteOverrides,
     ] = await Promise.all([
       tx.inventoryMovement.count({ where: { companyId, productId } }),
       tx.warehouseTransferItem.count({ where: { companyId, productId } }),
@@ -776,6 +767,9 @@ export class ProductsService {
           },
         },
       }),
+      tx.priceListProductRule.count({ where: { companyId, productId } }),
+      // Product ownership was established before counting this global-ID link.
+      tx.websiteProductOverride.count({ where: { productId } }),
     ]);
     return {
       inventoryMovements,
@@ -784,6 +778,8 @@ export class ProductsService {
       cotizacionItems,
       purchaseOrderItems,
       purchaseReceiptItems,
+      priceRules,
+      websiteOverrides,
     };
   }
 
@@ -817,6 +813,19 @@ export class ProductsService {
     );
   }
 
+  private archivedIdentityConflict(product:Product) {
+    return new ConflictException({code:'PRODUCT_ARCHIVED_EXISTS',
+      message:product.annulledAt?'Este código o producto pertenece a un alta anulada. Conserva su identidad y utiliza otro código.':
+        'Este producto ya existe en Archivados. Puedes restaurarlo.',
+      productId:product.id,canRestore:!product.annulledAt,canArchive:false});
+  }
+
+  private recordLifecycle(tx:Prisma.TransactionClient,user:TenantUser,id:string,action:string,
+    details:Prisma.InputJsonObject={},operationId?:string){
+    return tx.productLifecycleEvent.create({data:{companyId:requireTenant(user),productId:id,
+      actorUserId:user.id,action,details,operationId}});
+  }
+
   private async pruneSafeDuplicateProducts(
     tx: Prisma.TransactionClient,
     companyId: string,
@@ -828,34 +837,8 @@ export class ProductsService {
       canonical,
       canonical.id,
     );
-    let deleted = 0;
-    let skipped = 0;
-    for (const duplicate of duplicates) {
-      const duplicateCode = this.normalizeProductCodeForLookup(
-        (duplicate as any).codigo,
-      );
-      const canonicalCode = this.normalizeProductCodeForLookup(
-        (canonical as any).codigo,
-      );
-      if (duplicateCode && duplicateCode !== canonicalCode) {
-        skipped += 1;
-        continue;
-      }
-      const references = await this.productReferenceCount(tx, duplicate.id);
-      if (references > 0) {
-        skipped += 1;
-        this.logger.warn(
-          `product-duplicate-prune skipped companyId=${companyId} canonicalProductId=${canonical.id} duplicateProductId=${duplicate.id} references=${references}`,
-        );
-        continue;
-      }
-      await tx.product.deleteMany({ where: { id: duplicate.id, companyId } });
-      deleted += 1;
-      this.logger.log(
-        `product-duplicate-prune deleted companyId=${companyId} canonicalProductId=${canonical.id} duplicateProductId=${duplicate.id}`,
-      );
-    }
-    return { deleted, skipped };
+    // Creation/editing never deletes another identity as a side effect.
+    return { deleted: 0, skipped: duplicates.length };
   }
 
   private async productResponse(
@@ -922,10 +905,13 @@ export class ProductsService {
         );
         if (operationProductId) {
           await this.lockOfflineOperation(tx, companyId, "product.create", operationProductId);
+          const removed=await tx.productLifecycleEvent.findFirst({where:{companyId,productId:operationProductId,action:'PRODUCT_DELETED'}});
+          if(removed)throw new ConflictException({code:'PRODUCT_REMOVED',message:'Este alta ya fue eliminada. No se volvió a crear el producto.'});
           const existingOperationProduct = await tx.product.findFirst({
             where: { id: operationProductId, companyId },
           });
           if (existingOperationProduct) {
+            if(existingOperationProduct.archivedAt) throw this.archivedIdentityConflict(existingOperationProduct);
             if (
               !this.productCreateReplayMatches(existingOperationProduct, dto)
             ) {
@@ -964,6 +950,7 @@ export class ProductsService {
             normalizedCodeForLookup,
           );
           if (existingByCode) {
+            if(existingByCode.archivedAt) throw this.archivedIdentityConflict(existingByCode);
             this.logProductSave({
               action: "create",
               decision: "reject-duplicate-code",
@@ -1066,6 +1053,8 @@ export class ProductsService {
           companyId,
           { ...data, stock: initialStock },
         );
+        const archivedEquivalent=equivalentProducts.find(product=>product.archivedAt);
+        if(archivedEquivalent) throw this.archivedIdentityConflict(archivedEquivalent);
         const reusableEquivalent = equivalentProducts.find((product) => {
           const productCode = this.normalizeProductCodeForLookup(
             (product as any).codigo,
@@ -1358,7 +1347,8 @@ export class ProductsService {
           search,
           category,
           categories,
-          includeArchived: query.includeArchived === "true",
+          includeArchived: query.includeArchived === "true" || query.archivedOnly === "true",
+          archivedOnly: query.archivedOnly === "true",
         });
         return toPageResult(
           filtered.slice(pagination.skip, pagination.skip + pagination.take),
@@ -1378,10 +1368,9 @@ export class ProductsService {
       }
     }
 
-    try {
-      const where: Prisma.ProductWhereInput = {
+    const where: Prisma.ProductWhereInput = {
         companyId,
-        ...(query.includeArchived === "true" ? {} : { archivedAt: null }),
+        ...(query.archivedOnly === "true" ? { archivedAt: { not: null } } : query.includeArchived === "true" ? {} : { archivedAt: null }),
         ...(category ? { categoria: category } : {}),
         ...(categories.length > 0 ? { categoria: { in: categories } } : {}),
         ...(search
@@ -1397,6 +1386,7 @@ export class ProductsService {
           ? { warehouseStocks: { some: { warehouseId: query.warehouseId } } }
           : {}),
       };
+    try {
       const [products, total] = await Promise.all([
         this.prisma.product.findMany({
           where,
@@ -1416,7 +1406,8 @@ export class ProductsService {
       );
     } catch (error) {
       if (!this.isSchemaMismatch(error)) throw error;
-      const legacyWhere: Prisma.ProductWhereInput = { companyId };
+      if (query.archivedOnly === "true") throw error;
+      const legacyWhere: Prisma.ProductWhereInput = where;
       const [products, total] = await Promise.all([
         this.prisma.product.findMany({
           where: legacyWhere,
@@ -1430,7 +1421,7 @@ export class ProductsService {
           : Promise.resolve(null),
       ]);
       return toPageResult(
-        products.map((p) => this.mapProduct({ ...p, archivedAt: null })),
+        products.map((p) => this.mapProduct(p as Product)),
         pagination,
         total,
       );
@@ -1444,6 +1435,7 @@ export class ProductsService {
       category?: string;
       categories?: string[];
       includeArchived: boolean;
+      archivedOnly?: boolean;
     },
   ) {
     const search = filters.search?.toLowerCase();
@@ -1452,6 +1444,7 @@ export class ProductsService {
       (filters.categories ?? []).map((value) => value.toLowerCase()),
     );
     return items.filter((item) => {
+      if (filters.archivedOnly && !(item.archived || item.archivedAt)) return false;
       if (!filters.includeArchived && (item.archived || item.archivedAt)) {
         return false;
       }
@@ -1644,7 +1637,8 @@ export class ProductsService {
         unitOfMeasure.id !== current.unitOfMeasureId
       ) {
         const hasStock = new Prisma.Decimal(current.stock ?? 0).abs().gt(0);
-        const referenceCount = await this.productReferenceCount(tx, id);
+        const referenceCount = Object.values(await this.protectedProductReferenceCounts(tx,companyId,id))
+          .reduce((sum,count)=>sum+count,0);
         if (hasStock || referenceCount > 0) {
           throw new BadRequestException(
             "No se puede cambiar la unidad de medida de un producto con stock o historial.",
@@ -1970,9 +1964,35 @@ export class ProductsService {
       where: { id, companyId },
       select: { id: true, archivedAt: true },
     });
-    if (!existing) return { ok: true };
-    if (existing.archivedAt) return { ok: true, archived: true };
-    await this.prisma.$transaction(async (tx) => {
+    if (!existing) {
+      const removed=await this.prisma.productLifecycleEvent.findFirst({where:{companyId,productId:id,action:'PRODUCT_DELETED'}});
+      if(removed)return {ok:true};
+      throw new NotFoundException('Producto no encontrado');
+    }
+    if (existing.archivedAt) throw new ConflictException({
+      code: "PRODUCT_ARCHIVED", message: "El producto está archivado. No se eliminó.", canReactivate:true,
+    });
+    try { await this.prisma.$transaction(async (tx) => {
+      await this.lockOfflineOperation(tx, companyId, "product.create", id);
+      const [locked] = await tx.$queryRaw<Array<{ id: string; stock: Prisma.Decimal; archivedAt: Date | null }>>`
+        SELECT id, stock, archived_at AS "archivedAt" FROM "Product"
+        WHERE id = ${id}::uuid AND company_id = ${companyId}::uuid FOR UPDATE
+      `;
+      if (!locked) return;
+      if (locked.archivedAt) throw new ConflictException({
+        code: "PRODUCT_ARCHIVED", message: "El producto está archivado. No se eliminó.",
+      });
+      const stocks = await tx.warehouseStock.findMany({ where: { companyId, productId: id } });
+      const total = stocks.reduce((sum, row) => sum.plus(row.quantity), new Prisma.Decimal(0));
+      const actual = new Prisma.Decimal(locked.stock);
+      if (!actual.equals(total) || actual.lt(0) || stocks.some(row => row.quantity.lt(0))) {
+        throw new ConflictException({code:"PRODUCT_STOCK_INCONSISTENT",
+          message:"Las existencias necesitan revisión. No se eliminó el producto.", canArchive:false});
+      }
+      if (!actual.equals(0) || stocks.some(row => !row.quantity.equals(0))) {
+        throw new ConflictException({code:"PRODUCT_HAS_STOCK",
+          message:"El producto conserva existencias. Puedes archivarlo sin perderlas.", canArchive:true});
+      }
       const references = await this.protectedProductReferenceCounts(
         tx,
         companyId,
@@ -1998,8 +2018,115 @@ export class ProductsService {
         eventType: "PRODUCT_DELETED",
         productId: id,
       });
-    });
+      await this.recordLifecycle(tx,user,id,'PRODUCT_DELETED',{},`delete:${id}`);
+    }); } catch(error) {
+      if(error instanceof ConflictException){
+        const response=error.getResponse();
+        const code=typeof response==='object'?(response as {code?:string}).code:undefined;
+        try { await this.prisma.$transaction(tx=>this.recordLifecycle(tx,user,id,'PRODUCT_DELETE_REJECTED',{code:code??'CONFLICT'})); }
+        catch(auditError){this.logger.error('Could not record rejected product deletion',auditError instanceof Error?auditError.stack:undefined);}
+      }
+      throw error;
+    }
     return { ok: true };
+  }
+
+  private async lockLifecycleProduct(tx: Prisma.TransactionClient, companyId: string, id: string) {
+    await tx.$queryRaw`SELECT id FROM "Product" WHERE company_id=${companyId}::uuid AND id=${id}::uuid FOR UPDATE`;
+    const product=await tx.product.findFirst({where:{companyId,id}});
+    if(!product) throw new NotFoundException('Producto no encontrado');
+    return product;
+  }
+
+  private async lifecycleSnapshot(tx: Prisma.TransactionClient, user: TenantUser, id: string) {
+    const companyId=requireTenant(user);
+    const product=await tx.product.findFirst({where:{companyId,id}});
+    if(!product) throw new NotFoundException('Producto no encontrado');
+    const references=await this.protectedProductReferenceCounts(tx,companyId,id);
+    const stocks=await tx.warehouseStock.findMany({where:{companyId,productId:id},orderBy:{warehouseId:'asc'}});
+    const total=stocks.reduce((sum,row)=>sum.plus(row.quantity),new Prisma.Decimal(0));
+    const consistent=product.stock.equals(total)&&!product.stock.lt(0)&&stocks.every(row=>!row.quantity.lt(0));
+    const movements=await tx.inventoryMovement.findMany({where:{companyId,productId:id},orderBy:[{createdAt:'asc'},{id:'asc'}],take:3});
+    const initial=movements.length===1?movements[0]:null;
+    const warehouse=initial?await tx.warehouse.findFirst({where:{companyId,id:initial.warehouseId,isActive:true}}):null;
+    const company=await tx.company.findUnique({where:{id:companyId},select:{inventoryEnabled:true}});
+    const noCommercialReferences=Object.entries(references).every(([key,count])=>key==='inventoryMovements'||count===0);
+    const onlyInitial=!!initial&&initial.type==='INITIAL_STOCK'&&initial.sourceType==='PRODUCT_CREATE'&&
+      initial.reason==='PRODUCT_INITIAL_STOCK'&&initial.previousQuantity.equals(0)&&initial.quantityDelta.gt(0)&&
+      initial.resultingQuantity.equals(initial.quantityDelta)&&product.stock.equals(initial.resultingQuantity)&&
+      references.inventoryMovements===1&&stocks.every(row=>row.warehouseId===initial.warehouseId
+        ?row.quantity.equals(initial.resultingQuantity):row.quantity.equals(0))&&!!warehouse;
+    const status=product.annulledAt?'ANNULLED':product.archivedAt?'ARCHIVED':'ACTIVE';
+    const enabled=this.config.get<string>('PRODUCT_LIFECYCLE_ANNULMENT_ENABLED')==='true';
+    const canAnnul=enabled&&user.role==='ADMIN'&&status!=='ANNULLED'&&consistent&&onlyInitial&&noCommercialReferences&&
+      company?.inventoryEnabled!==false&&product.trackInventory&&product.itemType==='PRODUCT';
+    const canDelete=status==='ACTIVE'&&consistent&&product.stock.equals(0)&&
+      stocks.every(row=>row.quantity.equals(0))&&!this.hasProtectedProductHistory(references);
+    return {productId:id,companyId,status,lifecycleVersion:product.lifecycleVersion,
+      stock:product.stock.toNumber(),stockConsistent:consistent,
+      warehouseStocks:stocks.map(row=>({warehouseId:row.warehouseId,quantity:row.quantity.toNumber()})),
+      references,canDelete,
+      canArchive:status==='ACTIVE',canRestore:status==='ARCHIVED',canAnnul,
+      annulmentOperationId:product.annulmentOperationId,
+      reason:!consistent?'Las existencias necesitan revisión.':status==='ANNULLED'?'El alta ya está anulada.':
+        canAnnul?'Solo conserva la carga inicial. Puede anularse con confirmación.':
+        status==='ARCHIVED'?'Conserva sus existencias e historial. Puedes restaurarlo.':
+        canDelete?'Sin existencias ni historial. Puedes eliminarlo definitivamente.':
+        'Conserva las existencias y el historial. Puedes archivar el producto.',
+      initialMovementId:initial?.id??null,
+      events:await tx.productLifecycleEvent.findMany({where:{companyId,productId:id},orderBy:[{createdAt:'desc'},{id:'desc'}],take:30})};
+  }
+
+  async lifecycle(user: TenantUser,id:string) {
+    const companyId=requireTenant(user);
+    await this.assertWritable(companyId);
+    return this.prisma.$transaction(tx=>this.lifecycleSnapshot(tx,user,id),PRODUCT_INVENTORY_TRANSACTION_OPTIONS);
+  }
+
+  async annul(user: TenantUser,id:string,input:AnnulProductDto) {
+    const companyId=requireTenant(user);
+    if(user.role!=='ADMIN')throw new ForbiddenException('Solo el administrador puede anular el alta.');
+    if(this.config.get<string>('PRODUCT_LIFECYCLE_ANNULMENT_ENABLED')!=='true')throw new NotFoundException('Anulación no habilitada.');
+    if(!input?.operationId||!Number.isInteger(input.expectedVersion)||input.expectedVersion<0||
+      typeof input.reason!=='string'||input.reason.trim().length<10||input.reason.length>500){
+      throw new BadRequestException('Comprueba la confirmación y el motivo de la anulación.');
+    }
+    await this.assertWritable(companyId);
+    try {
+      return await this.prisma.$transaction(async tx=>{
+        const product=await this.lockLifecycleProduct(tx,companyId,id);
+        if(product.annulledAt){
+          if(product.annulmentOperationId!==input.operationId||product.annulmentReason!==input.reason.trim()){
+            throw new ConflictException({code:'PRODUCT_ANNULLED',message:'Este producto ya tiene el alta anulada. Actualiza su estado.'});
+          }
+          return {ok:true,annulled:true,replayed:true,product:await this.productResponse(tx,companyId,id)};
+        }
+        if(product.lifecycleVersion!==input.expectedVersion)throw new ConflictException({
+          code:'PRODUCT_LIFECYCLE_CHANGED',message:'El producto cambió. Comprueba sus datos antes de anularlo.'});
+        const snapshot=await this.lifecycleSnapshot(tx,user,id);
+        if(!snapshot.canAnnul||!snapshot.initialMovementId)throw new ConflictException({
+          code:'PRODUCT_ANNUL_NOT_ALLOWED',message:'No se puede anular esta alta con seguridad. Puedes conservarla archivada.',details:snapshot});
+        const initial=await tx.inventoryMovement.findFirstOrThrow({where:{id:snapshot.initialMovementId,companyId,productId:id}});
+        await this.inventoryMutationService().decreaseStockInTransaction(tx,{
+          companyId,productId:id,warehouseId:initial.warehouseId,quantity:initial.quantityDelta,
+          type:InventoryMovementType.ADJUSTMENT_OUT,sourceType:'PRODUCT_ANNULMENT',sourceId:id,
+          sourceItemId:initial.id,operationId:`product-annul:${input.operationId}`,
+          reason:input.reason.trim(),createdByUserId:user.id,
+        });
+        await tx.product.updateMany({where:{companyId,id,annulledAt:null},data:{
+          archivedAt:product.archivedAt??new Date(),annulledAt:new Date(),annulledByUserId:user.id,
+          annulmentReason:input.reason.trim(),annulmentOperationId:input.operationId,annulledInitialMovementId:initial.id,
+        }});
+        await this.enqueueProductTelemetry(tx,{companyId,actorUserId:user.id,eventType:'PRODUCT_ANNULLED',productId:id,
+          metadata:{initial_movement_id:initial.id,operation_id:input.operationId}});
+        await this.recordLifecycle(tx,user,id,'PRODUCT_ANNULLED',{initialMovementId:initial.id},`annul:${input.operationId}`);
+        return {ok:true,annulled:true,replayed:false,product:await this.productResponse(tx,companyId,id)};
+      },PRODUCT_INVENTORY_TRANSACTION_OPTIONS);
+    }catch(error){
+      if(this.isUniqueConstraint(error))throw new ConflictException({code:'PRODUCT_OPERATION_CONFLICT',
+        message:'La operación ya pertenece a otro registro. Actualiza antes de continuar.'});
+      throw error;
+    }
   }
 
   private async assertActiveProduct(companyId: string, productId: string) {
@@ -2030,16 +2157,20 @@ export class ProductsService {
       };
     }
     await this.prisma.$transaction(async (tx) => {
-      await tx.product.updateMany({
+      await tx.$queryRaw`SELECT id FROM "Product" WHERE company_id=${companyId}::uuid AND id=${id}::uuid FOR UPDATE`;
+      const changed=await tx.product.updateMany({
         where: { id, companyId, archivedAt: null },
         data: { archivedAt: new Date() },
       });
-      await this.enqueueProductTelemetry(tx, {
+      if(changed.count===1) {
+        await this.recordLifecycle(tx,user,id,'PRODUCT_ARCHIVED');
+        await this.enqueueProductTelemetry(tx, {
         companyId,
         actorUserId: user.id,
         eventType: "PRODUCT_ARCHIVED",
         productId: id,
       });
+      }
     });
     return {
       ok: true,
@@ -2052,12 +2183,19 @@ export class ProductsService {
     const companyId = requireTenant(user);
     await this.assertWritable(companyId);
     return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Product" WHERE company_id=${companyId}::uuid AND id=${id}::uuid FOR UPDATE`;
       const existing = await tx.product.findFirst({
         where: { id, companyId },
-        select: { id: true, archivedAt: true },
+        select: { id: true, archivedAt: true, annulledAt:true, codigo:true },
       });
       if (!existing) {
         throw new NotFoundException("Producto no encontrado");
+      }
+      if(existing.annulledAt) throw new ConflictException({code:'PRODUCT_ANNULLED',
+        message:'El alta está anulada y conserva su historial. No puede restaurarse.'});
+      if(existing.codigo){
+        const collision=await tx.product.findFirst({where:{companyId,id:{not:id},codigo:{equals:existing.codigo,mode:'insensitive'}},select:{id:true}});
+        if(collision)throw new ConflictException({code:'PRODUCT_CODE_CONFLICT',message:'Otro producto utiliza este código. No se restauró.'});
       }
       if (!existing.archivedAt) {
         return {
@@ -2078,6 +2216,7 @@ export class ProductsService {
         eventType: "PRODUCT_REACTIVATED",
         productId: id,
       });
+      await this.recordLifecycle(tx,user,id,'PRODUCT_REACTIVATED');
       return {
         ok: true,
         archived: false,
@@ -2087,15 +2226,8 @@ export class ProductsService {
   }
 
   async purgeAllForDebug(user: TenantUser) {
-    const companyId = requireTenant(user);
-    await this.assertWritable(companyId);
-    const deleted = await this.prisma.product.deleteMany({
-      where: { companyId },
-    });
-    return {
-      ok: true,
-      deletedProducts: deleted.count,
-    };
+    requireTenant(user);
+    throw new NotFoundException("La purga no está disponible en la aplicación.");
   }
 
   /**
@@ -2126,6 +2258,11 @@ export class ProductsService {
       imageKey: true,
       imageUpdatedAt: true,
       archivedAt: true,
+      annulledAt: true,
+      annulmentOperationId: true,
+      annulmentReason: true,
+      annulledByUserId: true,
+      lifecycleVersion: true,
       unitOfMeasureId: true,
       unitOfMeasure: {
         select: {
@@ -2146,6 +2283,7 @@ export class ProductsService {
     return {
       id: true,
       companyId: true,
+      archivedAt: true,
       nombre: true,
       codigo: true,
       categoria: true,
@@ -2170,6 +2308,7 @@ export class ProductsService {
       : this.resolveUrl(product.imagen ?? null);
     return {
       ...product,
+      lifecycleStatus: productAny.annulledAt ? 'ANNULLED' : product.archivedAt ? 'ARCHIVED' : 'ACTIVE',
       fotoUrl,
       imageKey,
       storageProvider: imageKey

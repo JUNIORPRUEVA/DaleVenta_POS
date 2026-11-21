@@ -851,41 +851,31 @@ class CatalogController extends StateNotifier<CatalogState> {
   }
 
   Future<void> remove(String id) async {
-    final currentItems = state.items;
-    final index = currentItems.indexWhere((product) => product.id == id);
-    if (index < 0) return;
-    final removed = currentItems[index];
-    final nextItems = [
-      for (final product in currentItems)
-        if (product.id != id) product,
-    ];
-    state = state.copyWith(
-      items: nextItems,
-      saving: false,
-      clearError: true,
-      actionError: null,
-    );
-    _mutationSeq += 1;
-    _markConfirmedDelete(id);
-
     final repo = ref.read(catalogRepositoryProvider);
     try {
       await repo.deleteProduct(id, skipLoader: true);
+      if (!mounted) return;
+      final nextItems = [for (final product in state.items) if (product.id != id) product];
+      _mutationSeq += 1;
+      _markConfirmedDelete(id);
+      state = state.copyWith(items: nextItems, saving: false, clearError: true, actionError: null);
       unawaited(_saveSnapshotSafely(repo, nextItems));
     } catch (e) {
-      final current = state.items;
-      if (!current.any((product) => product.id == id)) {
-        final restored = [...current];
-        final safeIndex = index.clamp(0, restored.length);
-        restored.insert(safeIndex, removed);
-        final message = e is ApiException
-            ? e.message
-            : 'No se pudo eliminar el producto';
-        state = state.copyWith(items: restored, actionError: message);
-        unawaited(_saveSnapshotSafely(repo, restored));
-      }
+      if (mounted) state = state.copyWith(actionError: e is ApiException ? e.message : 'No se pudo eliminar el producto');
       rethrow;
     }
+  }
+
+  Future<void> reconcileLifecycle({String? productId}) async {
+    // Confirmed overlays protect a local mutation from older requests. A new
+    // server lifecycle event supersedes those overlays, including restores.
+    _mutationSeq++;
+    if (productId == null || productId.isEmpty) {
+      _confirmedMutations.clear(); _confirmedDeletedIds.clear();
+    } else {
+      _confirmedMutations.remove(productId); _confirmedDeletedIds.remove(productId);
+    }
+    await load(forceRemote: true, silent: true);
   }
 
   Future<ProductModel?> archive(String id) async {

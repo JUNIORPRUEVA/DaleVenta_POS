@@ -48,14 +48,18 @@ import '../../catalogo/application/product_search_controller.dart';
 import '../../catalogo/application/stock_adjustment_feedback.dart';
 import '../../catalogo/data/catalog_repository.dart';
 import '../../warehouses/data/warehouse_repository.dart';
+import 'product_lifecycle_dialog.dart';
+import 'product_lifecycle_feedback.dart';
+import 'product_artwork.dart';
+import '../../../core/realtime/operations_refresh_signals.dart';
 
 const _primaryBlue = AppColors.secondary;
 const _lightBlueHover = AppColors.secondarySoft;
 const _textSecondary = AppColors.textMuted;
 const _borderSoft = AppColors.border;
 const _pageBackground = AppColors.background;
-const double _desktopSidePanelWidth = 500;
-const double _desktopWideSidePanelWidth = 550;
+const double _desktopSidePanelWidth = 540;
+const double _desktopWideSidePanelWidth = 590;
 const double _stockLowThreshold = 5;
 const Duration _desktopImagePickerTimeout = Duration(seconds: 30);
 const String _inventoryCategoriesCacheKey = 'inventory_categories_v1';
@@ -1064,6 +1068,9 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
       if (mounted) setState(() {});
     });
     _seedProductSearchFromCatalogState();
+    ref.listenManual(catalogDataRefreshTickProvider, (_, _) {
+      if (mounted) unawaited(_productSearch.refresh());
+    });
     unawaited(_productSearch.loadInitial());
   }
 
@@ -1369,7 +1376,7 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
     return doc.save();
   }
 
-  Future<void> _deleteProductsSelection(List<ProductModel> products) async {
+  Future<void> _deleteProductsSelection(List<ProductModel> products, {bool archive = false}) async {
     if (products.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Selecciona productos para eliminar')),
@@ -1383,26 +1390,60 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
       reason: 'Eliminar productos',
     );
     if (!allowed || !mounted) return;
-    final confirmed = await FullTechConfirmDialog.show(
-      context,
-      title: 'Eliminar selección',
-      message: '¿Deseas eliminar ${products.length} productos seleccionados?',
-      confirmText: 'Eliminar',
-      cancelText: 'Cancelar',
-      icon: Icons.delete_outline_rounded,
-      iconColor: FullTechDialogTokens.errorColor,
-      isDestructive: true,
-    );
-    if (confirmed != true || !mounted) return;
-    final controller = ref.read(catalogControllerProvider.notifier);
+    final repo = ref.read(catalogRepositoryProvider);
+    final eligible = <ProductModel>[];
+    final results = <String>[];
     for (final product in products) {
-      await controller.remove(product.id);
-      _productSearch.removeLocal(product.id);
+      try {
+        await repo.assertNoPendingProductReferences(product.id);
+        final state = await repo.productLifecycle(product.id);
+        if (archive ? state.canArchive : state.canDelete) {
+          eligible.add(product);
+        } else {
+          results.add('${product.nombre}: ${state.reason}');
+        }
+      } catch (error) {
+        results.add('${product.nombre}: ${userSafeErrorMessage(error, fallback: 'No se pudo comprobar. Sin cambios.')}');
+      }
     }
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${products.length} productos eliminados')),
-    );
+    final confirmed = eligible.isNotEmpty && (await ProductLifecycleFeedback.confirmBulk(
+      context, archive:archive, eligible:eligible.length, total:products.length) == true);
+    if (!mounted || (eligible.isNotEmpty && confirmed != true)) return;
+    for (final product in eligible) {
+      try {
+        if (archive) { await repo.archiveProduct(product.id); }
+        else { await repo.deleteProduct(product.id); }
+        results.add('${product.nombre}: ${archive ? 'Archivado' : 'Eliminado'}');
+      } catch (error) {
+        results.add('${product.nombre}: ${userSafeErrorMessage(error, fallback: 'No se confirmó el cambio. Comprueba su estado.')}');
+      }
+    }
+    try { await _refreshLifecycleCatalog(); } catch (_) {
+      results.add('Cambios procesados. Actualiza el catálogo para comprobar su estado.');
+    }
+    if (!mounted) return;
+    await showDialog<void>(context: context, builder: (context) => ProductLifecycleResultsDialog(results:results));
+  }
+
+  Future<void> _refreshLifecycleCatalog() async {
+    await ref.read(catalogControllerProvider.notifier).reconcileLifecycle();
+    if (mounted) await _productSearch.refresh();
+  }
+
+  Future<void> _showLifecycle(ProductModel product) async {
+    final allowed = await ensureAdminAuthorization(context, ref,
+      permission: AppPermission.editProducts, reason: 'Gestionar producto');
+    if (!allowed || !mounted) return;
+    await showDialog<void>(context: context, builder: (_) => ProductLifecycleDialog(
+      productId: product.id, name: product.nombre, onChanged: _refreshLifecycleCatalog));
+  }
+
+  Future<void> _showArchivedProducts() async {
+    final allowed = await ensureAdminAuthorization(context, ref,
+      permission: AppPermission.editProducts, reason: 'Consultar archivados');
+    if (!allowed || !mounted) return;
+    await showDialog<void>(context: context, builder: (_) => ArchivedProductsDialog(onChanged: _refreshLifecycleCatalog));
   }
 
   Future<void> _changeProductsCategorySelection(
@@ -1624,6 +1665,9 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
   Future<void> _handleMobileOverflow(String action) async {
     if (_mobileTabIndex != 0) return;
     switch (action) {
+      case 'archived':
+        await _showArchivedProducts();
+        break;
       case 'import':
         await _importCatalog();
         break;
@@ -1825,6 +1869,7 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
         onExportSelection: _exportProductsSelection,
         onPdfSelection: _showProductsPdf,
         onBulkDelete: _deleteProductsSelection,
+        onBulkArchive: (products) => _deleteProductsSelection(products, archive: true),
         onBulkChangeCategory: _changeProductsCategorySelection,
         onEdit: (product) => _openProductEditor(product: product),
         onSetStock: _setProductStock,
@@ -1833,38 +1878,7 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
         inventoryEnabled: inventoryEnabled,
         showTaxBadges: showTaxBadges,
         taxConfig: taxConfig,
-        onDelete: (product) async {
-          final allowed = await ensureAdminAuthorization(
-            context,
-            ref,
-            permission: AppPermission.editProducts,
-            reason: 'Eliminar producto',
-          );
-          if (!allowed || !context.mounted) return;
-          final controller = ref.read(catalogControllerProvider.notifier);
-          try {
-            await controller.remove(product.id);
-            _productSearch.removeLocal(product.id);
-          } on ProductDeleteRequiresArchiveException catch (_) {
-            if (!context.mounted) return;
-            final archive = await FullTechConfirmDialog.show(
-              context,
-              title: 'Archivar producto',
-              message:
-                  'Este producto tiene movimientos o historial y no puede eliminarse definitivamente.\n\n¿Deseas archivarlo?',
-              confirmText: 'Archivar producto',
-              cancelText: 'Cancelar',
-              icon: Icons.archive_outlined,
-              iconColor: AppColors.secondary,
-            );
-            if (archive == true) {
-              final archived = await controller.archive(product.id);
-              if (archived != null) {
-                _productSearch.removeLocal(archived.id);
-              }
-            }
-          }
-        },
+        onDelete: _showLifecycle,
       ),
       InventoryTab(
         key: _inventoryKey,
@@ -1936,7 +1950,7 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
                     IconButton(
                       tooltip: 'Filtros',
                       onPressed: _openCurrentMobileFilters,
-                      icon: const Icon(Icons.filter_alt_outlined),
+                      icon: const ProductArtwork(ProductArtworkKind.filter),
                     ),
                   if (!_mobileSearchOpen && initialTabIndex == 0)
                     PopupMenuButton<String>(
@@ -1945,6 +1959,8 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
                       onSelected: (value) =>
                           unawaited(_handleMobileOverflow(value)),
                       itemBuilder: (context) => const [
+                        PopupMenuItem(value: 'archived', child: ListTile(dense: true,
+                          leading: Icon(Icons.archive_outlined), title: Text('Archivados'))),
                         PopupMenuItem(
                           value: 'import',
                           child: ListTile(
@@ -1994,6 +2010,12 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
             : FullTechPageHeader(
                 title: desktopTitle,
                 actions: [
+                  if (initialTabIndex == 0 && canEditProducts)
+                    _CatalogHeaderActionButton(onPressed: _showArchivedProducts,
+                      icon: const Icon(Icons.archive_outlined, size: 18), label: 'Archivados'),
+                  if (initialTabIndex == 0 && canEditProducts)
+                    _CatalogHeaderActionButton(onPressed: _showArchivedProducts,
+                      icon: const Icon(Icons.archive_outlined, size: 18), label: 'Archivados'),
                   if (initialTabIndex == 0)
                     _CatalogHeaderActionButton(
                       onPressed: canEditProducts ? _importCatalog : null,
@@ -2797,6 +2819,7 @@ class CatalogTab extends StatefulWidget {
     required this.onExportSelection,
     required this.onPdfSelection,
     required this.onBulkDelete,
+    this.onBulkArchive,
     required this.onBulkChangeCategory,
     required this.onEdit,
     required this.onSetStock,
@@ -2822,6 +2845,7 @@ class CatalogTab extends StatefulWidget {
   final Future<void> Function(List<ProductModel> products) onExportSelection;
   final Future<void> Function(List<ProductModel> products) onPdfSelection;
   final Future<void> Function(List<ProductModel> products) onBulkDelete;
+  final Future<void> Function(List<ProductModel> products)? onBulkArchive;
   final Future<void> Function(List<ProductModel> products, String category)
   onBulkChangeCategory;
   final ValueChanged<ProductModel> onEdit;
@@ -2976,6 +3000,9 @@ class _CatalogTabState extends State<CatalogTab> {
         await _changeSelectedCategory();
       case _CatalogBulkAction.delete:
         await deleteSelected();
+      case _CatalogBulkAction.archive:
+        final selected = widget.products.where((p) => _selectedIds.contains(p.id)).toList();
+        await widget.onBulkArchive?.call(selected);
     }
   }
 
@@ -3014,16 +3041,6 @@ class _CatalogTabState extends State<CatalogTab> {
   }
 
   Future<void> _confirmDelete(ProductModel product) async {
-    final confirmed = await FullTechConfirmDialog.show(
-      context,
-      title: 'Eliminar producto',
-      message: '¿Deseas eliminar "${product.nombre}" del catálogo?',
-      confirmText: 'Eliminar',
-      cancelText: 'Cancelar',
-      icon: Icons.delete_outline_rounded,
-      iconColor: FullTechDialogTokens.errorColor,
-    );
-    if (confirmed != true) return;
     await widget.onDelete(product);
     if (!mounted) return;
     setState(() => _selectedIds.remove(product.id));
@@ -3308,6 +3325,7 @@ class _CatalogToolbar extends StatelessWidget {
         children: [
           SizedBox(
             width: searchWidth,
+            height: 48,
             child: TextField(
               controller: controller,
               onChanged: onSearchChanged,
@@ -3317,6 +3335,8 @@ class _CatalogToolbar extends StatelessWidget {
                   child: ProvidedActionIcon(ProvidedAction.search, size: 18),
                 ),
                 hintText: 'Buscar por nombre, código o categoría',
+                constraints: const BoxConstraints.tightFor(height: 48),
+                visualDensity: VisualDensity.standard,
                 filled: true,
                 fillColor: Colors.white,
                 border: OutlineInputBorder(
@@ -3347,7 +3367,7 @@ class _CatalogToolbar extends StatelessWidget {
             icon: Badge(
               isLabelVisible: hasFilters,
               smallSize: 8,
-              child: const Icon(Icons.filter_alt_outlined, size: 17),
+              child: const ProductArtwork(ProductArtworkKind.filter, size: 18),
             ),
             label: 'Filtro',
           ),
@@ -3515,9 +3535,7 @@ class _CatalogToolbarButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final shape = RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(7),
-    );
+    const shape = RoundedRectangleBorder();
     final textStyle = TextStyle(
       fontFamily: Theme.of(context).textTheme.labelMedium?.fontFamily,
       fontSize: 13,
@@ -3531,7 +3549,10 @@ class _CatalogToolbarButton extends StatelessWidget {
       icon: icon,
       label: text,
       style: OutlinedButton.styleFrom(
-        minimumSize: const Size(0, 40),
+        minimumSize: const Size(0, 48),
+        maximumSize: const Size(double.infinity, 48),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.standard,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         foregroundColor: AppColors.primary,
         disabledForegroundColor: AppColors.textMuted,
@@ -3544,7 +3565,7 @@ class _CatalogToolbarButton extends StatelessWidget {
   }
 }
 
-enum _CatalogBulkAction { export, pdf, category, delete }
+enum _CatalogBulkAction { export, pdf, category, archive, delete }
 
 class _CatalogBulkActionsButton extends StatelessWidget {
   const _CatalogBulkActionsButton({
@@ -3601,6 +3622,9 @@ class _CatalogBulkActionsButton extends StatelessWidget {
             ),
           ),
         if (canEditProducts) const PopupMenuDivider(),
+        if (canEditProducts)
+          const PopupMenuItem(value: _CatalogBulkAction.archive,
+            child: _CatalogActionMenuRow(icon: Icons.archive_outlined, label: 'Archivar selección')),
         if (canEditProducts)
           const PopupMenuItem(
             value: _CatalogBulkAction.delete,
@@ -3907,13 +3931,11 @@ class _CatalogTable extends StatelessWidget {
                                   icon: const Icon(Icons.tune_outlined),
                                 ),
                               IconButton(
-                                tooltip: 'Eliminar',
+                                tooltip: 'Gestionar producto',
                                 onPressed: canEditProducts
                                     ? () => onDelete(product)
                                     : null,
-                                icon: const ProvidedActionIcon(
-                                  ProvidedAction.delete,
-                                ),
+                                icon: const ProductArtwork(ProductArtworkKind.delete),
                               ),
                             ],
                           ),
@@ -6794,6 +6816,7 @@ class CompactProductCard extends StatelessWidget {
                         onEdit: onEdit,
                         onStock: onStock,
                         onDelete: onDelete,
+                        lifecycle: true,
                       ),
                     ],
                   )
@@ -6863,11 +6886,12 @@ class CompactProductCard extends StatelessWidget {
 }
 
 class _ProductActionsMenu extends StatelessWidget {
-  const _ProductActionsMenu({this.onEdit, this.onStock, this.onDelete});
+  const _ProductActionsMenu({this.onEdit, this.onStock, this.onDelete, this.lifecycle = false});
 
   final VoidCallback? onEdit;
   final VoidCallback? onStock;
   final VoidCallback? onDelete;
+  final bool lifecycle;
 
   @override
   Widget build(BuildContext context) {
@@ -6917,12 +6941,12 @@ class _ProductActionsMenu extends StatelessWidget {
               ),
             ),
           if (onDelete != null)
-            const PopupMenuItem(
+            PopupMenuItem(
               value: 'delete',
               child: ListTile(
                 dense: true,
-                leading: ProvidedActionIcon(ProvidedAction.delete),
-                title: Text('Eliminar'),
+                leading: lifecycle ? const ProductArtwork(ProductArtworkKind.delete) : const Icon(Icons.delete_outline),
+                title: Text(lifecycle ? 'Gestionar producto' : 'Eliminar'),
               ),
             ),
         ],
@@ -7182,13 +7206,13 @@ class _ProductDetailPage extends StatelessWidget {
                 if (onDelete != null) ...[
                   const SizedBox(width: 10),
                   IconButton.outlined(
-                    tooltip: 'Eliminar',
+                    tooltip: 'Gestionar producto',
                     onPressed: () {
                       Navigator.of(context).pop();
                       onDelete?.call();
                     },
-                    icon: const Icon(Icons.delete_outline_rounded),
-                    color: AppColors.error,
+                    icon: const Icon(Icons.inventory_2_outlined),
+                    color: AppColors.primary,
                   ),
                 ],
               ],
@@ -7886,6 +7910,7 @@ class _ReadOnlyStockPanel extends StatelessWidget {
             ),
             const SizedBox(width: 12),
             OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(shape: const RoundedRectangleBorder()),
               onPressed: onAdjustStock,
               icon: const Icon(Icons.inventory_2_outlined),
               label: const Text('Ajustar stock'),
@@ -8025,10 +8050,12 @@ class _InventorySidePanelScaffold extends StatelessWidget {
     required this.body,
     this.footer,
     this.onSubmit,
+    this.headerIcon,
   });
 
   final String title;
   final IconData icon;
+  final Widget? headerIcon;
   final VoidCallback? onClose;
   final Widget body;
   final Widget? footer;
@@ -8077,7 +8104,7 @@ class _InventorySidePanelScaffold extends StatelessWidget {
                             color: _lightBlueHover,
                             border: Border.all(color: _borderSoft),
                           ),
-                          child: Icon(icon, color: _primaryBlue),
+                          child: Center(child:headerIcon??Icon(icon, color: _primaryBlue)),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -9028,6 +9055,17 @@ class _InventoryProductEditorPageState
       Navigator.of(context).pop(ProductFormResult(saved: true, product: saved));
     } catch (e) {
       if (!mounted) return;
+      if (e is ProductArchivedExistsException && e.canRestore) {
+        setState(() { _isSaving = false; _formError = null; });
+        var restored = false;
+        await showDialog<void>(context: context, builder: (_) => ProductLifecycleDialog(
+          productId: e.productId, name: name, onChanged: () async {
+            await ref.read(catalogControllerProvider.notifier).reconcileLifecycle();
+            restored = true;
+          }));
+        if (mounted && restored) Navigator.of(context).pop(const ProductFormResult(saved: true));
+        return;
+      }
       if (_isUomChangeProtectedError(e)) {
         // Producto sin stock pero con historial: el backend protege la unidad.
         // Mostramos una notificación profesional, sin exponer el error técnico.
@@ -9151,10 +9189,11 @@ class _InventoryProductEditorPageState
     return _InventorySidePanelScaffold(
       title: product == null ? 'Nuevo producto' : 'Editar producto',
       icon: product == null ? Icons.add_box_outlined : Icons.edit_outlined,
+      headerIcon: product == null ? const ProductArtwork(ProductArtworkKind.add,color:_primaryBlue,size:24) : null,
       onClose: _isSaving ? null : _close,
       onSubmit: _isSaving || _isPickingImage ? null : _advanceFormOrSave,
       body: Padding(
-        padding: const EdgeInsets.fromLTRB(0, 14, 0, 0),
+        padding: const EdgeInsets.fromLTRB(0, 14, 12, 0),
         child: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -9530,6 +9569,7 @@ class _InventoryProductEditorPageState
       footer: SizedBox(
         width: double.infinity,
         child: FilledButton.icon(
+          style: FilledButton.styleFrom(shape: const RoundedRectangleBorder()),
           onPressed: _isSaving ? null : _save,
           icon: _isSaving
               ? const SizedBox(

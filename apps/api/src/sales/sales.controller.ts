@@ -179,7 +179,6 @@ export class SalesController {
     return this.sales.createInvoicePdfShareLink(user, dto, requestBaseUrl);
   }
 
-  @Delete("debug/purge")
   @Roles(Role.ADMIN)
   purgeAllForDebug(@Req() req: Request) {
     const user = req.user as TenantUser;

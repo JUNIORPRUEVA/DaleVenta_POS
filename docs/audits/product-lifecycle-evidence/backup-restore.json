@@ -1,0 +1,15 @@
+{
+  "result": "PASS",
+  "backupSha256": "bd2b973b741a584db772acf22e6754cb9b6c69558aa359d65202342665a1936f",
+  "bytes": 876062,
+  "restoredDatabase": "fullpos_product_restore_1795227164085",
+  "protectedNativeProductIdentical": true,
+  "originalDatabaseUnchanged": true,
+  "oldWriterRestoreAndStockRejected": true,
+  "migrations": [
+    "20261121010000_product_lifecycle",
+    "20261121011000_product_lifecycle_events",
+    "20261121012000_product_lifecycle_historical_returns",
+    "20261121013000_product_lifecycle_return_column_mapping"
+  ]
+}

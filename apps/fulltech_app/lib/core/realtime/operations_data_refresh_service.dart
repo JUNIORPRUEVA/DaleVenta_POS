@@ -23,6 +23,14 @@ final operationsDataRefreshProvider = Provider<OperationsDataRefreshService>((
 class OperationsDataRefreshService {
   OperationsDataRefreshService(this._ref) {
     final realtime = _ref.read(operationsRealtimeServiceProvider);
+    _productSubscription = realtime.productStream.listen((_) {
+      _productTimer?.cancel();
+      _productTimer = Timer(const Duration(milliseconds: 250), () async {
+        if (!_ref.read(authStateProvider).isAuthenticated) return;
+        await _ref.read(catalogControllerProvider.notifier).reconcileLifecycle();
+        if (!_disposed) _ref.read(catalogDataRefreshTickProvider.notifier).state++;
+      });
+    });
     _salesSubscription = realtime.salesStream.listen((_) {
       refreshSalesAndCash();
     });
@@ -56,6 +64,9 @@ class OperationsDataRefreshService {
   }
 
   final Ref _ref;
+  bool _disposed = false;
+  Timer? _productTimer;
+  StreamSubscription<String>? _productSubscription;
   StreamSubscription<SalesRealtimeMessage>? _salesSubscription;
   StreamSubscription<CashRealtimeMessage>? _cashSubscription;
   StreamSubscription<PermissionsRealtimeMessage>? _permissionsSubscription;
@@ -122,6 +133,9 @@ class OperationsDataRefreshService {
   }
 
   void dispose() {
+    _disposed = true;
+    _productTimer?.cancel();
+    unawaited(_productSubscription?.cancel());
     unawaited(_salesSubscription?.cancel());
     unawaited(_cashSubscription?.cancel());
     unawaited(_permissionsSubscription?.cancel());

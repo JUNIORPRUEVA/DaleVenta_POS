@@ -61,7 +61,6 @@ export class ServiceOrdersController {
     return this.serviceOrders.create(req.user as RequestUser, dto);
   }
 
-  @Delete('debug/purge')
   @Roles(Role.ADMIN)
   purgeAllForDebug(@Req() req: Request) {
     return this.serviceOrders.purgeAllForDebug(req.user as RequestUser);

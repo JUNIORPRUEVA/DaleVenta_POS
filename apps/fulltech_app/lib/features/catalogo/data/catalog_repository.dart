@@ -14,6 +14,8 @@ import '../../../core/errors/api_exception.dart';
 import '../../../core/errors/user_safe_error_text.dart';
 import '../../../core/models/product_model.dart';
 import 'product_pages_loader.dart';
+import 'product_lifecycle_snapshot.dart';
+import '../../../core/offline/offline_store.dart';
 import '../../../core/offline/pending_sync_action.dart';
 import '../../../core/offline/sync_queue_service.dart';
 import '../../../core/offline/offline_emergency_policy.dart';
@@ -44,6 +46,12 @@ class ProductDeleteRequiresArchiveException extends ApiException {
        );
 
   final String productId;
+}
+
+class ProductArchivedExistsException extends ApiException {
+  ProductArchivedExistsException({required this.productId, required this.canRestore, required String message}) : super(message, 409);
+  final String productId;
+  final bool canRestore;
 }
 
 class CatalogRepository {
@@ -347,7 +355,7 @@ class CatalogRepository {
 
   bool _isProductHasHistory(dynamic data) {
     if (data is! Map) return false;
-    return data['code']?.toString() == 'PRODUCT_HAS_HISTORY' &&
+    return const ['PRODUCT_HAS_HISTORY', 'PRODUCT_HAS_STOCK'].contains(data['code']?.toString()) &&
         data['canArchive'] == true;
   }
 
@@ -763,6 +771,11 @@ class CatalogRepository {
         _extractMessage(e.response?.data, 'No se pudo crear el producto'),
         e.response?.statusCode,
       );
+      final response = e.response?.data;
+      if (response is Map && response['code'] == 'PRODUCT_ARCHIVED_EXISTS' && response['productId'] is String) {
+        throw ProductArchivedExistsException(productId: response['productId'] as String,
+          canRestore: response['canRestore'] == true, message: error.message);
+      }
       if (!_shouldQueueSync(error) || _syncQueue == null) throw error;
       await _assertOfflineOperation(
         _createSyncType,
@@ -1109,6 +1122,7 @@ class CatalogRepository {
   }
 
   Future<void> deleteProduct(String id, {bool skipLoader = false}) async {
+    await assertNoPendingProductReferences(id);
     try {
       await _deleteProductRemote(id, skipLoader: skipLoader);
     } on DioException catch (e) {
@@ -1135,7 +1149,9 @@ class CatalogRepository {
   Future<ProductModel> archiveProduct(
     String id, {
     bool skipLoader = false,
+    String? resolvingActionId,
   }) async {
+    await assertNoPendingProductReferences(id, ignoreActionId: resolvingActionId);
     try {
       final res = await _dio.patch(
         ApiRoutes.archiveProduct(id),
@@ -1167,20 +1183,92 @@ class CatalogRepository {
     PendingSyncAction action, {
     bool skipLoader = false,
   }) async {
+    final owner = await _tokenStorage.getUserSnapshot();
+    if (owner?.companyId != action.companyId || owner?.id != action.userId || action.type != _deleteSyncType) {
+      throw ApiException('Esta operación pertenece a otra sesión. No se modificó.');
+    }
     final id = (action.entityId ?? action.payload['id'] ?? '').toString();
     if (id.trim().isEmpty) {
       throw ApiException('No se encontró el producto pendiente para archivar');
     }
-    final product = await archiveProduct(id, skipLoader: skipLoader);
-    await _syncQueue?.remove(action.id);
+    final product = await archiveProduct(id, skipLoader: skipLoader, resolvingActionId: action.id);
+    final saved = await OfflineStore.instance.updatePendingActionIfUnchanged(action,
+      action.copyWith(status: 'review_resolved', permanent: true, updatedAt: DateTime.now().toUtc(),
+        payload: {...action.payload, 'productResolution': {'decision': 'ARCHIVED', 'productId': id}}));
+    await _syncQueue?.refreshStats();
+    if (!saved) throw ApiException('El producto se archivó. La operación local se conserva; comprueba su estado.');
     return product;
   }
 
-  Future<void> _deleteProductRemote(String id, {bool skipLoader = false}) {
-    return _dio.delete(
+  Future<void> _deleteProductRemote(String id, {bool skipLoader = false}) async {
+    final response = await _dio.delete(
       ApiRoutes.deleteProduct(id),
       options: skipLoader ? Options(extra: const {'skipLoader': true}) : null,
     );
+    if (response.data is! Map || response.data['ok'] != true || response.data['archived'] == true) {
+      throw ApiException('No se confirmó la eliminación. Comprueba el producto antes de repetir.');
+    }
+  }
+
+  Future<void> assertNoPendingProductReferences(String id, {String? ignoreActionId}) async {
+    final user = await _tokenStorage.getUserSnapshot();
+    final companyId = user?.companyId;
+    if (companyId == null || companyId.trim().isEmpty) {
+      throw ApiException('Inicia sesión para comprobar las operaciones pendientes.');
+    }
+    final pending = await OfflineStore.instance.listPendingActions(companyId: companyId, limit: null);
+    if (pending.any((a) => a.id != ignoreActionId && a.status != 'review_resolved' &&
+        (a.entityId == id || payloadReferencesProduct(a.payload, id)))) {
+      throw ApiException('Este producto tiene operaciones locales pendientes. Resuélvelas antes de cambiar su estado.');
+    }
+  }
+
+  Future<ProductLifecycleSnapshot> productLifecycle(String id) async {
+    try {
+      final response = await _dio.get('/products/$id/lifecycle');
+      return ProductLifecycleSnapshot(Map<String, dynamic>.from(response.data as Map));
+    } on DioException catch (e) {
+      throw ApiException(_extractMessage(e.response?.data, 'Se necesita conexión para comprobar el producto.'), e.response?.statusCode);
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> archivedProducts({String search = '', int page = 1}) async {
+    try {
+      final response = await _dio.get('/products', queryParameters: {
+        'archivedOnly': 'true', 'page': page, 'limit': 50,
+        if (search.trim().isNotEmpty) 'search': search.trim(),
+      });
+      final data = response.data;
+      final rows = data is Map ? data['items'] : data;
+      if (rows is! List) throw ApiException('No se pudo comprobar la lista de archivados.');
+      return rows.whereType<Map>().map((row) => Map<String, dynamic>.from(row)).toList();
+    } on DioException catch (e) {
+      throw ApiException(_extractMessage(e.response?.data, 'No se pudieron cargar los archivados.'), e.response?.statusCode);
+    }
+  }
+
+  Future<ProductModel> restoreProduct(String id) async {
+    await assertNoPendingProductReferences(id);
+    try {
+      final response = await _dio.patch('/products/$id/reactivate');
+      return ProductModel.fromJson(Map<String, dynamic>.from(response.data['product'] as Map));
+    } on DioException catch (e) {
+      throw ApiException(_extractMessage(e.response?.data, 'No se pudo restaurar el producto.'), e.response?.statusCode);
+    }
+  }
+
+  Future<void> annulProduct(String id, {required String operationId, required int expectedVersion, required String reason}) async {
+    await assertNoPendingProductReferences(id);
+    try {
+      final response = await _dio.post('/products/$id/annul', data: {
+        'operationId': operationId, 'expectedVersion': expectedVersion, 'reason': reason.trim(),
+      });
+      if (response.data is! Map || response.data['ok'] != true) {
+        throw ApiException('No se confirmó la anulación. Verifica el estado antes de repetir.');
+      }
+    } on DioException catch (e) {
+      throw ApiException(_extractMessage(e.response?.data, 'No se pudo confirmar la anulación. Verifica el estado antes de repetir.'), e.response?.statusCode);
+    }
   }
 
   Map<String, dynamic> _productPayload({

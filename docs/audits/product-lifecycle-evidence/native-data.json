@@ -1,0 +1,21 @@
+{
+  "result": "PASS",
+  "results": [
+    {
+      "platform": "windows",
+      "result": "PASS",
+      "originalAndCompensationRetained": true,
+      "exactlyOneAnnulment": true,
+      "validReplayExactlyOnce": true,
+      "pendingDeleteArchivedWithStockPreserved": true
+    },
+    {
+      "platform": "android",
+      "result": "PASS",
+      "originalAndCompensationRetained": true,
+      "exactlyOneAnnulment": true,
+      "validReplayExactlyOnce": true,
+      "pendingDeleteArchivedWithStockPreserved": true
+    }
+  ]
+}

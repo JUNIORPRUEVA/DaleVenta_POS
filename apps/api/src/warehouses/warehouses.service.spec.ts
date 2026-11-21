@@ -388,6 +388,23 @@ function buildService(
 }
 
 describe("WarehousesService", () => {
+  it('publishes auxiliary telemetry only after the warehouse transaction commits', async () => {
+    const { service, api } = buildService();
+    let insideTransaction = false;
+    const transaction = api.$transaction;
+    api.$transaction = jest.fn(async (work: any) => {
+      insideTransaction = true;
+      try { return await transaction(work); }
+      finally { insideTransaction = false; }
+    }) as any;
+    const enqueueBusinessEvent = jest.fn(async () => {
+      expect(insideTransaction).toBe(false);
+      return null;
+    });
+    (service as any).telemetry = { enqueueBusinessEvent };
+    await service.create(userA as any, {name:'Synthetic',code:'SYN'});
+    expect(enqueueBusinessEvent).toHaveBeenCalledTimes(1);
+  });
   it("blocks warehouse endpoints when company flag is off", async () => {
     const { service, api } = buildService();
 

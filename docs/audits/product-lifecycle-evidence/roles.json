@@ -1,0 +1,13 @@
+{
+  "result": "PASS",
+  "roles": [
+    "ADMIN",
+    "ASISTENTE",
+    "VENDEDOR",
+    "CAJERO"
+  ],
+  "legacyManagerMapsToAdmin": true,
+  "companyId": "906b8463-be82-4c70-904d-0172a3650449",
+  "forbiddenAnnulments": 2,
+  "productUnchanged": true
+}
