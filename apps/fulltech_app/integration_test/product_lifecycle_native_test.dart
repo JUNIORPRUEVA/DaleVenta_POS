@@ -4,12 +4,14 @@ import 'dart:ui' as ui;
 
 import 'package:daleventa_pos/core/auth/token_storage.dart';
 import 'package:daleventa_pos/core/models/user_model.dart';
+import 'package:daleventa_pos/core/models/product_model.dart';
 import 'package:daleventa_pos/core/offline/offline_store.dart';
 import 'package:daleventa_pos/core/offline/pending_sync_action.dart';
 import 'package:daleventa_pos/core/offline/sync_queue_service.dart';
 import 'package:daleventa_pos/core/theme/app_theme.dart';
 import 'package:daleventa_pos/features/catalogo/data/catalog_repository.dart';
 import 'package:daleventa_pos/features/products/ui/product_lifecycle_dialog.dart';
+import 'package:daleventa_pos/features/products/ui/product_lifecycle_feedback.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -27,9 +29,24 @@ class _FixtureStorage extends TokenStorage {
   Future<UserModel?> getUserSnapshot() async => user;
 }
 
+class _NativeRepository extends CatalogRepository {
+  _NativeRepository(super.dio, super.storage, this.evidenceFile);
+  final File evidenceFile;
+  @override
+  Future<ProductModel> archiveProduct(String id, {bool skipLoader = false, String? resolvingActionId}) async {
+    try {
+      return await super.archiveProduct(id, skipLoader: skipLoader, resolvingActionId: resolvingActionId);
+    } catch (error, stack) {
+      await evidenceFile.writeAsString('${error.runtimeType}\n$stack');
+      rethrow;
+    }
+  }
+}
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   testWidgets('real product lifecycle buttons preserve stock, identity and Kardex', (tester) async {
+    addTearDown(ProductLifecycleFeedback.dismissNotice);
     expect(Platform.isWindows || Platform.isAndroid, true);
     if (Platform.isWindows) { sqfliteFfiInit(); databaseFactory = databaseFactoryFfi; }
     final support = await getApplicationSupportDirectory();
@@ -42,11 +59,11 @@ void main() {
     expect(login.data['user']['companyId'], fixture['user']['companyId']);
     dio.options.headers['Authorization'] = 'Bearer ${login.data['accessToken']}';
     final user = UserModel.fromJson(Map<String, dynamic>.from(fixture['user'] as Map));
-    final repo = CatalogRepository(dio, _FixtureStorage(user));
     final pendingBefore = (await OfflineStore.instance.listPendingActions(limit: null)).map((a)=>a.toMap()).toList();
     final evidence = Directory(Platform.isAndroid ? '${support.path}/product-lifecycle-evidence'
       : const String.fromEnvironment('PRODUCT_LIFECYCLE_EVIDENCE_DIR'));
     await evidence.create(recursive: true);
+    final repo = _NativeRepository(dio, _FixtureStorage(user), File('${evidence.path}/repository-failure.txt'));
     final boundary = GlobalKey();
     late BuildContext host;
     var changed = 0;
@@ -101,10 +118,17 @@ void main() {
     await action('Archivar');
     final archived = await inspect(id); expect(archived['status'], 'ARCHIVED'); expect(archived['stock'], 7);
     expect(archived['references'], original['references']);
+    if (!host.mounted) throw StateError('Native test host was disposed');
     showDialog<void>(context: host, builder: (_) => ArchivedProductsDialog(onChanged: () async {changed++;}));
-    await settle(); expect(find.text('${product['nombre']}'), findsOneWidget);
+    await settle();
+    // Repeated runs retain archived products. Search instead of assuming the
+    // new row is among the currently built, visible rows of the first page.
+    await tester.enterText(find.byType(TextField), '${product['nombre']}');
+    await tester.tap(find.byTooltip('Buscar')); await settle();
+    final archivedRow = find.widgetWithText(ListTile, '${product['nombre']}');
+    expect(archivedRow, findsOneWidget);
     await capture('02-archived-list');
-    await tester.tap(find.text('${product['nombre']}')); await settle();
+    await tester.tap(archivedRow); await settle();
     await action('Restaurar');
     expect((await inspect(id))['status'], 'ACTIVE');
     await tester.tap(find.text('Cerrar')); await settle();
@@ -172,14 +196,14 @@ void main() {
     expect(resolved.payload['originalEvidence'],'preserved');expect((await inspect('${pendingProduct['id']}'))['stock'],3);
     expect((await inspect('${pendingProduct['id']}'))['status'],'ARCHIVED');
     await File('${evidence.path}/native-result.json').writeAsString(jsonEncode({
-      'result':'PASS','platform':Platform.operatingSystem,'companyId':user.companyId,'productId':id,
+      'result':'PASS','runId':const Uuid().v4(),'recordedAtUtc':DateTime.now().toUtc().toIso8601String(),
+      'platform':Platform.operatingSystem,'companyId':user.companyId,'productId':id,
       'deletedProductId':empty['id'],'annulmentOperationId':annulled['annulmentOperationId'],
       'changedCallbacks':changed,'realHttp':true,'originalStock':7,'finalStock':0,'movements':2,
       'localPendingBefore':pendingBefore.length,'localPendingAfter':pendingAfter.length,'localPendingUnchanged':true,
       'reconnectPermanentIncidentPreserved':true,'validStockAfterReconnect':5,'staleActionId':staleId,
       'reconnectProductId':valid['id'],
       'archivePendingDeletePreserved':true,'archivedResolutionProductId':pendingProduct['id'],
-      'reconnectProductId':valid['id'],
     }));
     await tester.pumpWidget(const SizedBox.shrink()); dio.close();
   });

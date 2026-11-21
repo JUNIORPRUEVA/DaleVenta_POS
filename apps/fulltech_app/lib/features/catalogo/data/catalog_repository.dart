@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/api/api_routes.dart';
 import '../../../core/auth/auth_repository.dart';
 import '../../../core/auth/token_storage.dart';
+import '../../../core/auth/operation_scope.dart';
 import '../../../core/cache/local_json_cache.dart';
 import '../../../core/debug/trace_log.dart';
 import '../../../core/errors/api_exception.dart';
@@ -1122,9 +1123,12 @@ class CatalogRepository {
   }
 
   Future<void> deleteProduct(String id, {bool skipLoader = false}) async {
+    final owner = await _productLifecycleOwner();
     await assertNoPendingProductReferences(id);
+    await _assertProductLifecycleOwner(owner);
     try {
-      await _deleteProductRemote(id, skipLoader: skipLoader);
+      await OperationScope(owner.$2, owner.$1).run(() => _deleteProductRemote(id, skipLoader: skipLoader));
+      await _assertProductLifecycleOwner(owner);
     } on DioException catch (e) {
       if (_isProductHasHistory(e.response?.data)) {
         throw ProductDeleteRequiresArchiveException(
@@ -1151,25 +1155,36 @@ class CatalogRepository {
     bool skipLoader = false,
     String? resolvingActionId,
   }) async {
+    final owner = await _productLifecycleOwner();
     await assertNoPendingProductReferences(id, ignoreActionId: resolvingActionId);
+    await _assertProductLifecycleOwner(owner);
     try {
-      final res = await _dio.patch(
+      final res = await OperationScope(owner.$2, owner.$1).run(() => _dio.patch(
         ApiRoutes.archiveProduct(id),
         options: skipLoader ? Options(extra: const {'skipLoader': true}) : null,
-      );
+      ));
       final data = res.data;
-      final rawProduct = data is Map && data['product'] is Map
+      if (data is! Map || (data.containsKey('ok') && data['ok'] != true) || data['archived'] == false) {
+        throw ApiException('No se confirmó el archivo. Comprueba el estado del producto.');
+      }
+      final rawProduct = data['product'] is Map
           ? data['product']
           : data;
       final product = ProductModel.fromJson(
         (rawProduct as Map).cast<String, dynamic>(),
       );
-      final products = await getCachedProducts();
+      if (product.id != id || product.archivedAt == null || product.activo ||
+          (rawProduct['companyId'] != null && rawProduct['companyId'] != owner.$2)) {
+        throw ApiException('No se confirmó el archivo de este producto. Comprueba su estado.');
+      }
+      await _assertProductLifecycleOwner(owner);
+      final products = await OperationScope(owner.$2, owner.$1).run(() => getCachedProducts());
       final next = [
         for (final item in products)
           if (item.id != id) item,
       ];
-      await saveProductsSnapshot(next);
+      await _assertProductLifecycleOwner(owner);
+      await OperationScope(owner.$2, owner.$1).run(() => _saveProductsSnapshotForCompany(owner.$2, next));
       return product;
     } on DioException catch (e) {
       throw ApiException(
@@ -1192,6 +1207,7 @@ class CatalogRepository {
       throw ApiException('No se encontró el producto pendiente para archivar');
     }
     final product = await archiveProduct(id, skipLoader: skipLoader, resolvingActionId: action.id);
+    await _assertProductLifecycleOwner((action.userId, action.companyId));
     final saved = await OfflineStore.instance.updatePendingActionIfUnchanged(action,
       action.copyWith(status: 'review_resolved', permanent: true, updatedAt: DateTime.now().toUtc(),
         payload: {...action.payload, 'productResolution': {'decision': 'ARCHIVED', 'productId': id}}));
@@ -1223,24 +1239,55 @@ class CatalogRepository {
     }
   }
 
+  Future<(String, String)> _productLifecycleOwner() async {
+    final user = await _tokenStorage.getUserSnapshot();
+    final companyId = user?.companyId?.trim() ?? '';
+    final userId = user?.id.trim() ?? '';
+    if (companyId.isEmpty || userId.isEmpty) {
+      throw ApiException('Inicia sesión para comprobar el producto.');
+    }
+    return (userId, companyId);
+  }
+
+  Future<void> _assertProductLifecycleOwner((String?, String?) owner) async {
+    if (await _productLifecycleOwner() != owner) {
+      throw ApiException('La sesión cambió. Comprueba el producto en su empresa antes de continuar.');
+    }
+  }
+
   Future<ProductLifecycleSnapshot> productLifecycle(String id) async {
+    final owner = await _productLifecycleOwner();
     try {
-      final response = await _dio.get('/products/$id/lifecycle');
-      return ProductLifecycleSnapshot(Map<String, dynamic>.from(response.data as Map));
+      final response = await OperationScope(owner.$2, owner.$1).run(() => _dio.get('/products/$id/lifecycle'));
+      final data = response.data;
+      if (data is! Map || data['productId'] != id || data['companyId'] != owner.$2 ||
+          data['lifecycleVersion'] is! int || data['lifecycleVersion'] < 0 ||
+          !const ['ACTIVE', 'ARCHIVED', 'ANNULLED'].contains(data['status'])) {
+        throw ApiException('No se pudo comprobar este producto. Actualiza su estado.');
+      }
+      await _assertProductLifecycleOwner(owner);
+      return ProductLifecycleSnapshot(Map<String, dynamic>.from(data));
     } on DioException catch (e) {
       throw ApiException(_extractMessage(e.response?.data, 'Se necesita conexión para comprobar el producto.'), e.response?.statusCode);
     }
   }
 
   Future<List<Map<String, dynamic>>> archivedProducts({String search = '', int page = 1}) async {
+    final owner = await _productLifecycleOwner();
     try {
-      final response = await _dio.get('/products', queryParameters: {
+      final response = await OperationScope(owner.$2, owner.$1).run(() => _dio.get('/products', queryParameters: {
         'archivedOnly': 'true', 'page': page, 'limit': 50,
         if (search.trim().isNotEmpty) 'search': search.trim(),
-      });
+      }));
       final data = response.data;
       final rows = data is Map ? data['items'] : data;
       if (rows is! List) throw ApiException('No se pudo comprobar la lista de archivados.');
+      await _assertProductLifecycleOwner(owner);
+      if (rows.any((row) => row is! Map || row['id'] is! String ||
+          (row['id'] as String).trim().isEmpty ||
+          (row['companyId'] != null && row['companyId'] != owner.$2))) {
+        throw ApiException('No se pudo comprobar la lista de esta empresa. Actualiza los archivados.');
+      }
       return rows.whereType<Map>().map((row) => Map<String, dynamic>.from(row)).toList();
     } on DioException catch (e) {
       throw ApiException(_extractMessage(e.response?.data, 'No se pudieron cargar los archivados.'), e.response?.statusCode);
@@ -1248,24 +1295,49 @@ class CatalogRepository {
   }
 
   Future<ProductModel> restoreProduct(String id) async {
+    final owner = await _productLifecycleOwner();
     await assertNoPendingProductReferences(id);
+    await _assertProductLifecycleOwner(owner);
     try {
-      final response = await _dio.patch('/products/$id/reactivate');
-      return ProductModel.fromJson(Map<String, dynamic>.from(response.data['product'] as Map));
+      final response = await OperationScope(owner.$2, owner.$1).run(() => _dio.patch('/products/$id/reactivate'));
+      final raw = response.data is Map ? response.data['product'] : null;
+      if (response.data is! Map || response.data['ok'] != true || response.data['archived'] == true ||
+          raw is! Map || raw['id'] != id ||
+          (raw['companyId'] != null && raw['companyId'] != owner.$2)) {
+        throw ApiException('No se confirmó la restauración de este producto. Comprueba su estado.');
+      }
+      final product = ProductModel.fromJson(Map<String, dynamic>.from(raw));
+      if (product.archivedAt != null || !product.activo || raw['annulledAt'] != null) {
+        throw ApiException('El producto no está activo. Comprueba su estado antes de repetir.');
+      }
+      await _assertProductLifecycleOwner(owner);
+      return product;
     } on DioException catch (e) {
       throw ApiException(_extractMessage(e.response?.data, 'No se pudo restaurar el producto.'), e.response?.statusCode);
     }
   }
 
   Future<void> annulProduct(String id, {required String operationId, required int expectedVersion, required String reason}) async {
+    final owner = await _productLifecycleOwner();
     await assertNoPendingProductReferences(id);
+    await _assertProductLifecycleOwner(owner);
     try {
-      final response = await _dio.post('/products/$id/annul', data: {
+      final response = await OperationScope(owner.$2, owner.$1).run(() => _dio.post('/products/$id/annul', data: {
         'operationId': operationId, 'expectedVersion': expectedVersion, 'reason': reason.trim(),
-      });
-      if (response.data is! Map || response.data['ok'] != true) {
+      }));
+      final data = response.data;
+      final product = data is Map ? data['product'] : null;
+      if (data is! Map || data['ok'] != true || data['annulled'] != true ||
+          product is! Map || product['id'] != id ||
+          product['annulmentOperationId'] != operationId ||
+          product['annulmentReason'] != reason.trim() ||
+          DateTime.tryParse('${product['annulledAt']}') == null ||
+          DateTime.tryParse('${product['archivedAt']}') == null ||
+          num.tryParse('${product['stock']}') != 0 ||
+          (product['companyId'] != null && product['companyId'] != owner.$2)) {
         throw ApiException('No se confirmó la anulación. Verifica el estado antes de repetir.');
       }
+      await _assertProductLifecycleOwner(owner);
     } on DioException catch (e) {
       throw ApiException(_extractMessage(e.response?.data, 'No se pudo confirmar la anulación. Verifica el estado antes de repetir.'), e.response?.statusCode);
     }

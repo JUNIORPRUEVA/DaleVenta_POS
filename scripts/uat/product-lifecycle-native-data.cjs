@@ -5,6 +5,7 @@ async function main(){
  const results=[];
  for(const file of ['windows/native-result.json','android/files/product-lifecycle-evidence/native-result.json']){
   const r=JSON.parse(await fs.readFile(`.uat/product-lifecycle/${file}`,'utf8'));assert.equal(r.result,'PASS');
+  assert.equal(typeof r.runId,'string');assert.ok(r.runId.length>0);assert.ok(Date.parse(r.recordedAtUtc));
   const product=await db.product.findFirstOrThrow({where:{companyId:r.companyId,id:r.productId}});
   assert.ok(product.annulledAt);assert.ok(product.archivedAt);assert.equal(Number(product.stock),0);
   assert.equal(product.annulmentOperationId,r.annulmentOperationId);
@@ -20,7 +21,7 @@ async function main(){
   const archived=await db.product.findFirstOrThrow({where:{companyId:r.companyId,id:r.archivedResolutionProductId}});
   assert.ok(archived.archivedAt);assert.equal(Number(archived.stock),3);
   assert.equal(await db.inventoryMovement.count({where:{companyId:r.companyId,productId:archived.id}}),1);
-  results.push({platform:r.platform,result:'PASS',originalAndCompensationRetained:true,exactlyOneAnnulment:true,validReplayExactlyOnce:true,pendingDeleteArchivedWithStockPreserved:true});
+  results.push({platform:r.platform,runId:r.runId,recordedAtUtc:r.recordedAtUtc,result:'PASS',originalAndCompensationRetained:true,exactlyOneAnnulment:true,validReplayExactlyOnce:true,pendingDeleteArchivedWithStockPreserved:true});
  }
  await fs.writeFile('.uat/product-lifecycle/native-data.json',JSON.stringify({result:'PASS',results},null,2));console.log(JSON.stringify({result:'PASS',results}));
 }

@@ -1,8 +1,8 @@
 {
   "result": "PASS",
-  "backupSha256": "bd2b973b741a584db772acf22e6754cb9b6c69558aa359d65202342665a1936f",
-  "bytes": 876062,
-  "restoredDatabase": "fullpos_product_restore_1795227164085",
+  "backupSha256": "87199c76bb0eaa79d669f1e9c9a4b9ab6db4cb0f47166b679bb31b17fcd9bb13",
+  "bytes": 907797,
+  "restoredDatabase": "fullpos_product_restore_1795268274268",
   "protectedNativeProductIdentical": true,
   "originalDatabaseUnchanged": true,
   "oldWriterRestoreAndStockRejected": true,

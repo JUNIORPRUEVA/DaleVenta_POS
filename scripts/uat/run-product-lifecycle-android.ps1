@@ -11,6 +11,8 @@ if ((& $adb -s $serial shell getprop ro.boot.qemu.avd_name).Trim() -ne 'FullPOS_
 $space = (& $adb -s $serial shell df -k /data | Select-Object -Last 1).Trim() -split '\s+'
 if ([long]$space[3] -lt 3145728) { throw 'Insufficient space; preserve all data.' }
 New-Item -ItemType Directory -Path $evidence -Force | Out-Null
+$resultFile = Join-Path $evidence 'files/product-lifecycle-evidence/native-result.json'
+$previousRunId = if (Test-Path -LiteralPath $resultFile) { (Get-Content -LiteralPath $resultFile -Raw | ConvertFrom-Json).runId } else { $null }
 & $adb -s $serial shell am force-stop $package
 if ($LASTEXITCODE -ne 0) { throw 'Could not stop isolated test package.' }
 $snapshot = Join-Path $evidence ('snapshot-' + [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmssfff') + '.tar')
@@ -57,6 +59,10 @@ try {
     --driver=integration_test/product_lifecycle_driver.dart --target=integration_test/product_lifecycle_native_test.dart `
     --keep-app-running *> (Join-Path $evidence 'run.log')
   if ($LASTEXITCODE -ne 0) { throw 'Android acceptance failed; preserve the evidence.' }
+  $runText = Get-Content -LiteralPath (Join-Path $evidence 'run.log') -Raw
+  if (-not $runText.Contains('All tests passed') -or $runText.Contains('end of failure')) {
+    throw 'Android driver did not report a clean pass; preserve the previous result and current failure log.'
+  }
   $extract=[Diagnostics.ProcessStartInfo]::new($adb)
   foreach ($argument in @('-s',$serial,'exec-out','run-as',$package,'tar','-cf','-','files/product-lifecycle-evidence')) {$extract.ArgumentList.Add($argument)}
   $extract.UseShellExecute=$false;$extract.CreateNoWindow=$true;$extract.RedirectStandardOutput=$true
@@ -64,5 +70,11 @@ try {
   try {$copy.StandardOutput.BaseStream.CopyTo($out)}finally{$out.Dispose()};$copy.WaitForExit()
   if ($copy.ExitCode -ne 0) {throw 'Could not extract evidence.'}
   tar -xf (Join-Path $evidence 'evidence.tar') -C $evidence
+  if ($LASTEXITCODE -ne 0) { throw 'Could not unpack Android evidence.' }
+  $currentResult = Get-Content -LiteralPath $resultFile -Raw | ConvertFrom-Json
+  if ($currentResult.result -ne 'PASS' -or $currentResult.platform -ne 'android' -or
+      [string]::IsNullOrWhiteSpace($currentResult.runId) -or $currentResult.runId -eq $previousRunId) {
+    throw 'Android result is missing, failed or stale; it cannot be used as current evidence.'
+  }
   Get-Content (Join-Path $evidence 'run.log') -Tail 5
 } finally {Pop-Location}

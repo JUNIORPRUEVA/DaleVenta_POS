@@ -9,14 +9,23 @@ exclusivo 56562, datos sintéticos. Producción únicamente consultada para hash
 de artefactos; ninguna mutación, migración, reinicio o publicación remota.
 
 El commit web previo solicitado quedó en `a4ebdf1e`; recuperación en `d5986236`.
-Backend e interfaz implementados: 121 pruebas backend, 214 Flutter y análisis
-focalizado sin incidencias. Windows y Android emulado aprobaron la ejecución con
+Backend e interfaz implementados, commits locales `c4bfd1d5` y `5545d07c`.
+Revisión profunda del 21 de noviembre: cinco fallos adicionales del cliente
+reproducidos y corregidos (identidad/estado de respuestas, cambio de sesión y
+avisos huérfanos). 121 pruebas backend; 278 Flutter más dos casos de avisos y
+seis de autenticación/ámbito aprobados; dos omisiones históricas por entorno.
+Repetición focalizada de 104 pruebas aprobada y análisis sin incidencias.
+Windows y Android emulado aprobaron la ejecución con
 API/SQLite reales, reconexión y archivo de incidencia sin borrar evidencia.
 PostgreSQL confirmó compensación/replay únicos y stock conservado. Backup y
-restauración aprobados. Manifest de 66 archivos de código/pruebas sin cambios.
+restauración aprobados. El cierre nuevo conserva runId de cada plataforma y
+comprobación SQL; los ejecutores rechazan resultados antiguos. Manifest de la
+revisión actual: 11 archivos de código/pruebas sin cambios antes del commit,
+incluidas las adiciones ya preparadas para commit; excluye capturas de fallos.
 Galería Flutter: http://127.0.0.1:4493/ — 39 vistas y 78 capturas, sin API.
-Estado técnico del alcance: GO WITH ISSUES. Pendientes: aprobación visual del
-propietario e iOS físico no disponible. No hay autorización de despliegue.
+Estado técnico del alcance: GO WITH ISSUES. Aprobación visual concedida por el
+propietario el 21 de noviembre; iOS físico no disponible. Integración y despliegue
+siguen separados; no hay autorización de despliegue.
 Documentos y ledger en `docs/audits/PRODUCT_LIFECYCLE_*_20261120.md`.
 
 ## Registro web: entrada automática — 2026-11-20

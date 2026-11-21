@@ -1,5 +1,5 @@
 {
-  "run": 1795226209022,
+  "run": 1795267597921,
   "scenarios": [
     "five debug purge routes unavailable to company administrator",
     "zero stock without references physically deleted",
@@ -12,5 +12,5 @@
     "concurrent edit invalidates stale administrative confirmation"
   ],
   "result": "PASS",
-  "companyId": "906b8463-be82-4c70-904d-0172a3650449"
+  "companyId": "e85982a8-088b-405a-958a-2a3664192751"
 }

@@ -10,7 +10,12 @@ class ProductLifecycleFeedback {
     _noticeTimer = null;
     final entry = _notice;
     _notice = null;
-    if (entry != null && entry.mounted) entry.remove();
+    if (entry != null) {
+      // An inserted entry can still be awaiting its first frame. Remove it
+      // before disposal so rapid replacements cannot leave an orphan notice.
+      entry.remove();
+      entry.dispose();
+    }
   }
 
   static String title(String action) => switch (action) {

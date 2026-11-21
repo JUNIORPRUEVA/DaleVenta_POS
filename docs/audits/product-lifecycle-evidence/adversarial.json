@@ -1,5 +1,5 @@
 {
-  "run": 1795226210984,
+  "run": 1795267599442,
   "scenarios": [
     "uncommitted quote locks product; annul waits and rejects after reference commits",
     "stale document writer is rejected by PostgreSQL after annulment",
@@ -11,5 +11,5 @@
     "delete and offline create replay share a lock; identity cannot resurrect in the race window"
   ],
   "result": "PASS",
-  "companyId": "042be751-c6d4-42e6-b6cf-f9996b0c1408"
+  "companyId": "db5fc8d9-6577-4353-a1e0-915c604b67e0"
 }

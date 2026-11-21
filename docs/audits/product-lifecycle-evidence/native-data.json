@@ -3,6 +3,8 @@
   "results": [
     {
       "platform": "windows",
+      "runId": "02954331-d145-4305-a941-401f551179c0",
+      "recordedAtUtc": "2026-11-21T13:46:30.566161Z",
       "result": "PASS",
       "originalAndCompensationRetained": true,
       "exactlyOneAnnulment": true,
@@ -11,6 +13,8 @@
     },
     {
       "platform": "android",
+      "runId": "1f2adab9-f136-408a-bb6f-abe443708aca",
+      "recordedAtUtc": "2026-11-21T13:46:54.106701Z",
       "result": "PASS",
       "originalAndCompensationRetained": true,
       "exactlyOneAnnulment": true,

@@ -1,8 +1,8 @@
 {
   "result": "PASS",
-  "companyId": "52ae1528-8332-4960-b69c-004cebe3af7c",
-  "saleId": "500b2459-b752-4f32-8b1b-8b94d3315447",
-  "orderId": "14290c15-a5b9-4200-a3ee-c99924570147",
+  "companyId": "ce9dd935-abd6-4ff1-ba6f-9094091eabac",
+  "saleId": "af08b968-c892-45d0-bb36-1821fa133bda",
+  "orderId": "5fe69b2e-6721-4ffe-a750-c4fa0b8c37df",
   "scenarios": [
     "real sale protects identity; archive preserves sale/item snapshots; new archived sale rejected; historical return restores inventory",
     "real purchase order and receipt protect product and remain byte-equivalent after archive",

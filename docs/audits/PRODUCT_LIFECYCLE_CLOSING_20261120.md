@@ -1,5 +1,78 @@
 # Cierre de ingeniería y límites de publicación
 
+## Revisión profunda posterior a aprobación visual — 21 de noviembre de 2026
+
+Se revisó la versión `5545d07c` y se reprodujeron fallos adicionales del cliente
+antes de corregirlos. No se cambian los botones aprobados ni las reglas
+financieras, fiscales, de inventario, licencias o seguridad del backend.
+
+| Fallo reproducido | Corrección y comprobación |
+| --- | --- |
+| Archivo con identidad distinta cerraba una eliminación pendiente | Se exige el ID solicitado y estado archivado antes de tocar caché o incidencia. |
+| Cambio de empresa durante archivo cerraba la incidencia anterior | Contexto de usuario/empresa capturado, solicitudes y caché fijadas con OperationScope, comprobación al regresar y antes de resolver. También se comprueba cambio de usuario dentro de la misma empresa. |
+| Un `ok` genérico bastaba para confirmar anulación | Se exige identidad del producto y operación, motivo original, fechas válidas, estado anulado/archivado y stock cero. |
+| Restauración aceptaba otro producto o uno todavía archivado | Se comprueba identidad y estado activo antes de mostrar éxito. |
+| Dos avisos antes del primer dibujo dejaban un aviso huérfano | Se retira y libera la entrada anterior incluso antes de que esté montada; cierre repetido y salida de pantalla probados. |
+
+Las lecturas de elegibilidad comprueban ID, empresa, versión y estado. Archivados
+rechaza filas extranjeras o malformadas. Una discrepancia no borra la operación
+local ni se presenta como éxito. La caché de archivo queda fijada a su empresa.
+
+Pruebas nuevas reproducidas antes de los arreglos: cuatro regresiones de
+repositorio fallaron, y falló el reemplazo inmediato de avisos. Después de las
+correcciones pasan 17 regresiones de repositorio y dos de avisos; la repetición
+con las 85 vistas/pruebas de galería sumó 104 aprobadas.
+
+Evidencia local de esta revisión:
+
+- `deep-backend.log`: 121 pruebas y 11 suites aprobadas; `deep-build.log`: API compilada.
+- `deep-flutter-verified.log`: 278 aprobadas y dos omisiones históricas condicionadas por entorno. Los dos casos nuevos de avisos pasan en `deep-final-regressions.log`.
+- `deep-acceptance.log`, `deep-adversarial.log`, `deep-commerce.log` y `deep-final-http.log`: 25 escenarios HTTP/PostgreSQL aprobados. Los cuatro últimos comprueban ambos órdenes de carrera referencia/borrado, la misma identidad de anulación contra dos productos y las cinco rutas con empresa extranjera/sin autenticación.
+- `deep-roles.log` y `deep-realtime.log`: permisos reales y entrega de eventos a dos clientes autorizados, sin entrega al extranjero.
+- `deep-windows-verified.log` y `deep-android-launch.log`: widgets, repositorio, SQLite y HTTP reales, desconexión/reapertura, operación rechazada conservada y siguiente operación válida procesada una sola vez.
+- `deep-native-data.log`: verificación independiente de datos persistidos de Windows y Android, movimiento original y compensación, un evento de anulación y archivo con stock conservado.
+- `deep-backup.log`: backup restaurado en otra base sintética, datos idénticos y escrituras antiguas de reactivación/reposición rechazadas por PostgreSQL.
+- `deep-auth-scope.log`: seis comprobaciones adicionales de autenticación y cambio de ámbito aprobadas. Son independientes de las 278 anteriores y de los dos casos nuevos de avisos.
+- `deep-analyze-final.log`: análisis focalizado sin incidencias; `deep-web-build.log` y `deep-web-browser.log`: compilación Web y 78 capturas de las 39 vistas, sin llamadas a API.
+- Cierre final tras corregir los supuestos del ensayo: `deep-windows-current.log` y `deep-android-current.log` aprobados con los ejecutores que exigen evidencia nueva. `deep-native-data-final.log` vuelve a contrastar ambos resultados con PostgreSQL: runId Windows `02954331-d145-4305-a941-401f551179c0`, Android `1f2adab9-f136-408a-bb6f-abe443708aca`. Ambos conservan el movimiento original, una compensación y un evento; la reconexión aplica una sola vez la operación válida y conserva el pendiente rechazado. La repetición verifica además el producto anulado que persistió desde la ejecución anterior.
+
+Se mantienen los fallos intermedios en los logs. Una invocación de pruebas incluía
+un directorio inexistente; se corrigió la selección. El ensayo inicial de Windows
+usaba el puerto 4017 en la configuración global del perfil UAT, que solo admite
+4004: se corrigieron los argumentos del ensayo, sin ampliar la lista permitida
+ni detener el servicio ajeno de 4004. El repositorio del ensayo llama a la API
+privada explícita de 4017; Android usa la redirección local 4004 → 4017.
+
+La repetición nativa también corrigió supuestos del ensayo: se busca por nombre
+en Archivados en lugar de asumir que una fila está visible, y se selecciona el
+ListTile en vez del mismo texto dentro del buscador. Los ejecutores preservan
+datos previos, rechazan salidas fallidas y exigen un runId nuevo en el resultado;
+el verificador SQL registra ese runId y su fecha. Así una evidencia antigua no
+puede utilizarse como si perteneciera a la ejecución actual.
+El manifiesto de código también se corrigió para enumerar diferencias contra
+HEAD: preparar archivos con git add no cambia el conjunto revisado. Se comparan
+11 hashes de código/pruebas y se excluyen las capturas de fallos; verificación
+aprobada antes y después de preparar el commit.
+
+Las dos omisiones corresponden a `catalog_offline_uat_integrity_test.dart`:
+validación de DTO histórico de cotización sobre copia desechable y ensayo de
+reapertura/replay del entorno Phase 11. Exigen `FULLPOS_PHASE11_UAT=true` y sus
+fixtures/credenciales propios. No se habilitó ese entorno ajeno; la reapertura y
+reconexión de este alcance sí se ejecutaron con SQLite/HTTP reales en las dos
+plataformas nativas. No se cuentan omisiones como pruebas aprobadas.
+
+Límite conservado: una cola desconectada de otro equipo no es visible al
+servidor. Si referencia un producto retirado al reconectar, el rechazo y su
+evidencia deben conservarse para recuperación; no se debe repetir el cobro a
+ciegas. Se verifica que ese rechazo individual no atasque operaciones válidas
+independientes. Esta revisión no certifica cambios simultáneos de otras ramas.
+
+El alcance local verificado mantiene **GO WITH ISSUES**: aprobación visual ya
+concedida, iPhone físico no disponible y revisión global ajena de licencias
+documentada más abajo. Integración y despliegue siguen separados; no hubo push,
+despliegue, modificación productiva ni eliminación de incidencias para resolver
+los fallos. Las pruebas reducen riesgos concretos; no certifican riesgo cero.
+
 ## Cambios comprobados
 
 - Borrado físico protegido por existencias de cada almacén y referencias.
