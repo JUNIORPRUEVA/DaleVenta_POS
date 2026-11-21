@@ -83,6 +83,23 @@ describe('GlobalExceptionFilter — correlación y respuesta segura', () => {
     expect(logged).toContain('fallo interno');
   });
 
+  it.each([400, 500])('redacta credenciales en URLs del log de error %s', (status) => {
+    const rawUrl = '/guardian/webhooks/whatsapp?hub.verify_token=qa-private-marker&token=qa-other-marker&page=2';
+    const { captured, host } = createHost({
+      method: 'GET',
+      originalUrl: rawUrl,
+      requestId: 'req-safe-log',
+    });
+    withNodeEnv('production', () => new GlobalExceptionFilter().catch(new HttpException({ message: `Cannot GET ${rawUrl}` }, status), host));
+    const logged = JSON.stringify([...errorSpy.mock.calls, ...warnSpy.mock.calls]);
+    expect(logged).not.toContain('qa-private-marker');
+    expect(logged).not.toContain('qa-other-marker');
+    expect(logged).toContain('hub.verify_token=***');
+    expect(logged).toContain('page=2');
+    expect(captured.status).toBe(status);
+    expect(captured.body.requestId).toBe('req-safe-log');
+  });
+
   it('en producción no expone stack ni detalles internos', () => {
     const { captured, host } = createHost({
       method: 'GET',

@@ -15,6 +15,7 @@ import { AppModule } from './app.module';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { describeListenFailure, shouldFallbackToIpv4 } from './common/listen-host';
 import { requestIdMiddleware } from './common/request-id/request-id.middleware';
+import { sanitizeRequestUrl } from './common/request-log';
 import { assertSafeUatEnvironment, buildSafeUatBanner } from './common/uat-safety';
 import { assertDosaSignatureLabSafety } from './ecf/provider/dosa/dosa-webhook-signature.policy';
 import { CatalogRealtimeRelayService } from './products/catalog-realtime-relay.service';
@@ -52,7 +53,7 @@ async function bootstrap() {
   app.use((req: Request, res: Response, next: NextFunction) => {
     const start = Date.now();
     const method = req.method;
-    const url = req.originalUrl || req.url;
+    const url = sanitizeRequestUrl(req.originalUrl || req.url);
     const requestId = (req as Request & { requestId?: string }).requestId ?? '-';
 
     res.on('finish', () => {

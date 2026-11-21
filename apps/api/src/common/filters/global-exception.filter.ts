@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { GuardianCaptureRegistry } from '../../guardian/guardian.capture.registry';
+import { sanitizeRequestUrl } from '../request-log';
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -36,7 +37,9 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const res = ctx.getResponse<{ status: (code: number) => any; json: (body: any) => any; setHeader?: (name: string, value: string) => void }>();
 
     const method = req?.method ?? 'UNKNOWN';
-    const url = req?.originalUrl ?? req?.url ?? 'UNKNOWN';
+    const rawUrl = req?.originalUrl ?? req?.url ?? 'UNKNOWN';
+    const url = sanitizeRequestUrl(rawUrl);
+    const redactRequestUrl = (value: string) => value.split(rawUrl).join(url);
 
     const databaseMessage=exception instanceof Prisma.PrismaClientKnownRequestError
       ?safeString(exception.meta):exception instanceof Prisma.PrismaClientUnknownRequestError?exception.message:'';
@@ -95,13 +98,16 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         res.setHeader?.('Retry-After', String(Math.ceil(seconds)));
       }
     }
-    const message = isHttp
+    const rawMessage = isHttp
       ? safeString(rawResponse)
       : exception instanceof Error
         ? exception.message
         : safeString(exception);
 
-    const stack = exception instanceof Error ? exception.stack : undefined;
+    const message = redactRequestUrl(rawMessage);
+    const stack = exception instanceof Error && exception.stack
+      ? redactRequestUrl(exception.stack)
+      : undefined;
     const requestId = req?.requestId ?? null;
     const logPayload = {
       requestId,
@@ -132,7 +138,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         path: url,
         status,
         exceptionType: exception instanceof Error ? exception.constructor.name : typeof exception,
-        message: exception instanceof Error ? exception.message : message,
+        message: exception instanceof Error ? redactRequestUrl(exception.message) : message,
         stack,
         // Metadatos de Prisma sin parámetros de consulta: permiten distinguir
         // una caída de infraestructura (P1001) de una regla de negocio (P2002).
