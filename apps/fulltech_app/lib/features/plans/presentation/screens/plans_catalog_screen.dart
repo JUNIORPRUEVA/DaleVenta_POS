@@ -58,15 +58,19 @@ class _PlansCatalogScreenState extends ConsumerState<PlansCatalogScreen>
     final current = _currentOf(license, catalog);
     final visible = onlyUpgrades && current != null
         ? catalog
-            .where((plan) => plan.monthlyPrice > current.monthlyPrice)
-            .toList(growable: false)
+              .where((plan) => plan.monthlyPrice > current.monthlyPrice)
+              .toList(growable: false)
         : catalog;
     // Solo cuando hay catalogo y de verdad no queda nada por encima.
     final atTopPlan =
-        onlyUpgrades && current != null && catalog.isNotEmpty && visible.isEmpty;
+        onlyUpgrades &&
+        current != null &&
+        catalog.isNotEmpty &&
+        visible.isEmpty;
 
     return PlansShell(
       section: PlansSection.catalogo,
+      maxContentWidth: 1440,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

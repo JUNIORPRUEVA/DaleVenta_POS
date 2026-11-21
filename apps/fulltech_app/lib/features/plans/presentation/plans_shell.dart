@@ -53,10 +53,13 @@ class PlansShell extends ConsumerStatefulWidget {
     required this.section,
     required this.child,
     this.actions = const [],
+    this.maxContentWidth = 1080,
   });
 
   final PlansSection section;
   final Widget child;
+  final double maxContentWidth;
+
   /// Acciones propias de la pagina (p. ej. el historial en Transferencia).
   final List<Widget> actions;
 
@@ -66,6 +69,7 @@ class PlansShell extends ConsumerStatefulWidget {
 
 class _PlansShellState extends ConsumerState<PlansShell> {
   bool _busy = false;
+
   /// Contador capturado en `initState`: en `dispose` ya no se puede usar `ref`
   /// con garantias (la pantalla puede estar desmontandose junto con el armazon)
   /// y el descuento se perdia, dejando la capa de licencia apagada para siempre.
@@ -155,7 +159,7 @@ class _PlansShellState extends ConsumerState<PlansShell> {
           // Pegado arriba: la pagina no debe quedar centrada en vertical.
           alignment: Alignment.topCenter,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1080),
+            constraints: BoxConstraints(maxWidth: widget.maxContentWidth),
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
               child: widget.child,

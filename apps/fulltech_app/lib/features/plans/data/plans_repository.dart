@@ -35,12 +35,15 @@ final planUpgradeRequesterProvider = Provider<PlanUpgradeRequester>((ref) {
 });
 
 /// Ticket de mejora que ya esta abierto (si lo hay).
-final planUpgradeOpenProvider = FutureProvider<PlanUpgradeRequest?>((ref) async {
+final planUpgradeOpenProvider = FutureProvider<PlanUpgradeRequest?>((
+  ref,
+) async {
   return ref.watch(plansRepositoryProvider).fetchOpenPlanUpgrade();
 });
 
-final paymentInstructionsProvider =
-    FutureProvider<PaymentInstructions>((ref) async {
+final paymentInstructionsProvider = FutureProvider<PaymentInstructions>((
+  ref,
+) async {
   return ref.watch(plansRepositoryProvider).fetchPaymentInstructions();
 });
 
@@ -72,7 +75,9 @@ class PlansRepository {
   Future<List<PlanOffer>> fetchPlans() async {
     final data = await _get(ApiRoutes.licensePlans);
     final raw = data['plans'];
-    if (raw is! List) throw ApiException('La API no devolvio el catalogo de planes.');
+    if (raw is! List) {
+      throw ApiException('La API no devolvio el catalogo de planes.');
+    }
     return raw
         .whereType<Map>()
         .map((row) => PlanOffer.fromJson(Map<String, dynamic>.from(row)))
@@ -80,13 +85,19 @@ class PlansRepository {
   }
 
   Future<PaymentInstructions> fetchPaymentInstructions() async {
-    return PaymentInstructions.fromJson(await _get(ApiRoutes.licensePaymentInstructions));
+    return PaymentInstructions.fromJson(
+      await _get(ApiRoutes.licensePaymentInstructions),
+    );
   }
 
   Future<List<LicenseOrder>> fetchOrders() async {
     final data = await _get(ApiRoutes.licenseOrders);
     final raw = data['orders'];
-    if (raw is! List) return const [];
+    if (raw is! List) {
+      throw ApiException(
+        'No se pudo comprobar el historial de pagos. Intenta nuevamente.',
+      );
+    }
     return raw
         .whereType<Map>()
         .map((row) => LicenseOrder.fromJson(Map<String, dynamic>.from(row)))
@@ -147,7 +158,9 @@ class PlansRepository {
     required String fileName,
   }) async {
     if (fileBytes == null && (filePath == null || filePath.isEmpty)) {
-      throw ApiException('No se pudo leer el comprobante. Seleccionalo nuevamente.');
+      throw ApiException(
+        'No se pudo leer el comprobante. Seleccionalo nuevamente.',
+      );
     }
     final form = FormData.fromMap({
       'file': fileBytes != null
@@ -167,12 +180,41 @@ class PlansRepository {
           )
           .timeout(_evidenceTimeout);
       final data = _map(res.data);
+      final rawOrder = data['order'];
+      final evidence = data['evidence'];
+      final license = data['license'];
+      if (data['ok'] != true ||
+          rawOrder is! Map ||
+          rawOrder['id'] != orderId ||
+          evidence is! Map ||
+          '${evidence['id'] ?? ''}'.trim().isEmpty ||
+          data['activated'] is! bool ||
+          !const [
+            'UNCONFIRMED',
+            'EVIDENCE_RECEIVED',
+            'SETTLED',
+          ].contains(rawOrder['status'])) {
+        throw ApiException(
+          'No se confirmó la recepción del comprobante. Revisa el historial antes de enviarlo de nuevo.',
+        );
+      }
+      if (data['activated'] == true &&
+          (license is! Map ||
+              license['status'] != 'ACTIVE' ||
+              license['planCode'] != rawOrder['planCode'])) {
+        throw ApiException(
+          'El comprobante se recibió, pero no se pudo confirmar el estado del plan. Consulta el historial.',
+        );
+      }
       return EvidenceUploadResult(
-        activated: data['license'] is Map,
+        activated: data['activated'] == true,
         message: (data['message'] ?? '').toString(),
+        order: LicenseOrder.fromJson(Map<String, dynamic>.from(rawOrder)),
       );
     } on TimeoutException {
-      throw ApiException('El comprobante tardo demasiado en subir.');
+      throw ApiException(
+        'No se pudo confirmar la subida a tiempo. Revisa el historial antes de enviarlo de nuevo.',
+      );
     } on DioException catch (e) {
       throw ApiException(_message(e.response?.data), e.response?.statusCode);
     }
@@ -350,10 +392,13 @@ class PaymentInstructions {
   final String? accountType;
   final String? holder;
   final String? holderTaxId;
+
   /// Solo hay una cuenta para pagos.
   final bool singleAccount;
+
   /// Recordatorio previo: monto exacto y a nombre de quien se transfiere.
   final String? beforeTransfer;
+
   /// Que hacer si el banco del cliente es distinto (pago al instante + RNC).
   final String? otherBankNote;
 
@@ -492,6 +537,7 @@ class LicenseOrder {
 
   String get statusLabel {
     switch (status) {
+      case 'CREATED':
       case 'AWAITING_TRANSFER':
         return 'Esperando tu transferencia';
       case 'EVIDENCE_RECEIVED':
@@ -506,7 +552,7 @@ class LicenseOrder {
       case 'EXPIRED':
         return 'Vencida';
       default:
-        return status;
+        return 'Por comprobar';
     }
   }
 
@@ -519,7 +565,7 @@ class LicenseOrder {
       amount: double.tryParse('${json['amount'] ?? 0}') ?? 0,
       currency: (json['currency'] ?? 'DOP').toString(),
       months: (json['months'] as num?)?.toInt() ?? 1,
-      status: (json['status'] ?? 'CREATED').toString(),
+      status: (json['status'] ?? 'CREATED').toString().trim().toUpperCase(),
       reference: (json['reference'] ?? '').toString(),
       expiresAt: DateTime.tryParse('${json['expiresAt'] ?? ''}'),
       periodStart: DateTime.tryParse('${json['periodStart'] ?? ''}'),
@@ -527,9 +573,13 @@ class LicenseOrder {
       createdAt: DateTime.tryParse('${json['createdAt'] ?? ''}'),
       evidences: raw is List
           ? raw
-              .whereType<Map>()
-              .map((row) => LicenseOrderEvidence.fromJson(Map<String, dynamic>.from(row)))
-              .toList(growable: false)
+                .whereType<Map>()
+                .map(
+                  (row) => LicenseOrderEvidence.fromJson(
+                    Map<String, dynamic>.from(row),
+                  ),
+                )
+                .toList(growable: false)
           : const [],
     );
   }
@@ -559,8 +609,14 @@ class PlanUpgradeRequest {
   }
 }
 
-class EvidenceUploadResult {  const EvidenceUploadResult({required this.activated, required this.message});
+class EvidenceUploadResult {
+  const EvidenceUploadResult({
+    required this.activated,
+    required this.message,
+    this.order,
+  });
 
   final bool activated;
   final String message;
+  final LicenseOrder? order;
 }

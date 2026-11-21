@@ -32,7 +32,7 @@ class PlansGrid extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
-        final columns = width >= 1000 ? 4 : (width >= 660 ? 2 : 1);
+        final columns = width >= 1180 ? 4 : (width >= 660 ? 2 : 1);
         final gap = columns == 1 ? 14.0 : 18.0;
         final rows = <Widget>[];
         for (var i = 0; i < plans.length; i += columns) {
@@ -49,7 +49,8 @@ class PlansGrid extends StatelessWidget {
                       Expanded(
                         child: PlanCard(
                           plan: slice[j],
-                          current: currentPlanCode != null &&
+                          current:
+                              currentPlanCode != null &&
                               currentPlanCode!.toLowerCase() ==
                                   slice[j].code.toLowerCase(),
                           busy: busy,
@@ -110,8 +111,10 @@ class PlanCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final highlighted = plan.highlight && !current;
-    final pad = compact ? 15.0 : 18.0;
-    final features = plan.included.take(compact ? 4 : 6).toList(growable: false);
+    final pad = compact ? 15.0 : 24.0;
+    final features = plan.included
+        .take(compact ? 4 : 6)
+        .toList(growable: false);
 
     return Container(
       decoration: BoxDecoration(
@@ -153,7 +156,7 @@ class PlanCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: compact ? 16 : 15.5,
+                      fontSize: compact ? 16 : 20,
                       fontWeight: FontWeight.w700,
                       letterSpacing: -0.2,
                       color: _Ink.primary,
@@ -183,7 +186,7 @@ class PlanCard extends StatelessWidget {
                         child: Text(
                           money(plan.monthlyPrice, plan.currency),
                           style: TextStyle(
-                            fontSize: compact ? 25 : 28,
+                            fontSize: compact ? 25 : 36,
                             fontWeight: FontWeight.w700,
                             height: 1,
                             letterSpacing: -1.1,
@@ -219,10 +222,10 @@ class PlanCard extends StatelessWidget {
           Padding(
             padding: EdgeInsets.fromLTRB(pad, compact ? 6 : 12, pad, pad),
             child: _PlanAction(
-              label: current ? 'Tu plan' : 'Elegir plan',
+              label: current ? 'Renovar plan' : 'Elegir plan',
               current: current,
               highlighted: highlighted,
-              onPressed: current || busy ? null : onChoose,
+              onPressed: busy ? null : onChoose,
             ),
           ),
         ],
@@ -275,9 +278,9 @@ class _PlanAction extends StatelessWidget {
     final Color foreground;
     final Color? border;
     if (current) {
-      background = _Ink.hairSoft;
-      foreground = _Ink.muted;
-      border = null;
+      background = Colors.white;
+      foreground = _Ink.primary;
+      border = _Ink.primary;
     } else if (highlighted) {
       background = _Ink.primary;
       foreground = Colors.white;
@@ -288,7 +291,7 @@ class _PlanAction extends StatelessWidget {
       border = _Ink.hair;
     }
     return SizedBox(
-      height: 42,
+      height: 46,
       child: TextButton(
         onPressed: onPressed,
         style: TextButton.styleFrom(
@@ -298,7 +301,7 @@ class _PlanAction extends StatelessWidget {
           disabledForegroundColor: _Ink.muted,
           elevation: 0,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(11),
+            borderRadius: BorderRadius.zero,
             side: border == null ? BorderSide.none : BorderSide(color: border),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -337,8 +340,8 @@ class _FeatureLine extends StatelessWidget {
               label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 12.3,
+              style: TextStyle(
+                fontSize: compact ? 12.3 : 14,
                 height: 1.3,
                 fontWeight: FontWeight.w500,
                 color: _Ink.secondary,

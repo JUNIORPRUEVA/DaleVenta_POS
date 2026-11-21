@@ -2,7 +2,7 @@ import { PrismaClient, Role } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve, dirname, basename } from 'node:path';
 import { ConfigService } from '@nestjs/config';
 import { LicenseActivationService } from './license-activation.service';
 import { LicenseEvidenceStorage } from './license-evidence.storage';
@@ -79,7 +79,13 @@ suite('Pago de planes con PostgreSQL aislado', () => {
 
   afterAll(async () => {
     await db?.$disconnect();
-    if (storageDir) await rm(storageDir, { recursive: true, force: true });
+    if (storageDir) {
+      const target = resolve(storageDir);
+      if (dirname(target) !== resolve(tmpdir()) || !basename(target).startsWith('license-evidence-')) {
+        throw new Error('unsafe_fixture_cleanup');
+      }
+      await rm(target, { recursive: true, force: true });
+    }
   });
 
   beforeEach(async () => {

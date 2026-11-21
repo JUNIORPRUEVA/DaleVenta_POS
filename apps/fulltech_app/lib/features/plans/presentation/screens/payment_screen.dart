@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/license/license_repository.dart';
+import '../../../../core/errors/api_exception.dart';
 import '../../../../core/routing/routes.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../data/plans_repository.dart';
@@ -31,6 +32,7 @@ class PaymentScreen extends ConsumerStatefulWidget {
   /// Plan pedido desde el catalogo (si viene, manda sobre el plan actual).
   final String? planCode;
   final int? months;
+
   /// `true` cuando el cliente ya eligio pagar: se muestra el detalle.
   final bool startPayment;
 
@@ -42,8 +44,11 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
     with PlansActionMixin {
   int _months = 1;
   bool _initialized = false;
+
   /// Comprobante ya subido en esta pantalla (nombre del archivo).
   String? _evidenceName;
+  EvidenceUploadResult? _uploaded;
+  bool _monthsChosen = false;
 
   @override
   void didChangeDependencies() {
@@ -66,66 +71,68 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
           .read(plansRepositoryProvider)
           .createOrder(quote.planCode, months: quote.months),
     );
-    if (created == null) return;
+    if (!mounted) return;
     ref.invalidate(licenseOrdersProvider);
     // La licencia cambia en cuanto existe la orden (queda pendiente de pago):
     // se vuelve a pedir para que el aviso de la app se actualice al instante.
     ref.invalidate(licenseStatusProvider);
-    snack('Orden ${created.reference} creada. Transfiere y sube el comprobante.');
+    if (created == null) return;
+    snack(
+      'Orden ${created.reference} creada. Transfiere y sube el comprobante.',
+    );
   }
 
   Future<void> _upload(LicenseOrder order) async {
-    final picked = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const ['pdf', 'jpg', 'jpeg', 'png'],
-      withData: kIsWeb,
-    );
-    final file = picked?.files.isEmpty == false ? picked!.files.first : null;
-    if (!mounted || file == null) return;
-    final path = kIsWeb ? null : file.path;
-    if (file.size > 8 * 1024 * 1024) {
-      snack('El comprobante no puede superar 8 MB.');
-      return;
+    var sent = false;
+    final selected = await run(() async {
+      final picked = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['pdf', 'jpg', 'jpeg', 'png'],
+        withData: kIsWeb,
+      );
+      final file = picked?.files.isEmpty == false ? picked!.files.first : null;
+      if (!mounted || file == null) return null;
+      final path = kIsWeb ? null : file.path;
+      if (file.size > 8 * 1024 * 1024) {
+        throw ApiException('El comprobante no puede superar 8 MB.');
+      }
+      if (file.bytes == null && path == null) {
+        throw ApiException(
+          'No se pudo leer el comprobante. Seleccionalo nuevamente.',
+        );
+      }
+      if (file.size <= 0) {
+        throw ApiException(
+          'El comprobante está vacío. Selecciona otro archivo.',
+        );
+      }
+      sent = true;
+      final result = await ref
+          .read(plansRepositoryProvider)
+          .uploadEvidence(
+            orderId: order.id,
+            filePath: path,
+            fileBytes: file.bytes,
+            fileName: file.name,
+          );
+      return (name: file.name, result: result);
+    });
+    if (!mounted) return;
+    if (sent) {
+      ref.invalidate(licenseOrdersProvider);
+      ref.invalidate(licenseStatusProvider);
     }
-    if (file.bytes == null && path == null) {
-      snack('No se pudo leer el comprobante. Seleccionalo nuevamente.');
-      return;
-    }
-
-    final result = await run(
-      () => ref.read(plansRepositoryProvider).uploadEvidence(
-        orderId: order.id,
-        filePath: path,
-        fileBytes: file.bytes,
-        fileName: file.name,
-      ),
-    );
-    if (!mounted || result == null) return;
-    setState(() => _evidenceName = file.name);
-    ref.invalidate(licenseOrdersProvider);
-    ref.invalidate(licenseStatusProvider);
+    if (selected == null) return;
+    final result = selected.result;
+    setState(() {
+      _evidenceName = selected.name;
+      _uploaded = result;
+    });
     snack(
       result.activated
-          ? 'Comprobante recibido. Tu plan quedo actualizado.'
-          : 'Comprobante recibido. Queda en revision.',
+          ? 'Tu plan está disponible. El pago sigue en verificación.'
+          : 'Comprobante recibido. Tu pago está en revisión.',
     );
-  }
-
-  /// Ultimo paso: el cliente confirma que hizo la transferencia del monto
-  /// exacto. Sin esa confirmacion el pago no se da por bueno.
-  Future<void> _confirmPayment(OrderQuote? quote) async {
-    final amount = quote == null
-        ? 'el monto exacto'
-        : money(quote.amountDue, quote.currency);
-    final ok = await confirm(
-      title: 'Confirmar pago',
-      message:
-          'Estas seguro de que realizaste la transferencia de $amount a la '
-          'cuenta de FULLTECH, SRL con la referencia de la orden?',
-      accept: 'Si, ya transferi',
-    );
-    if (!ok) return;
-    snack('Pago confirmado. Soporte lo verifica y tu plan se actualiza.');
   }
 
   Future<void> _cancel(LicenseOrder order) async {
@@ -146,8 +153,10 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
 
   @override
   Widget build(BuildContext context) {
-    final license = ref.watch(licenseStatusProvider).valueOrNull;
-    final orders = ref.watch(licenseOrdersProvider).valueOrNull ?? const [];
+    final licenseAsync = ref.watch(licenseStatusProvider);
+    final license = licenseAsync.valueOrNull;
+    final ordersAsync = ref.watch(licenseOrdersProvider);
+    final orders = ordersAsync.valueOrNull ?? const <LicenseOrder>[];
     final instructions = ref.watch(paymentInstructionsProvider).valueOrNull;
     final planCode = _targetPlanCode(license);
     final wide = MediaQuery.sizeOf(context).width >= 980;
@@ -155,27 +164,90 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
     // Entrada sin eleccion previa: centro de pagos (estado + dos caminos).
     final isHub = !widget.startPayment && (widget.planCode ?? '').isEmpty;
     if (isHub) {
-      return _PagosHub(
-        license: license,
-        orders: orders,
-      );
+      if (licenseAsync.hasError || ordersAsync.hasError) {
+        return PlansShell(
+          section: PlansSection.pago,
+          child: ErrorBlock(
+            message:
+                'No se pudo comprobar el estado del pago. Intenta nuevamente.',
+            onRetry: () {
+              ref.invalidate(licenseOrdersProvider);
+              ref.invalidate(licenseStatusProvider);
+            },
+          ),
+        );
+      }
+      if (!licenseAsync.hasValue || !ordersAsync.hasValue) {
+        return const PlansShell(
+          section: PlansSection.pago,
+          child: LoadingBlock(height: 200),
+        );
+      }
+      return _PagosHub(license: license, orders: orders);
     }
 
-    final quoteAsync = planCode == null
-        ? const AsyncValue<OrderQuote>.loading()
-        : ref.watch(
-            orderQuoteProvider((planCode: planCode, months: _months)),
-          );
+    LicenseOrder? resumedOrder;
+    for (final order in orders) {
+      if (order.planCode.trim().toLowerCase() == planCode &&
+          (order.isOpen ||
+              order.status == 'EVIDENCE_RECEIVED' ||
+              order.status == 'UNCONFIRMED') &&
+          (widget.months == null && !_monthsChosen ||
+              order.months == _months)) {
+        resumedOrder = order;
+        break;
+      }
+    }
+    final months =
+        widget.months == null && !_monthsChosen && resumedOrder != null
+        ? resumedOrder.months
+        : _months;
+    if (planCode == null) {
+      return PlansShell(
+        section: PlansSection.pago,
+        child: PlansPanel(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Elige un plan para preparar tu pago.'),
+              const SizedBox(height: 16),
+              SquareButton(
+                label: 'Elegir plan',
+                onPressed: () => context.push(Routes.planesCatalogo),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    final quoteAsync = ref.watch(
+      orderQuoteProvider((planCode: planCode, months: months)),
+    );
     final quote = quoteAsync.valueOrNull;
-    final openOrder = openOrderOf(orders);
+    final openOrder = resumedOrder?.isOpen == true ? resumedOrder : null;
     final orderMatches =
         openOrder != null &&
-        quote != null &&
-        openOrder.planCode == quote.planCode &&
-        openOrder.months == quote.months &&
-        openOrder.amount == quote.amountDue;
+        openOrder.planCode.trim().toLowerCase() == planCode &&
+        openOrder.months == months;
+    final submitted =
+        _uploaded != null ||
+        resumedOrder?.status == 'EVIDENCE_RECEIVED' ||
+        resumedOrder?.status == 'UNCONFIRMED';
+    LicenseOrder? receivedOrder = _uploaded?.order;
+    for (final order in orders) {
+      if (order.id == receivedOrder?.id) {
+        receivedOrder = order;
+        break;
+      }
+    }
+    final verified = receivedOrder?.status == 'SETTLED';
+    final rejected = receivedOrder?.status == 'REJECTED';
     // El saldo cubre la mejora: no hay nada que transferir.
-    final covered = quote?.covered == true;
+    final covered = orderMatches
+        ? openOrder.amount <= 0
+        : quote?.covered == true;
+    final ordersReady =
+        ordersAsync.hasValue && !ordersAsync.isLoading && !ordersAsync.hasError;
     // Hay cuota vencida o una orden abierta: no es «pago adelantado».
     final owes = license?.renewal?.isOverdue == true || openOrder != null;
     // La cuota pendiente del plan actual **no se cancela**: solo se descarta
@@ -190,120 +262,161 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
         orderMatches && !renewalOrder && !(license?.renewal?.isOverdue == true);
 
     return PopScope(
-      // Con una orden abierta no se sale sin terminar el pago o cancelarla.
-      canPop: !orderMatches,
-      onPopInvokedWithResult: (didPop, _) {
-        if (didPop) return;
-        snack('Termina el pago o cancela la orden para salir.');
-      },
+      // A pending payment is persisted by the server; it must not trap the user.
+      canPop: true,
       child: PlansShell(
-      section: PlansSection.pago,
-      actions: [
-        TextButton.icon(
-          onPressed: () => context.push(Routes.planesHistorial),
-          icon: const Icon(Icons.receipt_long_outlined, size: 18),
-          label: const Text('Historial de transferencia'),
-          style: TextButton.styleFrom(
-            foregroundColor: AppColors.textSecondary,
-            textStyle: const TextStyle(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-      ],
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (wide)
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  flex: 6,
-                  child: _ResumenCard(
-                    quoteAsync: quoteAsync,
-                    quote: quote,
-                    months: _months,
-                    isActive: license?.isUsable == true,
-                    onMonths: (value) => setState(() => _months = value),
-                    orderMatches: orderMatches,
-                    openOrder: openOrder,
-                    busy: busy,
-                    onGenerate: quote == null
-                        ? null
-                        : () => _generateOrder(quote),
-                    onRetryQuote: planCode == null
-                        ? null
-                        : () => ref.invalidate(
-                            orderQuoteProvider((
-                              planCode: planCode,
-                              months: _months,
-                            )),
-                          ),
-                  ),
-                ),
-                const SizedBox(width: 14),
-                const Expanded(flex: 5, child: _PasosCard()),
-              ],
-            )
-          else ...[
-            _ResumenCard(
-              quoteAsync: quoteAsync,
-              quote: quote,
-              months: _months,
-              isActive: license?.isUsable == true,
-              onMonths: (value) => setState(() => _months = value),
-              orderMatches: orderMatches,
-              openOrder: openOrder,
-              busy: busy,
-              onGenerate: quote == null ? null : () => _generateOrder(quote),
-              onRetryQuote: planCode == null
-                  ? null
-                  : () => ref.invalidate(
-                      orderQuoteProvider((
-                        planCode: planCode,
-                        months: _months,
-                      )),
-                    ),
-            ),
-            const SizedBox(height: 12),
-            const _PasosCard(),
-          ],
-          // Con saldo suficiente no hay transferencia: no se muestran datos
-          // bancarios ni se pide comprobante.
-          if (covered)
-            const Padding(
-              padding: EdgeInsets.only(top: 4),
-              child: Text(
-                'La plataforma aplica tu saldo y activa el plan nuevo. No envies dinero.',
-                style: TextStyle(
-                  fontSize: 12,
-                  height: 1.45,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textMuted,
-                ),
+        section: PlansSection.pago,
+        actions: [
+          TextButton.icon(
+            onPressed: () => context.push(Routes.planesHistorial),
+            icon: const Icon(Icons.receipt_long_outlined, size: 18),
+            label: const Text('Historial de transferencia'),
+            style: TextButton.styleFrom(
+              foregroundColor: MediaQuery.sizeOf(context).width < 900
+                  ? Colors.white
+                  : AppColors.textSecondary,
+              textStyle: const TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
               ),
             ),
-          if (!covered) ...[
-            const SizedBox(height: 12),
-            _BancoCard(
-              instructions: instructions,
-              order: orderMatches ? openOrder : null,
-              evidenceName: _evidenceName,
-            ),
-          ],
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: SquareButton(
-                  label: covered
+          ),
+        ],
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (ordersAsync.hasError)
+              ErrorBlock(
+                message: 'No se pudo comprobar tu orden de pago.',
+                onRetry: () => ref.invalidate(licenseOrdersProvider),
+              ),
+            if (ordersAsync.isLoading) const LinearProgressIndicator(),
+            if (submitted)
+              PlansPanel(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.check_circle_outline,
+                      color: AppColors.primary,
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      verified
+                          ? 'Pago verificado'
+                          : rejected
+                          ? 'Comprobante revisado'
+                          : 'Comprobante recibido',
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      verified
+                          ? 'El servidor confirmó tu pago. Consulta el estado de tu plan.'
+                          : rejected
+                          ? 'No se pudo confirmar el pago. Revisa el motivo en el historial antes de transferir de nuevo.'
+                          : 'Tu pago está en revisión. No necesitas transferir ni subirlo de nuevo.',
+                    ),
+                    const SizedBox(height: 16),
+                    SquareButton(
+                      label: 'Ver estado del pago',
+                      onPressed: () => context.push(Routes.planesHistorial),
+                    ),
+                  ],
+                ),
+              ),
+            if (!submitted) ...[
+              if (wide)
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      flex: 6,
+                      child: _ResumenCard(
+                        quoteAsync: quoteAsync,
+                        quote: quote,
+                        months: months,
+                        isActive: license?.isUsable == true,
+                        onMonths: (value) => setState(() {
+                          _months = value;
+                          _monthsChosen = true;
+                        }),
+                        orderMatches: orderMatches,
+                        openOrder: openOrder,
+                        busy: busy,
+                        onGenerate: quote == null
+                            ? null
+                            : () => _generateOrder(quote),
+                        onRetryQuote: () => ref.invalidate(
+                          orderQuoteProvider((
+                            planCode: planCode,
+                            months: months,
+                          )),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    const Expanded(flex: 5, child: _PasosCard()),
+                  ],
+                )
+              else ...[
+                _ResumenCard(
+                  quoteAsync: quoteAsync,
+                  quote: quote,
+                  months: months,
+                  isActive: license?.isUsable == true,
+                  onMonths: (value) => setState(() {
+                    _months = value;
+                    _monthsChosen = true;
+                  }),
+                  orderMatches: orderMatches,
+                  openOrder: openOrder,
+                  busy: busy,
+                  onGenerate: quote == null
+                      ? null
+                      : () => _generateOrder(quote),
+                  onRetryQuote: () => ref.invalidate(
+                    orderQuoteProvider((planCode: planCode, months: months)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const _PasosCard(),
+              ],
+              // Con saldo suficiente no hay transferencia: no se muestran datos
+              // bancarios ni se pide comprobante.
+              if (covered)
+                const Padding(
+                  padding: EdgeInsets.only(top: 4),
+                  child: Text(
+                    'No necesitas transferir dinero. Consulta el estado de la solicitud en Historial.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      height: 1.45,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textMuted,
+                    ),
+                  ),
+                ),
+              if (!covered) ...[
+                const SizedBox(height: 12),
+                _BancoCard(
+                  instructions: instructions,
+                  order: orderMatches ? openOrder : null,
+                  evidenceName: _evidenceName,
+                ),
+              ],
+              const SizedBox(height: 12),
+              _PaymentActions(
+                primary: SquareButton(
+                  label: busy
+                      ? 'Procesando…'
+                      : covered
                       ? (orderMatches
                             ? 'Solicitud enviada, revisando tu saldo'
                             : 'Solicitar la mejora con mi saldo')
-                      : _evidenceName != null
-                      ? 'Confirmar pago'
                       : orderMatches
                       ? 'Subir comprobante de la transferencia'
                       : (license?.isUsable == true
@@ -313,54 +426,79 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen>
                             : 'Generar orden para transferir'),
                   icon: covered
                       ? Icons.verified_rounded
-                      : _evidenceName != null
-                      ? Icons.verified_rounded
                       : orderMatches
                       ? Icons.upload_file_rounded
                       : Icons.arrow_forward_rounded,
-                  onPressed: busy
+                  onPressed: busy || !ordersReady
                       ? null
                       : covered
                       ? (orderMatches || quote == null
                             ? null
                             : () => _generateOrder(quote))
-                      : _evidenceName != null
-                      ? () => _confirmPayment(quote)
                       : orderMatches
                       ? () => _upload(openOrder)
                       : quote == null
                       ? null
                       : () => _generateOrder(quote),
                 ),
+                secondary: canCancelOrder
+                    ? SquareButton(
+                        label: 'Cancelar orden',
+                        variant: SquareVariant.ghost,
+                        onPressed: busy ? null : () => _cancel(openOrder),
+                      )
+                    : null,
               ),
-              if (canCancelOrder) ...[
-                const SizedBox(width: 10),
-                SizedBox(
-                  width: 190,
-                  child: SquareButton(
-                    label: 'Cancelar orden',
-                    variant: SquareVariant.ghost,
-                    onPressed: busy ? null : () => _cancel(openOrder),
-                  ),
+              if (busy)
+                const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: LinearProgressIndicator(),
                 ),
-              ],
+              const SizedBox(height: 10),
+              const Text(
+                'Tambien puedes hacer este proceso desde la app movil: es el mismo '
+                'y ahi tienes mas comodidad.',
+                style: TextStyle(
+                  fontSize: 11.5,
+                  height: 1.4,
+                  color: AppColors.textMuted,
+                ),
+              ),
             ],
-          ),
-          const SizedBox(height: 10),
-          const Text(
-            'Tambien puedes hacer este proceso desde la app movil: es el mismo '
-            'y ahi tienes mas comodidad.',
-            style: TextStyle(
-              fontSize: 11.5,
-              height: 1.4,
-              color: AppColors.textMuted,
-            ),
-          ),
-        ],
-      ),
+          ],
+        ),
       ),
     );
   }
+}
+
+class _PaymentActions extends StatelessWidget {
+  const _PaymentActions({required this.primary, this.secondary});
+  final Widget primary;
+  final Widget? secondary;
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      if (constraints.maxWidth < 600) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            primary,
+            if (secondary != null) ...[const SizedBox(height: 10), secondary!],
+          ],
+        );
+      }
+      return Row(
+        children: [
+          Expanded(child: primary),
+          if (secondary != null) ...[
+            const SizedBox(width: 10),
+            SizedBox(width: 190, child: secondary),
+          ],
+        ],
+      );
+    },
+  );
 }
 
 /// Centro de pagos: estado de la suscripcion y los dos caminos posibles.
@@ -398,8 +536,9 @@ class _PagosHub extends ConsumerWidget {
       title = 'Tu pago esta en verificacion';
       detail =
           'Recibimos tu comprobante${renewal?.order?.reference != null ? ' ${renewal!.order!.reference}' : ''} '
-          'y lo estamos revisando. Tu plan sigue activo hasta '
-          '${_shortDate(license?.periodEndsAt)}: no tienes que pagar de nuevo.';
+          'y lo estamos revisando. '
+          '${license?.isUsable == true ? 'Tu plan sigue disponible hasta ${_shortDate(license?.periodEndsAt)}. ' : ''}'
+          'No tienes que pagar de nuevo.';
     } else if (overdue) {
       icon = Icons.error_outline_rounded;
       tint = const Color(0xFFB45309);
@@ -450,7 +589,9 @@ class _PagosHub extends ConsumerWidget {
           icon: const Icon(Icons.receipt_long_outlined, size: 18),
           label: const Text('Historial de transferencia'),
           style: TextButton.styleFrom(
-            foregroundColor: AppColors.textSecondary,
+            foregroundColor: MediaQuery.sizeOf(context).width < 900
+                ? Colors.white
+                : AppColors.textSecondary,
             textStyle: const TextStyle(
               fontSize: 12.5,
               fontWeight: FontWeight.w700,
@@ -501,9 +642,7 @@ class _PagosHub extends ConsumerWidget {
                     Expanded(
                       child: _HubStat(
                         label: 'Mensualidad',
-                        value: price == null
-                            ? '—'
-                            : money(price, 'DOP'),
+                        value: price == null ? '—' : money(price, 'DOP'),
                       ),
                     ),
                     Expanded(
@@ -578,7 +717,10 @@ class _PagosHub extends ConsumerWidget {
     );
   }
 
-  double? _monthlyPriceOf(LicenseStatusModel? license, List<PlanOffer> catalog) {
+  double? _monthlyPriceOf(
+    LicenseStatusModel? license,
+    List<PlanOffer> catalog,
+  ) {
     final code = license?.planCode?.trim().toLowerCase();
     if (code == null || code.isEmpty) return null;
     for (final plan in catalog) {
@@ -628,9 +770,7 @@ class _NextDueCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              PlansEyebrow(
-                overdue ? 'CUOTA VENCIDA' : 'PROXIMA CUOTA',
-              ),
+              PlansEyebrow(overdue ? 'CUOTA VENCIDA' : 'PROXIMA CUOTA'),
               const Spacer(),
               if (days != null && !overdue)
                 Text(
@@ -788,7 +928,7 @@ class _ResumenCard extends StatelessWidget {
                       : 'Lo que vas a pagar hoy',
                 ),
               ),
-              _MesesSelector(months: months, onChanged: onMonths),
+              _MesesSelector(months: months, onChanged: busy ? null : onMonths),
             ],
           ),
           const SizedBox(height: 10),
@@ -800,7 +940,9 @@ class _ResumenCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      quote?.planName ?? 'Plan',
+                      openOrder?.planName ??
+                          quote?.planName ??
+                          'Plan seleccionado',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -828,7 +970,29 @@ class _ResumenCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          if (quoteAsync.isLoading)
+          if (orderMatches && openOrder != null) ...[
+            const Text(
+              'Importe de tu orden',
+              style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              money(openOrder!.amount, openOrder!.currency),
+              style: const TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.w800,
+                color: AppColors.primaryDark,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Orden ${openOrder!.reference} · ${openOrder!.months} ${openOrder!.months == 1 ? 'mes' : 'meses'}',
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Usa el importe de esta orden. Adjunta el comprobante después de transferir.',
+            ),
+          ] else if (quoteAsync.isLoading)
             const LoadingBlock(height: 96)
           else if (quoteAsync.hasError)
             ErrorBlock(
@@ -840,15 +1004,15 @@ class _ResumenCard extends StatelessWidget {
             )
           else if (quote != null) ...[
             _MoneyLine(
-              label: '${quote!.months} x ${money(quote!.monthlyPrice, quote!.currency)}',
+              label:
+                  '${quote!.months} x ${money(quote!.monthlyPrice, quote!.currency)}',
               value: money(quote!.subtotal, quote!.currency),
             ),
             if (quote!.hasCredit)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: _MoneyLine(
-                  label:
-                      'Lo que aun no consumes (${quote!.creditDays} dias)',
+                  label: 'Lo que aun no consumes (${quote!.creditDays} dias)',
                   value: '- ${money(quote!.credit, quote!.currency)}',
                   highlight: const Color(0xFF15803D),
                 ),
@@ -962,8 +1126,8 @@ class _PasosCard extends StatelessWidget {
     ),
     (
       '3',
-      'Listo: tu plan se renueva',
-      'Soporte verifica el pago. Si algo no cuadra, te escribe por WhatsApp.',
+      'Consulta el resultado',
+      'El sistema indica si tu plan está disponible o si el comprobante necesita revisión.',
     ),
   ];
 
@@ -1039,6 +1203,7 @@ class _BancoCard extends StatelessWidget {
 
   final PaymentInstructions? instructions;
   final LicenseOrder? order;
+
   /// Comprobante ya subido: se muestra pequeno bajo la referencia.
   final String? evidenceName;
 
@@ -1297,6 +1462,7 @@ class _BankLine extends StatelessWidget {
 
   final String label;
   final String value;
+
   /// Accion pegada al valor (por ejemplo, copiar).
   final Widget? trailing;
 
@@ -1311,10 +1477,7 @@ class _BankLine extends StatelessWidget {
             width: 66,
             child: Text(
               label,
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.textMuted,
-              ),
+              style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
             ),
           ),
           Expanded(
@@ -1341,11 +1504,7 @@ class _BankLine extends StatelessWidget {
 }
 
 class _MoneyLine extends StatelessWidget {
-  const _MoneyLine({
-    required this.label,
-    required this.value,
-    this.highlight,
-  });
+  const _MoneyLine({required this.label, required this.value, this.highlight});
 
   final String label;
   final String value;
@@ -1382,7 +1541,7 @@ class _MesesSelector extends StatelessWidget {
   const _MesesSelector({required this.months, required this.onChanged});
 
   final int months;
-  final ValueChanged<int> onChanged;
+  final ValueChanged<int>? onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -1409,12 +1568,13 @@ class _MesesSelector extends StatelessWidget {
                 child: Text(m == 1 ? '1 mes' : '$m meses'),
               ),
           ],
-          onChanged: (value) {
-            if (value != null) onChanged(value);
-          },
+          onChanged: onChanged == null
+              ? null
+              : (value) {
+                  if (value != null) onChanged!(value);
+                },
         ),
       ),
     );
   }
 }
-

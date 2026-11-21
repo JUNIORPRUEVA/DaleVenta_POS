@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Header, Headers, Param, Patch, Post, Query, Req, StreamableFile, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Header, Headers, Param, ParseUUIDPipe, Patch, Post, Query, Req, StreamableFile, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
@@ -95,7 +95,7 @@ export class LicenseController {
 
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Post('orders/:id/cancel')
-  cancelOrder(@Req() req: Request, @Param('id') id: string) {
+  cancelOrder(@Req() req: Request, @Param('id', ParseUUIDPipe) id: string) {
     return this.orders.cancelOrder(req.user as TenantUser, id);
   }
 
@@ -113,7 +113,7 @@ export class LicenseController {
   )
   uploadEvidence(
     @Req() req: Request,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @UploadedFile() file?: Express.Multer.File,
   ) {
     return this.orders.uploadEvidence(req.user as TenantUser, id, file);
@@ -125,8 +125,8 @@ export class LicenseController {
   @Header('Cache-Control', 'private, no-store')
   async downloadEvidence(
     @Req() req: Request,
-    @Param('id') id: string,
-    @Param('evidenceId') evidenceId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('evidenceId', ParseUUIDPipe) evidenceId: string,
   ) {
     const { evidence, buffer } = await this.orders.getEvidence(
       req.user as TenantUser,

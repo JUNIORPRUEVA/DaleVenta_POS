@@ -70,3 +70,112 @@ PC / Móvil.
 2. ¿Se echa en falta alguna frase por plan (para quién es cada uno)?
 3. Si le gusta este estilo, el siguiente paso es aplicarlo a las otras tres
    pantallas para que la sección quede coherente.
+
+## Actualización verificada — 21/11/2026
+
+Esta sección sustituye las decisiones visuales anteriores que entren en
+conflicto con la solicitud actual del propietario. Trabajo aislado en
+`C:/t/fppl-7e92-20261120`, rama `agent/product-lifecycle-private-20261120`.
+El commit visual anterior quedó en `57b4e095`. No se publicó ni se modificó
+producción. Precios, prorrateos, reglas de activación y permisos comerciales
+siguen siendo responsabilidad del backend existente.
+
+### Fallos reproducidos y corregidos
+
+1. El botón de comprobante dependía de una cotización recién consultada:
+   fallaba si esa consulta daba error o cambiaba el crédito. Ahora una orden
+   pendiente válida conserva su importe y permite adjuntar el comprobante.
+2. Reabrir una orden de varios meses restablecía el selector a un mes. Se
+   conserva el período guardado salvo elección expresa del cliente.
+3. «Confirmar pago» solo emitía un mensaje local. Se eliminó: después de
+   subir se muestra «Comprobante recibido» y el acceso al estado real del pago.
+   La interfaz distingue recepción, disponibilidad del plan y pago verificado.
+4. El selector de archivos quedaba fuera de la protección contra doble clic.
+   Selección, lectura y envío ahora comparten el estado ocupado y el manejo de
+   errores. Cancelar el selector no envía nada; se valida archivo vacío y 8 MB.
+5. El historial del servidor omitía los metadatos del comprobante ya guardado.
+   Se devuelven identificador, MIME, tamaño y fecha; nunca la ruta privada ni OCR.
+6. Una orden vencida aceptaba archivos antes de actualizar el historial. Se
+   comprueba su vencimiento antes del procesamiento y dentro de la transacción.
+7. Tres creaciones simultáneas podían producir dos órdenes. La creación y
+   reutilización se serializan por empresa mediante bloqueo transaccional.
+8. Cancelar mientras se recibía un comprobante podía sobrescribir el estado.
+   La cancelación bloquea la fila y vuelve a comprobar sus datos; devuelve
+   conflicto si ya se recibió el archivo. No se elimina la evidencia.
+9. Un fallo al cargar pagos podía parecer ausencia de órdenes o suscripción
+   al día. Se muestran error y reintento; no se afirma un estado sin comprobar.
+10. El historial afirmaba que revisión equivalía a licencia activa. El texto
+    ahora explica que recibir un comprobante no confirma todavía el pago.
+
+Tras una respuesta incierta se vuelve a consultar el historial; no se anuncia
+recepción sin validar la respuesta. La subida exige identidad de orden,
+identificador de evidencia, estado reconocido y bandera de activación explícita.
+Los identificadores de las rutas privadas tienen validación UUID y conservan
+autenticación, permisos y aislamiento por empresa.
+
+### Catálogo y avisos
+
+- Ancho máximo del catálogo: 1.440 px; cuatro columnas desde 1.180 px de
+  espacio disponible, dos desde 660 y una en teléfono.
+- En escritorio aumentan tipografía, precio y espacio interior. El plan
+  actual ofrece «Renovar plan» habilitado. Botones cuadrados de 46 px.
+- Se mantiene la tipografía compacta del teléfono. El enlace al historial
+  conserva contraste blanco sobre el appbar azul del móvil.
+- Los avisos usan `AppFeedback`: párrafo compacto arriba a la derecha,
+  con el filtrado de identificadores y el ciclo de vida compartidos.
+
+### Verificación y límites
+
+| Verificación | Resultado |
+| --- | --- |
+| Flutter, sección Planes | 69 pruebas pasan |
+| Análisis estático de Planes y pruebas nuevas | Sin incidencias |
+| Backend, órdenes/evidencias/planes/renovación | 115 pruebas pasan |
+| Integración de dominio en PostgreSQL aislado | 19 pruebas pasan |
+| HTTP real con multipart y comprobación SQL | 7 grupos de escenarios pasan |
+| Windows nativo, orden de tres meses y PDF real con cotización fallida | Subida única, recepción e historial comprobados |
+| SQL independiente después de Windows | Una evidencia, tres meses, EVIDENCE_RECEIVED, activación NONE y licencia TRIAL sin cambios |
+| Vista previa Flutter Web | Catálogo, pago e historial en 1.920, 1.280 y 390 px; nueve capturas, sin peticiones API ni desbordamiento horizontal |
+| Compilación API, Windows y vista previa Web | Correcta |
+
+Los escenarios HTTP incluyen aislamiento entre empresas, ausencia de sesión,
+firma falsa, duplicados, vencimiento, descarga privada con bytes originales y
+la carrera real entre cancelación y subida. Windows utiliza bytes de un PDF
+sintético mediante HTTP real; solo se automatiza la elección del archivo en
+el selector del sistema operativo. Se comprueba también que la cola offline
+no cambia. La API privada escucha en 4018 y usa exclusivamente la base
+`fullpos_plans_payment_20261121` en PostgreSQL local 56562; el puerto 4004 y
+las otras sesiones se conservaron. La suite de dominio usa otra base exclusiva
+`appyra_license_e2e`, puerto local 56701.
+
+Las pruebas de dominio simulan resultados OCR y activación en su fixture;
+no acreditan conciliación bancaria externa. En las pruebas HTTP/Windows no
+se habilitó activación de prueba, OCR externo ni envíos reales. No se hizo
+una transferencia bancaria, operación financiera real, migración o seed de
+producción. Android/iPhone físicos no se probaron en este cambio.
+
+**Resultado:** correcciones verificadas localmente y listas para revisión.
+**NO-GO de publicación automática:** una publicación y la validación bancaria
+real requieren su proceso independiente. No se afirma ausencia absoluta de
+riesgos ni se cambia la política financiera para lograr pruebas verdes.
+
+### Evidencia y reproducción
+
+Evidencia local ignorada por Git: `.uat/plans-payment/`.
+`plans-reproduced.log` está en `.uat/product-lifecycle/` y conserva los tres
+fallos iniciales de Flutter. `http-reproduced.log`, `expired-reproduced.log`,
+`concurrent-reproduced.log` y `cancel-reproduced.log` conservan los fallos HTTP.
+`http-verified.log`, `http-result.json`, `flutter-tests-final.log`,
+`analyze-final.log`, `backend-tests-final.log`, `domain-integration.log`,
+`windows-functional.log`, `native-result.json`, `native-sql-result.json` y
+`design-evidence/` contienen los resultados finales. No versionar credenciales
+sintéticas, archivos privados, perfiles del navegador ni datos locales.
+
+Scripts reproducibles: `scripts/uat/plans-payment-lab.cjs` (init/serve),
+`plans-payment-http.cjs`, `plans-payment-verify-native.cjs`,
+`plans-payment-design.cjs` y `preview-plans-payment.cjs`. Prueba nativa:
+`apps/fulltech_app/integration_test/plans_payment_native_test.dart`.
+La vista previa en `http://127.0.0.1:4495/#/planes/catalogo` contiene datos
+ficticios, rechaza todas las llamadas API y simula escrituras en memoria.
+No se transmite el archivo elegido ni se activa una licencia desde la vista
+previa. Esa simulación pertenece al entrypoint de diseño, no al arranque real.
