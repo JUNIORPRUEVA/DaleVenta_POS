@@ -1,5 +1,32 @@
 # Ciclo de vida de productos — ejecución autorizada
 
+## Cierre de experiencia del cliente — 21 de noviembre de 2026
+
+El propietario aprobó el diseño de las 39 vistas tras el commit `c4bfd1d5`.
+Se conserva el diseño aprobado. El cliente abre Gestionar producto, elige una
+acción permitida y confirma; no debe conocer reglas internas ni pedir revisión
+a otra persona para las acciones que su permiso permite.
+
+| Necesidad | Recorrido y resultado |
+| --- | --- |
+| Retirar un producto que ya vendió | Gestionar → Archivar → confirmar. Conserva ventas, existencias e historial. |
+| Eliminar uno sin uso ni existencias | Gestionar → Eliminar definitivamente → confirmar. El servidor vuelve a validar. |
+| Volver a ofrecer un archivado | Archivados → buscar producto → Restaurar → confirmar. Conserva su identidad e historial. |
+| Cambiar de opinión antes de confirmar | Cancelar. No se muestra éxito ni se cierra el detalle original. |
+| Respuesta incierta o cambio simultáneo | Comprobar estado antes de volver a decidir; nunca asumir que falló y repetir a ciegas. |
+
+Solo se muestran acciones que permite el estado consultado. Tener ventas oculta
+el borrado definitivo y la anulación. La anulación del alta es excepcional,
+requiere permiso, habilitación y motivo; no forma parte de retirar un producto
+vendido. Sin conexión, estas transiciones esperan verificación; esto no bloquea
+por sí mismo la pantalla de ventas ni elimina operaciones offline.
+
+Validación adicional: las 85 pruebas de la galería pasaron, incluidas cuatro
+comprobaciones del recorrido completo de eliminar, archivar, restaurar y cancelar.
+Son pruebas de widgets con repositorio simulado; complementan las pruebas reales
+de API/base de datos y plataformas registradas en el informe de cierre.
+La aprobación visual no autoriza despliegue ni habilitación de la anulación.
+
 ## Fase 0: entorno y baseline
 
 Trabajo aislado actual: `C:/t/fppl-7e92-20261120`, rama

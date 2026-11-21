@@ -122,4 +122,52 @@ void main() {
       );
     },
   );
+  for (final flow in [
+    ('zero', 'Eliminar definitivamente', 'Eliminar', 'Producto eliminado'),
+    ('history', 'Archivar', 'Archivar', 'Producto archivado'),
+    ('archived', 'Restaurar', 'Restaurar', 'Producto restaurado'),
+  ]) {
+    testWidgets('${flow.$1}: one action and confirmation complete the flow', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        ProductLifecycleDesignGallery(initialCase: flow.$1),
+      );
+      await tester.pumpAndSettle();
+      if (flow.$1 == 'history') {
+        expect(find.text('Eliminar definitivamente'), findsNothing);
+        expect(find.text('Anular alta'), findsNothing);
+      }
+      await tester.tap(find.widgetWithText(OutlinedButton, flow.$2));
+      await tester.pumpAndSettle();
+      expect(find.text(flow.$4), findsNothing);
+      await tester.tap(find.widgetWithText(ElevatedButton, flow.$3));
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.textContaining(flow.$4), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    });
+  }
+  testWidgets('cancel keeps the product dialog without a success notice', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const ProductLifecycleDesignGallery(initialCase: 'zero'),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.widgetWithText(OutlinedButton, 'Eliminar definitivamente'),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cancelar'));
+    await tester.pumpAndSettle();
+    expect(find.text('Gestionar producto'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('persistent_feedback_card')),
+      findsNothing,
+    );
+    expect(find.text('Eliminar definitivamente'), findsOneWidget);
+  });
 }

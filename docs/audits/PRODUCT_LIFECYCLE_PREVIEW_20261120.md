@@ -52,8 +52,9 @@ un mensaje de lista vacía. Las confirmaciones usan botones cuadrados y una barr
 de acciones adaptable; no se cambia el diálogo compartido de otros módulos.
 
 Para solicitar un cambio basta indicar el número de la vista, el ancho aproximado
-y el texto/botón que debe ajustarse. La aprobación visual del propietario sigue
-pendiente hasta que revise la galería.
+y el texto/botón que debe ajustarse. El propietario aprobó visualmente la galería
+el 21 de noviembre de 2026, después del commit `c4bfd1d5`. Esta aprobación cierra
+la revisión visual; no constituye autorización de despliegue en producción.
 
 ## Reproducir
 

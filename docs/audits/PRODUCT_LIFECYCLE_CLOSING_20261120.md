@@ -60,7 +60,8 @@ a certificar todos los avisos globales. Se conservan los reportes, sin silenciar
 
 ## Pendientes legítimos y autorización
 
-La aprobación visual de las 39 vistas pertenece al propietario. iOS físico no se
+El propietario aprobó visualmente las 39 vistas el 21 de noviembre de 2026.
+La revisión visual está cerrada. iOS físico no se
 ejecutó porque solo hay Windows; no se inventa esa evidencia. No hay despliegue,
 migración, reinicio ni modificación de productos existentes en producción.
 La anulación está apagada por defecto y los códigos anulados siguen reservados.
@@ -75,7 +76,7 @@ incorpore una sola revisión coherente y repetir el cierre sobre ese commit.
 
 **GO WITH ISSUES para el alcance desarrollado en Windows, Android emulado y Web.**
 No quedan fallos reproducidos de este alcance sin corregir en las pruebas
-ejecutadas. Permanecen aprobación visual, iOS físico no disponible y la revisión
+ejecutadas. Permanecen iOS físico no disponible y la revisión
 global de avisos de licencias fuera del alcance. No es una certificación de
 riesgo cero ni una aprobación de producción.
 
