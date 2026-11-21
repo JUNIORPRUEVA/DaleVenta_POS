@@ -13,7 +13,7 @@ suite('CRM management with isolated PostgreSQL', () => {
   const future = new Date(Date.now() + 86400000 * 45);
   beforeAll(async () => {
     const url = new URL(fixtureUrl!);
-    if (url.hostname !== '127.0.0.1' || !['55519', '56701'].includes(url.port) || url.pathname !== '/crm_license_fixture' || url.search || url.hash) throw Error('unsafe_fixture_target');
+    if (url.hostname !== '127.0.0.1' || !['55519', '56701', '56711'].includes(url.port) || url.pathname !== '/crm_license_fixture' || url.search || url.hash) throw Error('unsafe_fixture_target');
     db = new PrismaClient({ datasources: { db: { url: fixtureUrl } } });
     licenses = new LicenseService(db as any, {} as any, { emitCompany: jest.fn() } as any);
     service = new CrmLicenseService(db as any, licenses, { get: () => 'true' } as any);

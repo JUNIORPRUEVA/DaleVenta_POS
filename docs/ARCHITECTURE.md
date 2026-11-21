@@ -28,9 +28,11 @@ FullPOS Cloud contains the operational apps and a public static website:
   The old questionnaire is retired from routing (`/onboarding` redirects to
   `/home`). Legacy status fields remain for old clients; the new progress is
   derived from activation data, not from an invented completion flag.
-  Windows, Android and iOS offer a compact registration link that opens the
-  public Astro form in the external browser. The Flutter `/register` route
-  returns to login; native account creation is disabled by the shared policy.
+  Windows offers a compact registration link that opens the public Astro form
+  in the external browser. Native Android/iOS phones instead explain that an
+  existing account is required; their login has no registration or exit link.
+  The Flutter `/register` route returns to login; native account creation is
+  disabled by the shared policy. Web and Windows keep their existing entry flow.
 
 ```text
 Flutter app / PWA / Windows

@@ -14,6 +14,7 @@ import '../../../core/realtime/operations_refresh_signals.dart';
 import '../../../core/routing/app_navigator.dart';
 import '../../../core/utils/app_feedback.dart';
 import '../../../core/utils/money_formatters.dart';
+import '../../../core/utils/native_phone_layout.dart';
 import '../../../core/widgets/custom_app_bar.dart';
 import '../../../core/widgets/provided_action_icon.dart';
 import '../../../core/theme/app_colors.dart';
@@ -867,6 +868,26 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
                                       const AlwaysScrollableScrollPhysics(),
                                   padding: const EdgeInsets.only(bottom: 24),
                                   children: [
+                                    if (usesNativePhoneLayout(context)) ...[
+                                      if (!_loading && _kpis.salesCount == 0) const _EmptyPeriodNotice(),
+                                      ReportsFinancialKpiCards(kpis: _kpis),
+                                      const SizedBox(height: 8),
+                                      _MobileReportSection(title: 'Ventas y formas de pago',
+                                        child: _HeroReportsPanel(wide: false, kpis: _kpis,
+                                          salesSeries: _salesSeries, paymentMethods: _paymentMethods, periodLabel: periodLabel)),
+                                      _MobileReportSection(title: 'Utilidad y comparativos',
+                                        child: Column(children: [
+                                          _PremiumCard(title: 'Evolución de utilidad bruta',
+                                            child: SizedBox(height: 200, child: ProfitLineChart(data: _profitSeries))),
+                                          _ComparativeStatsCard(rows: _comparisons),
+                                        ])),
+                                      _MobileReportSection(title: 'Rentabilidad por categoría',
+                                        child: CategoryProfitTable(categories: _categoryProfits)),
+                                      _MobileReportSection(title: 'Productos y clientes',
+                                        child: Column(children: [TopProductsTable(products: _topProducts), TopClientsTable(clients: _topClients)])),
+                                      _MobileReportSection(title: 'Ventas recientes',
+                                        child: _RecentSalesTable(sales: _sales.take(12).toList())),
+                                    ] else ...[
                                     if (!_loading && _kpis.salesCount == 0) ...[
                                       const _EmptyPeriodNotice(),
                                       const SizedBox(height: 16),
@@ -912,6 +933,7 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
                                     _RecentSalesTable(
                                       sales: _sales.take(12).toList(),
                                     ),
+                                    ],
                                   ],
                                 ),
                               ),
@@ -970,6 +992,23 @@ ThemeData _reportsVisualTheme(BuildContext context) {
     listTileTheme: theme.listTileTheme.copyWith(
       shape: const RoundedRectangleBorder(),
     ),
+  );
+}
+
+class _MobileReportSection extends StatelessWidget {
+  const _MobileReportSection({required this.title, required this.child});
+  final String title;
+  final Widget child;
+  @override
+  Widget build(BuildContext context) => ExpansionTile(
+    key: PageStorageKey('mobile-report-$title'),
+    title: Text(title, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+    tilePadding: const EdgeInsets.symmetric(horizontal: 8),
+    childrenPadding: const EdgeInsets.only(bottom: 8),
+    shape: const Border(bottom: BorderSide(color: AppColors.border, width: 0.5)),
+    collapsedShape: const Border(bottom: BorderSide(color: AppColors.border, width: 0.5)),
+    iconColor: AppColors.primary, collapsedIconColor: AppColors.textSecondary,
+    children: [KeyedSubtree(key: PageStorageKey('mobile-report-detail-$title'), child: child)],
   );
 }
 
@@ -2094,6 +2133,7 @@ class ReportsFinancialKpiCards extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final phone = usesNativePhoneLayout(context);
     // Jerarquia principal del reporte de desempeño de ventas:
     // Ventas -> Utilidad bruta -> Gastos -> Utilidad neta.
     // Las metricas secundarias (margenes y tickets) viven en el panel inferior
@@ -2140,7 +2180,7 @@ class ReportsFinancialKpiCards extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final columns = constraints.maxWidth >= 900 ? 4 : 2;
-        const gap = 12.0;
+        final gap = phone ? 8.0 : 12.0;
         final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2150,11 +2190,12 @@ class ReportsFinancialKpiCards extends StatelessWidget {
               runSpacing: gap,
               children: [
                 for (final card in cards)
-                  SizedBox(width: width, height: 108, child: card),
+                  SizedBox(width: width, height: phone ? 84 : 108, child: card),
               ],
             ),
             const SizedBox(height: 12),
-            _ProfitBreakdownPanel(kpis: kpis),
+            if (phone) _MobileReportSection(title: 'Márgenes y tickets', child: _ProfitBreakdownPanel(kpis: kpis))
+            else _ProfitBreakdownPanel(kpis: kpis),
           ],
         );
       },
@@ -2214,7 +2255,7 @@ class _ProfitBreakdownPanel extends StatelessWidget {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              if (!usesNativePhoneLayout(context)) const Text(
                 'Margen y tickets',
                 style: TextStyle(
                   color: _textPrimary,
@@ -2222,7 +2263,7 @@ class _ProfitBreakdownPanel extends StatelessWidget {
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              const SizedBox(height: 10),
+              if (!usesNativePhoneLayout(context)) const SizedBox(height: 10),
               content,
             ],
           );
@@ -2939,6 +2980,20 @@ class _KpiCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (usesNativePhoneLayout(context)) {
+      return _Surface(padding: const EdgeInsets.all(10), radius: 4, shadow: false,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(children: [Expanded(child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary))),
+              if (helpText != null) _KpiHelpButton(key: helpKey, message: helpText!),
+            ]),
+            FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft,
+              child: Text(value, style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                color: value.trim().startsWith('-') ? AppColors.error : AppColors.textPrimary,
+                fontWeight: FontWeight.w700))),
+          ]));
+    }
     return _Surface(
       padding: const EdgeInsets.all(11),
       radius: 14,

@@ -1,3 +1,4 @@
+import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -23,9 +24,11 @@ class CashTurnMenuButton extends ConsumerWidget {
     super.key,
     this.compact = false,
     this.refined = false,
+    this.mobileHeader = false,
   });
 
   final bool refined;
+  final bool mobileHeader;
 
   static const _navigatorSettleDelay = Duration(milliseconds: 220);
 
@@ -508,7 +511,30 @@ class CashTurnMenuButton extends ConsumerWidget {
             ),
           ),
       ],
-      child: _TurnTopbarButton(
+      child: mobileHeader ? Container(
+        key: const ValueKey('phone-cash-turn-button'),
+        height: 40,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.22)),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          const Icon(Icons.point_of_sale_outlined, size: 18, color: Colors.white),
+          const SizedBox(width: 6),
+          Text(
+            requiresReview ? 'Revisar turno' :
+            session.isLoading ? 'Cargando turno' :
+            (session.hasError || unverified) ? 'Sin verificar' :
+            staleShift ? 'Turno anterior' : active != null ? 'Turno abierto' : 'Turno cerrado',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: Colors.white, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(width: 4),
+          const Icon(Icons.expand_more, size: 16, color: Colors.white),
+        ]),
+      ) : _TurnTopbarButton(
         open: active != null,
         unverified: unverified,
         stale: staleShift,
@@ -1137,7 +1163,7 @@ class _CurrentTurnDialog extends StatelessWidget {
                             tooltip: 'Regresar',
                             onPressed: () => Navigator.pop(context),
                             color: Colors.white,
-                            icon: const Icon(Icons.arrow_back_rounded),
+                            icon: const MobileActionIcon(Icons.arrow_back_rounded),
                           ),
                           const Expanded(
                             child: Text(
@@ -1934,7 +1960,7 @@ class _TurnHistoryDialogState extends ConsumerState<_TurnHistoryDialog> {
                                   controller: _searchController,
                                   decoration: InputDecoration(
                                     hintText: 'Buscar turno...',
-                                    prefixIcon: const Icon(
+                                    prefixIcon: const MobileActionIcon(
                                       Icons.search_rounded,
                                       size: 19,
                                     ),
@@ -2752,7 +2778,7 @@ class _HistoryTurnCardState extends ConsumerState<_HistoryTurnCard> {
                   });
                   _loadDetail();
                 },
-                icon: const Icon(Icons.refresh_rounded, size: 16),
+                icon: const MobileActionIcon(Icons.refresh_rounded, size: 16),
                 label: const Text('Reintentar'),
                 style: TextButton.styleFrom(
                   foregroundColor: const Color(0xFFB45309),
@@ -3248,7 +3274,7 @@ class _HistoryEmptyState extends StatelessWidget {
               const SizedBox(height: 14),
               OutlinedButton.icon(
                 onPressed: onAction,
-                icon: const Icon(Icons.refresh_rounded, size: 17),
+                icon: const MobileActionIcon(Icons.refresh_rounded, size: 17),
                 label: Text(actionLabel!),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: const Color(0xFF1957E6),

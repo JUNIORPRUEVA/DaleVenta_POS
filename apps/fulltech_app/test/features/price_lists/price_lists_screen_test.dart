@@ -167,6 +167,12 @@ Future<_Lists> _pump(
     for (final name in ['add', 'close', 'search']) {
       await precacheImage(AssetImage('assets/image/action_$name.png'), context);
     }
+    for (final name in ['back', 'search', 'filter', 'refresh']) {
+      await precacheImage(
+        AssetImage('assets/image/mobile_navigation/$name.png'),
+        context,
+      );
+    }
   });
   await tester.pumpAndSettle();
   return repository;

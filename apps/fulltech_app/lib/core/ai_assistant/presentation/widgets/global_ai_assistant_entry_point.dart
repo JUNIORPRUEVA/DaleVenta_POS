@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../auth/auth_provider.dart';
 import '../../../routing/app_router.dart';
 import '../../../widgets/app_navigation.dart';
+import '../../../utils/native_phone_layout.dart';
 import '../../application/ai_assistant_controller.dart';
 import '../../domain/models/ai_chat_context.dart';
 import '../ai_chat_context_resolver.dart';
@@ -29,8 +30,18 @@ class GlobalAiAssistantEntryPoint extends ConsumerWidget {
     final mobileSheetOpen = ref.watch(mobileAiAssistantSheetOpenProvider);
 
     final router = ref.watch(routerProvider);
+    return ListenableBuilder(
+      listenable: router.routeInformationProvider,
+      builder: (context, _) => _buildForLocation(context, ref, router, mobileSheetOpen),
+    );
+  }
+
+  Widget _buildForLocation(BuildContext context, WidgetRef ref, GoRouter router, bool mobileSheetOpen) {
     final location = _safeLocation(context, router);
     if (_shouldHideEntryPoint(location)) return child;
+    if (usesNativePhoneLayout(context)) {
+      return child;
+    }
 
     final isDesktop = MediaQuery.sizeOf(context).width >= 900;
 
@@ -125,6 +136,11 @@ class GlobalAiAssistantEntryPoint extends ConsumerWidget {
       return;
     }
 
+    showMobilePanel(context, ref);
+  }
+
+  /// Opens the existing mobile conversation from an in-screen action.
+  static void showMobilePanel(BuildContext context, WidgetRef ref) {
     final openState = ref.read(mobileAiAssistantSheetOpenProvider.notifier);
     if (openState.state) return;
     openState.state = true;
@@ -136,12 +152,21 @@ class GlobalAiAssistantEntryPoint extends ConsumerWidget {
       barrierLabel: 'Cerrar FullPOS IA',
       barrierColor: Colors.transparent,
       transitionDuration: const Duration(milliseconds: 240),
-      pageBuilder: (dialogContext, _, __) => Stack(children: [
-        Positioned.fill(child: AiAssistantFocusBackdrop(
-          onDismiss: () => Navigator.of(dialogContext).maybePop())),
-        const Align(alignment: Alignment.bottomCenter, child: GlobalAiChatSheet()),
-      ]),
-      transitionBuilder: (_, animation, __, child) => FadeTransition(opacity: animation, child: child),
+      pageBuilder: (dialogContext, _, __) => Stack(
+        children: [
+          Positioned.fill(
+            child: AiAssistantFocusBackdrop(
+              onDismiss: () => Navigator.of(dialogContext).maybePop(),
+            ),
+          ),
+          const Align(
+            alignment: Alignment.bottomCenter,
+            child: GlobalAiChatSheet(),
+          ),
+        ],
+      ),
+      transitionBuilder: (_, animation, __, child) =>
+          FadeTransition(opacity: animation, child: child),
     ).whenComplete(() => openState.state = false);
   }
 
@@ -171,7 +196,8 @@ class GlobalAiAssistantEntryPoint extends ConsumerWidget {
           children: [
             Positioned.fill(
               child: AiAssistantFocusBackdrop(
-                onDismiss: () => Navigator.of(dialogContext).maybePop()),
+                onDismiss: () => Navigator.of(dialogContext).maybePop(),
+              ),
             ),
             Align(
               alignment: Alignment.centerRight,

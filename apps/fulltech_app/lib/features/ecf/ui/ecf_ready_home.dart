@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/utils/native_phone_layout.dart';
 
 /// The backend has already confirmed POS readiness before this view is shown.
 /// The local acknowledgement only controls the notice, never fiscal permission.
@@ -49,7 +50,7 @@ class _EcfReadyHomeState extends State<EcfReadyHome> {
 
   @override
   Widget build(BuildContext context) => SingleChildScrollView(
-    padding: const EdgeInsets.all(24),
+    padding: EdgeInsets.all(usesNativePhoneLayout(context) ? 12 : 24),
     child: Align(
       alignment: Alignment.topCenter,
       child: ConstrainedBox(
@@ -76,11 +77,11 @@ class _EcfReadyHomeState extends State<EcfReadyHome> {
               ),
               const SizedBox(height: 16),
             ],
-            Text(
+            if (!usesNativePhoneLayout(context)) Text(
               'Facturación electrónica',
               style: Theme.of(context).textTheme.titleLarge,
             ),
-            const SizedBox(height: 12),
+            if (!usesNativePhoneLayout(context)) const SizedBox(height: 12),
             if (widget.overview != null) ...[
               widget.overview!,
               const SizedBox(height: 16),

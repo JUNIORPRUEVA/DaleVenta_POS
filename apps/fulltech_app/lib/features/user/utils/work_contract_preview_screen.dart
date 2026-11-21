@@ -1,3 +1,4 @@
+import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -443,7 +444,7 @@ class _WorkContractPreviewScreenState
           IconButton(
             tooltip: 'Regenerar PDF',
             onPressed: () => setState(() => _pdfFuture = _buildPdf(_employee)),
-            icon: const Icon(Icons.refresh),
+            icon: const MobileActionIcon(Icons.refresh),
           ),
         ],
       ),

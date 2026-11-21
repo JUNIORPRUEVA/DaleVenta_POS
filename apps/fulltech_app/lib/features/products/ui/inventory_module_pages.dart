@@ -1,3 +1,5 @@
+import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
+import 'package:daleventa_pos/core/utils/native_phone_layout.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ui';
@@ -1900,13 +1902,15 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
                     IconButton(
                       tooltip: _mobileSearchOpen ? 'Cerrar búsqueda' : 'Buscar',
                       onPressed: _toggleMobileSearch,
-                      icon: const Icon(Icons.search_rounded),
+                      icon: const MobileActionIcon(Icons.search_rounded),
                     ),
                   if (!_mobileSearchOpen)
                     IconButton(
                       tooltip: 'Filtros',
                       onPressed: _openCurrentMobileFilters,
-                      icon: const ProductArtwork(ProductArtworkKind.filter),
+                      icon: usesNativePhoneLayout(context)
+                          ? const MobileActionIcon(Icons.filter_alt_outlined)
+                          : const ProductArtwork(ProductArtworkKind.filter),
                     ),
                   if (!_mobileSearchOpen && initialTabIndex == 0)
                     PopupMenuButton<String>(
@@ -2216,7 +2220,7 @@ class _InventoryMobileSearchField extends StatelessWidget {
           decoration: InputDecoration(
             hintText: hintText,
             hintStyle: const TextStyle(color: _textSecondary, fontSize: 13),
-            prefixIcon: const Icon(Icons.search_rounded, size: 19),
+            prefixIcon: const MobileActionIcon(Icons.search_rounded, size: 19),
             suffixIcon: IconButton(
               tooltip: 'Cerrar',
               onPressed: onClose,
@@ -3315,7 +3319,9 @@ class _CatalogToolbar extends StatelessWidget {
             icon: Badge(
               isLabelVisible: hasFilters,
               smallSize: 8,
-              child: const ProductArtwork(ProductArtworkKind.filter, size: 18),
+              child: usesNativePhoneLayout(context)
+                  ? const MobileActionIcon(Icons.filter_alt_outlined, size: 17)
+                  : const ProductArtwork(ProductArtworkKind.filter, size: 18),
             ),
             label: 'Filtro',
           ),
@@ -4918,7 +4924,7 @@ class _StockAdjustmentsPageState extends ConsumerState<StockAdjustmentsPage> {
                                 },
                                 decoration: _inventoryTextInputDecoration(
                                   'Buscar producto',
-                                  prefixIcon: Icon(Icons.search_rounded),
+                                  prefixIcon: MobileActionIcon(Icons.search_rounded),
                                 ),
                               ),
                             ),
@@ -6741,10 +6747,12 @@ class CompactProductCard extends StatelessWidget {
                           product: product,
                           showTaxBadge: showTaxBadge,
                           taxConfig: taxConfig,
+                          showMeasurementUnit: showMeasurementUnit,
                         ),
                       ),
-                      const SizedBox(width: 6),
-                      _CompactStockCostColumn(
+                      if (!usesNativePhoneLayout(context)) ...[
+                        const SizedBox(width: 6),
+                        _CompactStockCostColumn(
                         stockText: _productStockText(
                           product,
                           showMeasurementUnit: showMeasurementUnit,
@@ -6752,6 +6760,7 @@ class CompactProductCard extends StatelessWidget {
                         stockColor: statusColor,
                         costText: _costText(product),
                       ),
+                      ],
                       const SizedBox(width: 2),
                       _ProductActionsMenu(
                         onEdit: onEdit,
@@ -6967,11 +6976,13 @@ class _CompactProductInfo extends StatelessWidget {
     required this.product,
     required this.showTaxBadge,
     required this.taxConfig,
+    this.showMeasurementUnit = false,
   });
 
   final ProductModel product;
   final bool showTaxBadge;
   final ProductTaxUiConfig? taxConfig;
+  final bool showMeasurementUnit;
 
   @override
   Widget build(BuildContext context) {
@@ -6994,7 +7005,7 @@ class _CompactProductInfo extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 3),
-        Text(
+        if (!usesNativePhoneLayout(context)) Text(
           product.categoriaLabel,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
@@ -7005,6 +7016,21 @@ class _CompactProductInfo extends StatelessWidget {
             height: 1.05,
             letterSpacing: 0,
           ),
+        ),
+        if (usesNativePhoneLayout(context)) Wrap(
+          spacing: 8,
+          runSpacing: 2,
+          children: [
+            Row(mainAxisSize: MainAxisSize.min, children: [
+              if (product.isInventoryTracked) Text('Stock: ', style: Theme.of(context).textTheme.bodySmall),
+              Text(_productStockText(product, showMeasurementUnit: showMeasurementUnit),
+                style: Theme.of(context).textTheme.bodySmall),
+            ]),
+            Text(
+              'Costo: ${_costText(product)}',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+            ),
+          ],
         ),
         if (fiscalUiEnabled && taxConfig != null) ...[
           const SizedBox(height: 5),

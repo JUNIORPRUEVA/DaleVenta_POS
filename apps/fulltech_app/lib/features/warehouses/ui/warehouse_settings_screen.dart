@@ -1,3 +1,4 @@
+import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -83,7 +84,7 @@ class WarehouseSettingsScreen extends ConsumerWidget {
                 ? Routes.cotizaciones
                 : Routes.configuracion,
           ),
-          icon: const Icon(Icons.arrow_back_rounded),
+          icon: const MobileActionIcon(Icons.arrow_back_rounded),
         ),
       ),
       body: Center(
@@ -1318,7 +1319,7 @@ class _TransferProductPicker extends StatelessWidget {
                         _inputDecoration(
                           'Buscar producto por nombre, código o categoría',
                         ).copyWith(
-                          prefixIcon: const Icon(
+                          prefixIcon: const MobileActionIcon(
                             Icons.search_rounded,
                             size: 18,
                           ),

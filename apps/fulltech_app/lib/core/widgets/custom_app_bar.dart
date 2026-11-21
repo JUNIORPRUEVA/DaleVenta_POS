@@ -5,6 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'app_gesture_detector.dart';
+import '../utils/native_phone_layout.dart';
+import 'mobile_page_app_bar.dart';
+import 'mobile_action_icon.dart';
 
 import '../app_update/app_update_mini_control.dart';
 import '../auth/app_role.dart';
@@ -72,6 +75,7 @@ class CustomAppBar extends ConsumerWidget implements PreferredSizeWidget {
     );
     final hasDrawer = scaffold?.hasDrawer ?? false;
     final isMobileLayout = MediaQuery.sizeOf(context).width < 900;
+    final phone = usesNativePhoneLayout(context);
     final role = ref.watch(authStateProvider).user?.appRole;
     final branding = resolveRoleBranding(role ?? AppRole.unknown);
     final appBarColor = branding.drawerSolidColor;
@@ -94,18 +98,18 @@ class CustomAppBar extends ConsumerWidget implements PreferredSizeWidget {
       ref: ref,
     );
 
-    final titleUpdateControl = AppUpdateMiniControl(
+    final titleUpdateControl = phone ? const SizedBox.shrink() : AppUpdateMiniControl(
       compact: true,
       inTitle: true,
     );
 
     final resolvedActions = <Widget>[
       const WebSessionActions(),
-      ...?actions,
+      ...?(phone ? actions?.map(mobileAppBarAction).toList() : actions),
       if (primaryPendingAction != null) primaryPendingAction,
       if (trailing != null)
         trailing!
-      else
+      else if (!phone)
         _buildDefaultPrimaryAvatar(context: context, ref: ref),
     ];
 
@@ -124,12 +128,13 @@ class CustomAppBar extends ConsumerWidget implements PreferredSizeWidget {
         : null;
 
     final resolvedLeading =
+        (phone ? (leading == null ? backButton : mobileAppBarAction(leading!)) : null) ??
         leading ??
         (preferDrawerLeading ? drawerButton : backButton) ??
         drawerButton ??
         backButton;
 
-    final useBrandedMenu = brandMenu && (onMenuPressed != null || hasDrawer);
+    final useBrandedMenu = !phone && brandMenu && (onMenuPressed != null || hasDrawer);
     final resolvedTitle =
         titleWidget ??
         (!(showLogo || showDepartmentLabel)
@@ -294,7 +299,8 @@ class CustomAppBar extends ConsumerWidget implements PreferredSizeWidget {
       flexibleSpace: isMobileLayout
           ? DecoratedBox(
               decoration: BoxDecoration(
-                color: appBarColor,
+                color: phone ? null : appBarColor,
+                gradient: phone ? phoneAppBarGradient : null,
                 boxShadow: [
                   BoxShadow(
                     color: shadowColor,
@@ -303,6 +309,7 @@ class CustomAppBar extends ConsumerWidget implements PreferredSizeWidget {
                   ),
                 ],
               ),
+              child: phone ? const SizedBox.expand() : null,
             )
           : null,
       backgroundColor: isMobileLayout ? appBarColor : Colors.white,

@@ -40,6 +40,9 @@ class _FakeOperationsRealtimeService implements OperationsRealtimeService {
       const Stream<ClientsRealtimeMessage>.empty();
 
   @override
+  Stream<String> get productStream => const Stream<String>.empty();
+
+  @override
   Stream<Map<String, dynamic>> get whatsappStream =>
       const Stream<Map<String, dynamic>>.empty();
 

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../../core/utils/native_phone_layout.dart';
+import '../../../core/widgets/custom_app_bar.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/company/company_settings_model.dart';
@@ -23,9 +25,10 @@ class EcfFiscalDataPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return const Scaffold(
+    return Scaffold(
+      appBar: usesNativePhoneLayout(context) ? const CustomAppBar(title: 'Datos fiscales', showLogo: false, showDepartmentLabel: false) : null,
       backgroundColor: Colors.transparent,
-      body: EcfFiscalDataContent(),
+      body: const EcfFiscalDataContent(),
     );
   }
 }

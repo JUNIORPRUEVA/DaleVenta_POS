@@ -1,3 +1,4 @@
+import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
@@ -256,7 +257,7 @@ class _GlobalAiChatSheetState extends ConsumerState<GlobalAiChatSheet> {
                                       borderRadius: BorderRadius.circular(6),
                                     ),
                                   ),
-                                  icon: const Icon(
+                                  icon: const MobileActionIcon(
                                     Icons.refresh_rounded,
                                     size: 20,
                                   ),

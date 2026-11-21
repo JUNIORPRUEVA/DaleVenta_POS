@@ -1,3 +1,5 @@
+import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
+import 'package:daleventa_pos/core/widgets/mobile_page_app_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -673,7 +675,7 @@ class _SaleAttemptRecoveryScreenState
     if (!_isAdmin) {
       return Scaffold(
         backgroundColor: AppColors.background,
-        appBar: AppBar(title: const Text('Centro de recuperación')),
+        appBar: MobilePageAppBar(appBar: AppBar(title: const Text('Centro de recuperación'))),
         body: Center(
           child: _loading
               ? const CircularProgressIndicator()
@@ -733,7 +735,7 @@ class _SaleAttemptRecoveryScreenState
       ),
       child: Scaffold(
         backgroundColor: AppColors.background,
-        appBar: AppBar(title: const Text('Centro de recuperación')),
+        appBar: MobilePageAppBar(appBar: AppBar(title: const Text('Centro de recuperación'))),
         body: RefreshIndicator(
           onRefresh: _load,
           child: Center(
@@ -1122,7 +1124,7 @@ class _ErrorCard extends StatelessWidget {
           const SizedBox(height: 10),
           OutlinedButton.icon(
             onPressed: onRetry,
-            icon: const Icon(Icons.refresh_rounded, size: 17),
+            icon: const MobileActionIcon(Icons.refresh_rounded, size: 17),
             label: const Text('Reintentar'),
           ),
         ],
@@ -1158,7 +1160,7 @@ class _IncidentCard extends StatelessWidget {
       Wrap(spacing: 8, runSpacing: 6, children: [
         if (!canResolve)
           FilledButton.icon(onPressed: busy ? null : onVerify,
-            icon: const Icon(Icons.search, size: 16),
+            icon: const MobileActionIcon(Icons.search, size: 16),
             label: Text(busy ? 'Verificando…' : 'Verificar ahora'))
         else ...[
           OutlinedButton(onPressed: busy ? null : onNotPerformed, child: const Text('Eliminar pendiente')),

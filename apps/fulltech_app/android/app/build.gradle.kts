@@ -65,6 +65,11 @@ android {
     }
 
     buildTypes {
+        debug {
+            if (project.findProperty("fullposMobilePreview") == "true") {
+                applicationIdSuffix = ".mobilepreview"
+            }
+        }
         // El build de depuracion NO requiere material de firma de produccion.
         // Solo los artefactos release exigen `android/key.properties`; si falta,
         // la tarea release falla con mensaje explicito (ver mas abajo) en lugar

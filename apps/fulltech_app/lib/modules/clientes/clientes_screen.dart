@@ -1,3 +1,4 @@
+import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -554,7 +555,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
                     icon: Badge(
                       isLabelVisible: activeFilterCount > 0,
                       label: Text('$activeFilterCount'),
-                      child: const Icon(Icons.filter_alt_outlined),
+                      child: const MobileActionIcon(Icons.filter_alt_outlined),
                     ),
                   ),
                   PopupMenuButton<_ClientesMobileAction>(
@@ -719,7 +720,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
               borderRadius: BorderRadius.zero,
               borderSide: BorderSide.none,
             ),
-            prefixIcon: const Icon(
+            prefixIcon: const MobileActionIcon(
               Icons.search_rounded,
               color: Color(0xFF8A9AA8),
             ),
@@ -1909,7 +1910,7 @@ class _ClientesFiltersSheetState extends State<_ClientesFiltersSheet> {
                           color: const Color(0xFFEAF1FF),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Icon(
+                        child: const MobileActionIcon(
                           Icons.filter_alt_rounded,
                           color: AppColors.secondary,
                         ),

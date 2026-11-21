@@ -1,3 +1,4 @@
+import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -30,6 +31,8 @@ import '../../core/tax/product_tax_options_provider.dart';
 import '../../core/utils/app_feedback.dart';
 import '../../core/utils/date_time_formatters.dart';
 import '../../core/utils/local_file_bytes.dart';
+import '../../core/utils/native_phone_layout.dart';
+import '../../core/widgets/mobile_page_app_bar.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
 import '../../core/widgets/fulltech_dialog.dart';
@@ -219,6 +222,7 @@ class AccountSettingsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final phone = usesNativePhoneLayout(context);
     final multiWarehouseEnabled =
         ref.watch(companySettingsProvider).valueOrNull?.multiWarehouseEnabled ==
         true;
@@ -268,8 +272,8 @@ class AccountSettingsScreen extends ConsumerWidget {
           ),
         _SettingsActionCard(
           icon: Icons.system_update_alt_rounded,
-          title: 'App',
-          description: 'Versión instalada y actualizaciones de Windows.',
+          title: phone ? 'App y actualizaciones' : 'App',
+          description: phone ? 'Versión instalada y actualizaciones.' : 'Versión instalada y actualizaciones de Windows.',
           accent: const Color(0xFF1957E6),
           onTap: () => context.go(Routes.actualizaciones),
         ),
@@ -283,10 +287,10 @@ class AccountSettingsScreen extends ConsumerWidget {
 
         _SettingsActionCard(
           icon: Icons.workspace_premium_outlined,
-          title: 'Suscripcion',
+          title: phone ? 'Planes' : 'Suscripcion',
           description: 'Plan, limites, vigencia y estado de la licencia.',
           accent: const Color(0xFFB45309),
-          onTap: () => context.go(Routes.licencias),
+          onTap: () => context.go(phone ? Routes.planes : Routes.licencias),
         ),
         const _KeyboardShortcutsLaunchCard(),
         const _DeleteAccountLaunchCard(),
@@ -868,6 +872,7 @@ class _SettingsHubScaffold extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final mobile = MediaQuery.sizeOf(context).width < 900;
+    final phone = usesNativePhoneLayout(context);
     final user = ref.watch(authStateProvider).user;
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -890,7 +895,7 @@ class _SettingsHubScaffold extends ConsumerWidget {
         child: ConstrainedBox(
           constraints: BoxConstraints(maxWidth: mobile ? 760 : 620),
           child: Padding(
-            padding: EdgeInsets.fromLTRB(
+            padding: phone ? const EdgeInsets.fromLTRB(12, 12, 12, 16) : EdgeInsets.fromLTRB(
               mobile ? 20 : 22,
               mobile ? 16 : 26,
               mobile ? 20 : 22,
@@ -903,8 +908,9 @@ class _SettingsHubScaffold extends ConsumerWidget {
                   child: ListView.separated(
                     itemCount: children.length,
                     padding: EdgeInsets.only(bottom: mobile ? 24 : 18),
-                    separatorBuilder: (_, _) =>
-                        SizedBox(height: mobile ? 10 : 8),
+                    separatorBuilder: (_, _) => phone
+                        ? const Divider(height: 1, thickness: 0.5, color: AppColors.border)
+                        : SizedBox(height: mobile ? 10 : 8),
                     itemBuilder: (context, index) => children[index],
                   ),
                 ),
@@ -954,7 +960,7 @@ class _SettingsDetailScaffold extends ConsumerWidget {
         minimumSize: const Size.square(48),
         tapTargetSize: MaterialTapTargetSize.padded,
       ),
-      icon: const Icon(Icons.arrow_back_rounded),
+      icon: const MobileActionIcon(Icons.arrow_back_rounded),
     );
     final detailChild = shouldScaleContent
         ? Transform.scale(
@@ -981,11 +987,11 @@ class _SettingsDetailScaffold extends ConsumerWidget {
       backgroundColor: AppColors.background,
       drawer: buildAdaptiveDrawer(context, currentUser: user),
       appBar: plainMobileBar && !isDesktopLayout
-          ? AppBar(
+          ? MobilePageAppBar(appBar: AppBar(
               title: Text(title),
               leading: backButton,
               actions: [if (action != null) action!],
-            )
+            ))
           : CustomAppBar(
               title: '',
               showLogo: false,
@@ -1641,6 +1647,23 @@ class _SettingsActionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (usesNativePhoneLayout(context)) {
+      return Material(
+        key: ValueKey('phone-settings-row-$title'), color: Colors.transparent,
+        child: ListTile(
+          minTileHeight: 56, dense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          minLeadingWidth: 24, horizontalTitleGap: 12,
+          leading: Icon(icon, color: AppColors.primary, size: 22),
+          title: Text(title, style: Theme.of(context).textTheme.bodyMedium
+            ?.copyWith(color: AppColors.textPrimary, fontWeight: FontWeight.w600)),
+          subtitle: Text(description, maxLines: 2, overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
+          trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary, size: 18),
+          onTap: onTap,
+        ),
+      );
+    }
     return Material(
       color: Colors.white,
       borderRadius: BorderRadius.circular(8),

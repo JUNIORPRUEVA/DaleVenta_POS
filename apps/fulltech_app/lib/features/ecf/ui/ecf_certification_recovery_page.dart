@@ -1,3 +1,4 @@
+import 'package:daleventa_pos/core/widgets/mobile_page_app_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -104,7 +105,7 @@ class _EcfCertificationRecoveryPageState
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Reconciliación de intentos')),
+      appBar: MobilePageAppBar(appBar: AppBar(title: const Text('Reconciliación de intentos'))),
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(

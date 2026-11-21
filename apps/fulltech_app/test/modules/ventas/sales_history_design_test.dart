@@ -164,6 +164,13 @@ Future<void> _pump(
     ),
   );
   await tester.pumpAndSettle();
+  await tester.runAsync(() async {
+    final context = tester.element(find.byType(TpvSalesHistoryScreen));
+    for (final name in ['back', 'search', 'filter', 'refresh']) {
+      await precacheImage(AssetImage('assets/image/mobile_navigation/$name.png'), context);
+    }
+  });
+  await tester.pumpAndSettle();
 }
 
 void main() {
@@ -188,6 +195,13 @@ void main() {
         width < 760 ? find.byTooltip('Filtros') : find.text('Filtro'),
       );
       await tester.pumpAndSettle();
+      if (width == 390) {
+        final segments = tester.widgetList<SegmentedButton<dynamic>>(
+          find.byWidgetPredicate((widget) => widget is SegmentedButton),
+        );
+        expect(segments.length, 2);
+        expect(segments.every((widget) => !widget.showSelectedIcon), isTrue);
+      }
       for (final entry in {
         'Desde': DateTime(2026, 11, 1),
         'Hasta': DateTime(2026, 11, 13),

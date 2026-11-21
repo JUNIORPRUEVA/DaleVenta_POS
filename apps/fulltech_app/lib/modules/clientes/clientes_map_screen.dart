@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart' hide GestureDetector;
+import '../../core/widgets/mobile_action_icon.dart';
 import 'package:daleventa_pos/core/widgets/app_gesture_detector.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -1242,7 +1243,7 @@ class _FloatingMapButton extends StatelessWidget {
               borderRadius: BorderRadius.circular(18),
               border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
             ),
-            child: Icon(icon, color: Colors.white, size: 19),
+            child: MobileActionIcon(icon, color: Colors.white, size: 19),
           ),
         ),
       ),

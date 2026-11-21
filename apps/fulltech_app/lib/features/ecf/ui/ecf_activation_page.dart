@@ -1,3 +1,4 @@
+import 'package:daleventa_pos/core/widgets/mobile_page_app_bar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -325,7 +326,7 @@ class _EcfActivationPageState extends ConsumerState<EcfActivationPage> {
           );
     if (widget.embedded) return body;
     return Scaffold(
-      appBar: AppBar(title: const Text('Activar facturación electrónica')),
+      appBar: MobilePageAppBar(appBar: AppBar(title: const Text('Activar facturación electrónica'))),
       body: body,
     );
   }

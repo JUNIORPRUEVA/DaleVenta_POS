@@ -1,3 +1,4 @@
+import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -305,7 +306,7 @@ class _MisPagosScreenState extends ConsumerState<MisPagosScreen>
             Expanded(
               child: FilledButton.icon(
                 onPressed: _loading ? null : _load,
-                icon: const Icon(Icons.refresh),
+                icon: const MobileActionIcon(Icons.refresh),
                 label: const Text('Actualizar'),
                 style: FilledButton.styleFrom(
                   backgroundColor: Colors.white,
@@ -341,7 +342,7 @@ class _MisPagosScreenState extends ConsumerState<MisPagosScreen>
               width: double.infinity,
               child: FilledButton.icon(
                 onPressed: _loading ? null : _load,
-                icon: const Icon(Icons.refresh),
+                icon: const MobileActionIcon(Icons.refresh),
                 label: const Text('Actualizar'),
                 style: FilledButton.styleFrom(
                   backgroundColor: Colors.white,
@@ -1712,7 +1713,7 @@ class _MisPagosHistoryScreenState
           IconButton(
             tooltip: 'Recargar',
             onPressed: _loading ? null : _load,
-            icon: const Icon(Icons.refresh),
+            icon: const MobileActionIcon(Icons.refresh),
           ),
         ],
       ),
@@ -1900,7 +1901,7 @@ class _HistoryFilterPanelState extends State<_HistoryFilterPanel> {
               controller: _searchController,
               decoration: InputDecoration(
                 hintText: 'Buscar por período',
-                prefixIcon: const Icon(Icons.search, size: 18),
+                prefixIcon: const MobileActionIcon(Icons.search, size: 18),
                 isDense: true,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),

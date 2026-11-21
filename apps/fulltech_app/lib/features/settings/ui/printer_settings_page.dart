@@ -1,3 +1,5 @@
+import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
+import 'package:daleventa_pos/core/widgets/mobile_page_app_bar.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart' hide GestureDetector;
@@ -238,7 +240,7 @@ class _WindowsPrinterSettingsViewState
                 IconButton(
                   tooltip: 'Actualizar impresoras',
                   onPressed: _load,
-                  icon: const Icon(Icons.refresh_rounded),
+                  icon: const MobileActionIcon(Icons.refresh_rounded),
                 ),
               ],
             ),
@@ -600,7 +602,7 @@ class _WindowsPrinterSettingsViewState
       return Material(color: Colors.transparent, child: _body());
     }
     return Scaffold(
-      appBar: AppBar(title: const Text('Impresora y tickets')),
+      appBar: MobilePageAppBar(appBar: AppBar(title: const Text('Impresora y tickets'))),
       body: Padding(padding: const EdgeInsets.all(16), child: _body()),
     );
   }
@@ -1490,11 +1492,11 @@ class _MobilePrinterSettingsViewState
     }
     return Scaffold(
       backgroundColor: const Color(0xFFF6FAFD),
-      appBar: AppBar(
+      appBar: MobilePageAppBar(appBar: AppBar(
         backgroundColor: const Color(0xFF0B5CFF),
         foregroundColor: Colors.white,
         title: const Text('Impresora'),
-      ),
+      )),
       body: body,
     );
   }

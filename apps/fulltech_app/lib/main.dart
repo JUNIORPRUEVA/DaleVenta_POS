@@ -11,6 +11,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'core/app_update/app_update_controller.dart';
 import 'core/ai_assistant/presentation/widgets/global_ai_assistant_entry_point.dart';
+import 'core/widgets/mobile_presentation_theme.dart';
 import 'features/onboarding/presentation/widgets/activation_entry_point.dart';
 import 'core/config/uat_identity.dart';
 import 'core/api/env.dart';
@@ -441,7 +442,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
                 data: MediaQuery.of(
                   context,
                 ).copyWith(alwaysUse24HourFormat: false),
-                child: child,
+                child: MobilePresentationTheme(child: child),
               );
 
         return UsageActivityBoundary(

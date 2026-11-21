@@ -1,3 +1,5 @@
+import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
+import 'package:daleventa_pos/core/widgets/mobile_page_app_bar.dart';
 import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
@@ -3385,7 +3387,7 @@ class _HistoryFullScreenPageState
                     Expanded(
                       child: FilledButton.icon(
                         onPressed: _summaryLoading ? null : _fetchSummary,
-                        icon: const Icon(Icons.filter_alt_outlined, size: 14),
+                        icon: const MobileActionIcon(Icons.filter_alt_outlined, size: 14),
                         label: const Text(
                           'Aplicar',
                           style: TextStyle(fontSize: 11),
@@ -4007,7 +4009,7 @@ class _HistoryFullScreenPageState
     }
 
     return Scaffold(
-      appBar: AppBar(
+      appBar: MobilePageAppBar(appBar: AppBar(
         title: Text(
           _selectionMode
               ? 'Seleccionados (${_selectedCloseIds.length})'
@@ -4062,10 +4064,10 @@ class _HistoryFullScreenPageState
                 await _fetchSummary();
               }
             },
-            icon: const Icon(Icons.refresh),
+            icon: const MobileActionIcon(Icons.refresh),
           ),
         ],
-      ),
+      )),
       body: Column(
         children: [
           if (state.loading) const LinearProgressIndicator(),
@@ -4432,7 +4434,7 @@ class _CloseDetailFullScreenPageState
 
     if (close == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Detalle de cierre')),
+        appBar: MobilePageAppBar(appBar: AppBar(title: const Text('Detalle de cierre'))),
         body: const Center(
           child: Text('No se encontró el cierre seleccionado.'),
         ),
@@ -4461,7 +4463,7 @@ class _CloseDetailFullScreenPageState
     final posVoucherIsImage = _isImageVoucher(posVoucher);
 
     return Scaffold(
-      appBar: AppBar(
+      appBar: MobilePageAppBar(appBar: AppBar(
         title: Text(
           'Detalle · ${currentClose.type.label} · ${DateFormat('dd/MM/yyyy').format(currentClose.date)}',
         ),
@@ -4488,7 +4490,7 @@ class _CloseDetailFullScreenPageState
             ),
           const SizedBox(width: 8),
         ],
-      ),
+      )),
       floatingActionButton: currentClose.isPending && canReview
           ? FloatingActionButton.extended(
               tooltip: 'Aprobar o rechazar cierre',
@@ -5738,7 +5740,7 @@ class _AssistantCloseDetailScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Detalle de cierre')),
+      appBar: MobilePageAppBar(appBar: AppBar(title: const Text('Detalle de cierre'))),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [

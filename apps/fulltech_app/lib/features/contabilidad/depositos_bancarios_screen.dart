@@ -1,3 +1,4 @@
+import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -2132,14 +2133,14 @@ class _DepositosBancariosScreenState
                   icon: Badge(
                     isLabelVisible: hasActiveFilters,
                     smallSize: 8,
-                    child: const Icon(Icons.filter_alt_outlined),
+                    child: const MobileActionIcon(Icons.filter_alt_outlined),
                   ),
                 ),
                 const SizedBox(width: 8),
                 IconButton.filledTonal(
                   tooltip: _loading ? 'Actualizando...' : 'Actualizar',
                   onPressed: _loading ? null : _load,
-                  icon: const Icon(Icons.refresh_rounded),
+                  icon: const MobileActionIcon(Icons.refresh_rounded),
                 ),
                 const SizedBox(width: 8),
                 FilledButton.icon(
@@ -2162,13 +2163,13 @@ class _DepositosBancariosScreenState
                   icon: Badge(
                     isLabelVisible: hasActiveFilters,
                     smallSize: 8,
-                    child: const Icon(Icons.filter_alt_outlined),
+                    child: const MobileActionIcon(Icons.filter_alt_outlined),
                   ),
                 ),
                 IconButton(
                   tooltip: 'Actualizar',
                   onPressed: _loading ? null : _load,
-                  icon: const Icon(Icons.refresh_rounded),
+                  icon: const MobileActionIcon(Icons.refresh_rounded),
                 ),
                 IconButton(
                   tooltip: 'Nuevo depósito',
@@ -3273,7 +3274,7 @@ class _DepositsFiltersSheetState extends State<_DepositsFiltersSheet> {
                       color: const Color(0xFFEAF1FF),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(
+                    child: const MobileActionIcon(
                       Icons.filter_alt_rounded,
                       color: AppColors.secondary,
                     ),

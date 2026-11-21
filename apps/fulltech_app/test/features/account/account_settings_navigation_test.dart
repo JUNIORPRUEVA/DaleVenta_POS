@@ -21,6 +21,7 @@ import 'package:daleventa_pos/features/settings/data/mobile_printer_settings_mod
 import 'package:daleventa_pos/features/settings/data/mobile_printer_settings_repository.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -184,6 +185,9 @@ Future<GoRouter> _pumpSettingsRouter(
   final router = GoRouter(
     initialLocation: initialLocation,
     routes: [
+      GoRoute(path: Routes.planes, builder: (_, __) => const Scaffold(body: Text('Destino de planes'))),
+      GoRoute(path: Routes.apps, builder: (_, __) => const Scaffold(body: Text('Destino de apps'))),
+      GoRoute(path: Routes.actualizaciones, builder: (_, __) => const Scaffold(body: Text('Destino de actualizaciones'))),
       GoRoute(
         path: Routes.configuracion,
         builder: (_, __) => const AccountSettingsScreen(),
@@ -254,6 +258,27 @@ bool _companySettingSwitchValue(WidgetTester tester, String title) =>
     tester.widget<CompactSquareSwitch>(_companySettingSwitch(title)).value;
 
 void main() {
+  testWidgets('native settings uses neutral rows and preserves company app and plans destinations', (tester) async {
+    final router = await _pumpSettingsRouter(tester, viewport: const Size(390, 844));
+    for (final label in ['Empresa', 'Impresora', 'App y actualizaciones', 'Apps de la empresa', 'Planes', 'Atajos de teclado', 'Eliminar cuenta']) {
+      expect(find.byKey(ValueKey('phone-settings-row-$label')), findsOneWidget);
+    }
+    await tester.tap(find.text('Planes'));
+    await _settleSettingsFrame(tester);
+    expect(find.text('Destino de planes'), findsOneWidget);
+    router.go(Routes.configuracion);
+    await _settleSettingsFrame(tester);
+    await tester.tap(find.text('App y actualizaciones', findRichText: false));
+    await _settleSettingsFrame(tester);
+    expect(find.text('Destino de actualizaciones'), findsOneWidget);
+    router.go(Routes.configuracion);
+    await _settleSettingsFrame(tester);
+    await tester.tap(find.text('Apps de la empresa'));
+    await _settleSettingsFrame(tester);
+    expect(find.text('Destino de apps'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  }, variant: TargetPlatformVariant({TargetPlatform.android, TargetPlatform.iOS}));
+
   testWidgets(
     'guardar datos principales conserva los campos ocultos y permite RNC y representante vacíos',
     (tester) async {
@@ -799,14 +824,18 @@ void main() {
     );
   });
 
-  testWidgets('mobile settings hub uses drawer leading instead of back', (
+  testWidgets('settings uses back on native phones and keeps the Windows menu', (
     tester,
   ) async {
     await _pumpSettingsRouter(tester);
 
-    expect(find.byTooltip('Abrir menú'), findsOneWidget);
-    expect(find.byTooltip('Volver'), findsNothing);
-  });
+    if (defaultTargetPlatform == TargetPlatform.windows) {
+      expect(find.byTooltip('Abrir menú'), findsOneWidget);
+    } else {
+      expect(find.byTooltip('Regresar'), findsOneWidget);
+      expect(find.byTooltip('Abrir menú'), findsNothing);
+    }
+  }, variant: TargetPlatformVariant({TargetPlatform.android, TargetPlatform.iOS, TargetPlatform.windows}));
 
   testWidgets('mobile settings back button responds across its tap target', (
     tester,

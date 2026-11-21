@@ -14,7 +14,7 @@ local('CRM license changes preserve each company fiscal numbering', () => {
 
   beforeAll(async () => {
     const url = new URL(fixtureUrl!);
-    if (url.hostname !== '127.0.0.1' || !['55519', '56701'].includes(url.port) ||
+    if (url.hostname !== '127.0.0.1' || !['55519', '56701', '56711'].includes(url.port) ||
         url.pathname !== '/crm_license_fixture' || url.search || url.hash) {
       throw Error('unsafe_fixture_target');
     }

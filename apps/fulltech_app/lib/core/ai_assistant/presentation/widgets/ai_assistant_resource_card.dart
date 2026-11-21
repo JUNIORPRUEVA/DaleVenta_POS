@@ -1,3 +1,4 @@
+import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -117,7 +118,7 @@ class _ResourceCardState extends ConsumerState<AiAssistantResourceCard> {
           if (snapshot.hasError) {
             return TextButton.icon(
               onPressed: () => setState(() => _image = _bytes()),
-              icon: const Icon(Icons.refresh),
+              icon: const MobileActionIcon(Icons.refresh),
               label: const Text('Reintentar imagen'),
             );
           }

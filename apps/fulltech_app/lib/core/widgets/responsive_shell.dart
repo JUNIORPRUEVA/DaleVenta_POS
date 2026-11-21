@@ -1,3 +1,4 @@
+import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -462,7 +463,7 @@ class DesktopShellAppBar extends ConsumerWidget {
                 IconButton(
                   tooltip: 'Volver',
                   onPressed: onBack,
-                  icon: const Icon(Icons.arrow_back),
+                  icon: const MobileActionIcon(Icons.arrow_back),
                 )
               else
                 _DesktopTopbarMenuButton(onPressed: onToggleSidebar),

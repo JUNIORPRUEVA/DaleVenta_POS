@@ -19,6 +19,7 @@ describe('integracion IA y planes: compatibilidad de clientes', () => {
   it.each([null, new Date('2026-12-19T12:00:00Z')])('renueva conservando funciones concedidas y meses pagados (%s)', async expiresAt => {
     const update = jest.fn().mockResolvedValue({ id: 'company-a' });
     const tx = {
+      licensePlan: { findUnique: async () => plan },
       $queryRaw: jest.fn().mockResolvedValue([{ id: 'company-a' }]),
       company: {
         findUnique: jest.fn().mockResolvedValue({ licenseStatus: 'ACTIVE', licenseExpiresAt: new Date('2026-12-31T12:00:00Z'),
@@ -39,7 +40,7 @@ describe('integracion IA y planes: compatibilidad de clientes', () => {
 
   it('no conserva concesiones caducadas ni enciende modulos por una concesion', async () => {
     const update = jest.fn().mockResolvedValue({ id: 'company-a' });
-    const tx = { $queryRaw: jest.fn(), company: {
+    const tx = { licensePlan: { findUnique: async () => plan }, $queryRaw: jest.fn(), company: {
       findUnique: async () => ({ licenseStatus: 'ACTIVE', licenseExpiresAt: null, licenseActivatedAt: null,
         ncfEnabled: true, taxEnabled: false, wholesalePriceListsEnabled: false, measurementUnitsEnabled: false }), update,
     }, licenseCompanyOverride: { findUnique: async () => ({ ...concession, expiresAt: new Date('2026-11-18') }) } };

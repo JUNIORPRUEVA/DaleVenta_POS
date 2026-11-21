@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../../core/utils/native_phone_layout.dart';
+import '../../../core/widgets/custom_app_bar.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/auth/app_permissions.dart';
@@ -63,7 +65,8 @@ class EcfConfigPage extends ConsumerWidget {
         ),
       ),
       child: Scaffold(
-        // Sin barra propia: el shell ya muestra el título y el botón de volver.
+        appBar: usesNativePhoneLayout(context) ? const CustomAppBar(title: 'Numeración fiscal', showLogo: false, showDepartmentLabel: false) : null,
+        // Desktop reuses the shell header; native phones need their own bar.
         backgroundColor: Colors.transparent,
         body: RefreshIndicator(
           onRefresh: () async {

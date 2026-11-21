@@ -22,7 +22,9 @@ import '../routing/route_access.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_text_styles.dart';
 import '../utils/money_formatters.dart';
+import '../utils/native_phone_layout.dart';
 import 'app_navigation.dart';
+import 'mobile_drawer_account_footer.dart';
 
 const String _drawerCloseTurnAction = '__drawer_close_turn__';
 const String _drawerOpenTurnAction = '__drawer_open_turn__';
@@ -232,6 +234,13 @@ class _MobileDrawerAccountFooter extends StatelessWidget {
   Widget build(BuildContext context) {
     const footerBorder = Color(0xFFE8EEF5);
     const logoutColor = Color(0xFFDC2626);
+    if (usesNativePhoneLayout(context)) {
+      return MobileDrawerAccountFooter(
+        canManageUsers: canManageUsers,
+        onProfile: onProfileTap, onUsers: onUsersTap,
+        onSettings: onSettingsTap, onLogout: onLogoutTap,
+      );
+    }
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -730,6 +739,7 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
     final mediaQuery = MediaQuery.of(context);
     final isDesktop = mediaQuery.size.width >= kDesktopShellBreakpoint;
     final isCompactMobile = mediaQuery.size.width < 390;
+    final phone = usesNativePhoneLayout(context);
     final role =
         currentUser?.appRole ??
         ref.watch(authStateProvider).user?.appRole ??
@@ -785,11 +795,14 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
       cashConfirmed: cashConfirmed,
       cashStaleShift: cashStaleShift,
     );
+    if (usesNativePhoneLayout(context)) {
+      groups.removeWhere((group) => group.title == 'Turno');
+    }
     final location = safeCurrentLocation(context);
     final expandedGroupIndex = isDesktop
         ? (_openGroupIndex ?? -1)
         : _openGroupIndex;
-    final drawerWidth = isDesktop ? 318.0 : mediaQuery.size.width * 0.80;
+    final drawerWidth = isDesktop ? 318.0 : mediaQuery.size.width * (phone ? 0.75 : 0.80);
     final panelShadow = BoxShadow(
       color: AppColors.primary.withValues(alpha: 0.08),
       blurRadius: 24,
@@ -801,8 +814,8 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: isDesktop ? const Color(0xFFFBFCFE) : const Color(0xFFF8FBFF),
-          gradient: isDesktop
+          color: phone ? AppColors.surface : isDesktop ? const Color(0xFFFBFCFE) : const Color(0xFFF8FBFF),
+          gradient: isDesktop || phone
               ? null
               : const LinearGradient(
                   begin: Alignment.topCenter,
@@ -819,7 +832,7 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
         ),
         child: Stack(
           children: [
-            if (!isDesktop)
+            if (!isDesktop && !phone)
               const Positioned.fill(child: _MobileDrawerBackgroundTexture()),
             if (!isDesktop)
               Positioned(
@@ -1022,7 +1035,7 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
                   if (isDesktop)
                     const Divider(height: 1, color: AppColors.border),
                   Padding(
-                    padding: EdgeInsets.fromLTRB(
+                    padding: phone ? EdgeInsets.zero : EdgeInsets.fromLTRB(
                       isDesktop
                           ? 12
                           : isCompactMobile
@@ -1823,6 +1836,29 @@ class _DrawerMenuGroupTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasSubmenu = group.hasSubmenu;
+    if (usesNativePhoneLayout(context)) {
+      return Column(mainAxisSize: MainAxisSize.min, children: [
+        Material(
+          color: selected || expanded ? AppColors.primarySoft : Colors.transparent,
+          child: ListTile(
+            minTileHeight: 48, dense: true,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+            minLeadingWidth: 22, horizontalTitleGap: 12,
+            leading: group.title == 'Cliente'
+              ? const ImageIcon(AssetImage('assets/image/mobile_navigation/users.png'), size: 22, color: AppColors.primary)
+              : _DrawerGroupGlyph(icon: group.icon, assetIcon: group.assetIcon, size: 22, color: AppColors.primary),
+            title: Text(group.title, maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+            trailing: Icon(hasSubmenu && expanded ? Icons.expand_more : Icons.chevron_right,
+              color: AppColors.textSecondary, size: 18),
+            onTap: onTapHeader,
+          ),
+        ),
+        if (expanded && hasSubmenu)
+          Padding(padding: const EdgeInsets.only(left: 12), child: Column(children: group.items.map(itemBuilder).toList())),
+        const Divider(height: 1, thickness: 0.5, color: AppColors.border),
+      ]);
+    }
     final featured = group.featured && !desktop;
     final highlighted = selected || expanded;
     final foreground = desktop

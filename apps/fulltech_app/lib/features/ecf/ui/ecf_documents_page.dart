@@ -1,6 +1,9 @@
+import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../../../core/utils/native_phone_layout.dart';
+import '../../../core/widgets/custom_app_bar.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -145,8 +148,8 @@ class _EcfDocumentsPageState extends ConsumerState<EcfDocumentsPage> {
     final hasDocuments = firstPage != null && firstPage.total > 0;
 
     return Scaffold(
-      // Sin appBar propio: la barra del shell ya muestra título, atrás y las
-      // acciones de esta pantalla. Una segunda barra duplicaba la información.
+      appBar: usesNativePhoneLayout(context) ? const CustomAppBar(title: 'Facturas electrónicas', showLogo: false, showDepartmentLabel: false) : null,
+      // Desktop reuses the shell header; native phones need their own bar.
       backgroundColor: Colors.transparent,
       body: RefreshIndicator(
         onRefresh: _refresh,
@@ -779,7 +782,7 @@ class _SearchField extends StatelessWidget {
       decoration: InputDecoration(
         isDense: true,
         hintText: 'Buscar por e-NCF o número interno',
-        prefixIcon: const Icon(Icons.search),
+        prefixIcon: const MobileActionIcon(Icons.search),
         suffixIcon: ValueListenableBuilder<TextEditingValue>(
           valueListenable: controller,
           builder: (context, value, _) => value.text.isEmpty

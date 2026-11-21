@@ -6,6 +6,12 @@ const { PrismaClient } = require('@prisma/client'), PDFDocument = require('pdfki
 const root = path.resolve(__dirname, '../..'), dir = path.join(root, '.uat/plans-crm');
 const crmRoot = process.env.PLANS_CRM_REPO || 'C:/t/crm-plans-20261121';
 const bridgeRoot = process.env.PLANS_BRIDGE_REPO || 'C:/t/bridge-plans-20261121';
+// A second exact disposable lab lets consolidation leave earlier labs untouched.
+const consolidationLab = process.env.PLANS_CONSOLIDATION_LAB === 'true';
+const lab = consolidationLab
+  ? { port: '56711', user: 'fullpos_integration', database: 'fullpos_consolidacion', apiPort: '4028' }
+  : { port: '56562', user: 'postgres', database: 'fullpos_plans_payment_20261121', apiPort: '4019' };
+const databaseUrl = name => `postgresql://${lab.user}@127.0.0.1:${lab.port}/${name}`;
 const bridgeRequire = createRequire(path.join(bridgeRoot, 'package.json'));
 const { Pool } = require('pg'), express = bridgeRequire('express');
 const run = Date.now().toString(36), checks = [], errors = [];
@@ -21,25 +27,25 @@ async function request(base, route, { token, cookie, body, method, headers } = {
 }
 async function check(name, fn) { try { await fn(); checks.push(name); console.log('PASS', name); } catch (error) { errors.push({name, message: error.message.slice(0, 800)}); console.log('FAIL', name, error.message.slice(0, 300)); } }
 function ok(response, status=200) { assert.equal(response.status, status, JSON.stringify(response.body)); return response.body; }
-const base = 'http://127.0.0.1:4019';
+const base = `http://127.0.0.1:${lab.apiPort}`;
 async function main() {
   await fs.mkdir(dir, {recursive:true});
   // Check out all code privately; do not import secret-bearing workstation env.
   for(const key of Object.keys(process.env)) if(!(key in clean)) delete process.env[key];
   const secret = randomBytes(48).toString('hex');
-  const url = 'postgresql://postgres@127.0.0.1:56562/fullpos_plans_payment_20261121';
-  admin = new Pool({connectionString:'postgresql://postgres@127.0.0.1:56562/postgres'});
+  const url = databaseUrl(lab.database);
+  admin = new Pool({connectionString:databaseUrl('postgres')});
   const crmName = `fullpos_crm_${run}`, bridgeName = `fullpos_bridge_${run}`;
   for(const name of [crmName, bridgeName]) { assert.match(name,/^fullpos_(crm|bridge)_[a-z0-9]+$/); await admin.query(`CREATE DATABASE "${name}"`); }
-  report.databases = { fullpos:'fullpos_plans_payment_20261121', crm:crmName, bridge:bridgeName };
-  Object.assign(process.env, clean, { DATABASE_URL:`postgresql://postgres@127.0.0.1:56562/${bridgeName}`, DOTENV_PATH:path.join(dir,'no-env'),
+  report.databases = { fullpos:lab.database, crm:crmName, bridge:bridgeName };
+  Object.assign(process.env, clean, { DATABASE_URL:databaseUrl(bridgeName), DOTENV_PATH:path.join(dir,'no-env'),
     DALEVENTAS_LICENSE_API_BASE_URL:base, DALEVENTAS_LICENSE_ADMIN_SECRET:secret, LICENSING_ENABLED:'true',
     LICENSING_PAYMENT_STATUS_ENABLED:'true', APPYRA_ENV:'local', NODE_ENV:'test', PHYTO_WHATSAPP_MOCK:'true', LAURA_ENABLED:'false',
     PHYTO_CRM_TOKEN:randomBytes(32).toString('hex'), PHYTO_CRM_DATA:path.join(dir,run,'crm.sqlite') });
   apiLog = await fs.open(path.join(dir, 'api.log'), 'a');
   api = spawn(process.execPath, ['dist/main.js'], {cwd:path.join(root,'apps/api'),windowsHide:true,stdio:['ignore',apiLog.fd,apiLog.fd],env:{...clean,
-    DATABASE_URL:url, APP_ENV:'uat', UAT_LOCAL_ONLY:'true', UAT_EXPECTED_DB_NAME:'fullpos_plans_payment_20261121', UAT_EXPECTED_DB_PORT:'56562',
-    HOST:'127.0.0.1', PORT:'4019', JWT_SECRET:randomBytes(48).toString('hex'), LICENSE_ADMIN_SECRET:secret, CRM_LICENSE_MANAGEMENT_ENABLED:'true',
+    DATABASE_URL:url, APP_ENV:'uat', UAT_LOCAL_ONLY:'true', UAT_EXPECTED_DB_NAME:lab.database, UAT_EXPECTED_DB_PORT:lab.port,
+    HOST:'127.0.0.1', PORT:lab.apiPort, JWT_SECRET:randomBytes(48).toString('hex'), LICENSE_ADMIN_SECRET:secret, CRM_LICENSE_MANAGEMENT_ENABLED:'true',
     LICENSE_EVIDENCE_STORAGE_DRIVER:'local', LICENSE_EVIDENCE_DIR:path.join(dir,'private-evidence'), LICENSE_EVIDENCE_TEST_ACTIVATE:'false',
     LICENSE_BANK_NAME:'Banco de pruebas',LICENSE_BANK_ACCOUNT:'1234567890',LICENSE_BANK_HOLDER:'Empresa sintética',LICENSE_WA_DRY_RUN:'true',
     DOSA_EMISSION_ENABLED:'false',DOSA_PRODUCTION_EMISSION_ENABLED:'false'}});
@@ -56,7 +62,7 @@ async function main() {
   process.env.LICENSING_BASE_URL=`http://127.0.0.1:${bridge.address().port}`; process.env.LICENSING_SERVICE_TOKEN=issued.token;
   const {startCrmServer} = await import(pathToFileURL(path.join(crmRoot,'backend/server/crm-server.mjs')));
   const password = randomBytes(24).toString('hex')+'aA1!';
-  crm = await startCrmServer({host:'127.0.0.1',port:0, databaseUrl:`postgresql://postgres@127.0.0.1:56562/${crmName}`, dataFile:process.env.PHYTO_CRM_DATA,
+  crm = await startCrmServer({host:'127.0.0.1',port:0, databaseUrl:databaseUrl(crmName), dataFile:process.env.PHYTO_CRM_DATA,
     token:process.env.PHYTO_CRM_TOKEN,quiet:true,schedulerEnabled:false,whatsappMock:true,bootstrapAdminUser:'admin@example.test',bootstrapAdminPassword:password});
   const login = await request(crm.url,'/api/admin/auth/login',{body:{username:'admin@example.test',password}}); ok(login);
   const cookie=login.cookie; assert.ok(cookie);
@@ -65,6 +71,16 @@ async function main() {
   const registered=ok(await request(base,'/auth/register-business',{body:{commercialName:`Empresa sintética CRM ${run}`,firstName:'Prueba',lastName:'Integración',email:`flow-${run}@example.test`,password:customerPassword,confirmPassword:customerPassword,phone:'8095550100'}}),201);
   const companyId=registered.user.companyId, token=registered.accessToken;
   prisma = new PrismaClient({datasources:{db:{url}}});
+  if (consolidationLab) {
+    // Synthetic catalog fixtures belong only to this explicitly selected new lab.
+    assert.equal(lab.port, '56711'); assert.equal(lab.database, 'fullpos_consolidacion');
+    for (const data of [
+      { code:'basico',name:'FullPOS Básico',monthlyPrice:'1000.00',maxUsers:1,maxProducts:100,maxWarehouses:1,
+        multiWarehouse:false,wholesale:false,uom:true,ecf:false,taxes:false,ecfMonthlyQuota:null },
+      { code:'pro',name:'FullPOS Pro',monthlyPrice:'3500.00',maxUsers:4,maxProducts:1000,maxWarehouses:5,
+        multiWarehouse:true,wholesale:true,uom:true,ecf:true,taxes:true,ecfMonthlyQuota:1500 },
+    ]) await prisma.licensePlan.upsert({where:{code:data.code},create:{...data,version:1,active:true,currency:'DOP'},update:{}});
+  }
   const order=ok(await request(base,'/license/orders',{token,body:{planCode:'pro',months:3}}),201);
   let pdf; await new Promise(resolve=>{const d=new PDFDocument(),chunks=[];d.on('data',b=>chunks.push(b));d.on('end',()=>{pdf=Buffer.concat(chunks);resolve();});d.text('SINTÉTICO. NO ES UN PAGO. '+run);d.end();});
   const form=new FormData();form.append('file',new Blob([pdf],{type:'application/pdf'}),'prueba.pdf');

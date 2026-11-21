@@ -14,7 +14,7 @@ suite('integracion IA/planes en PostgreSQL propio', () => {
   const planCode = `audit-${randomUUID().slice(0, 8)}`;
   beforeAll(async () => {
     const url = new URL(fixtureUrl!);
-    if (url.hostname !== '127.0.0.1' || url.port !== '56701' || url.pathname !== '/appyra_license_e2e' || url.search || url.hash) {
+    if (url.hostname !== '127.0.0.1' || !['56701', '56711'].includes(url.port) || url.pathname !== '/appyra_license_e2e' || url.search || url.hash) {
       throw Error('unsafe_fixture_target');
     }
     db = new PrismaClient({ datasources: { db: { url: fixtureUrl } } });

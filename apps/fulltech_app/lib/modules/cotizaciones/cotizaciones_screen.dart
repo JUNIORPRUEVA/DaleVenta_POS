@@ -1,3 +1,4 @@
+import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
@@ -53,6 +54,7 @@ import '../../core/uom/uom_formatters.dart';
 import '../../core/utils/build_phase.dart';
 import '../../core/utils/app_feedback.dart';
 import '../../core/utils/money_formatters.dart';
+import '../../core/utils/native_phone_layout.dart';
 import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/branded_menu_button.dart';
@@ -61,6 +63,7 @@ import '../../features/onboarding/application/activation_controller.dart';
 import '../../features/onboarding/presentation/widgets/activation_steps.dart';
 import '../../core/widgets/refined_topbar_controls.dart';
 import 'presentation/widgets/sales_ticket_bar.dart';
+import 'presentation/widgets/mobile_sales_controls.dart';
 import 'presentation/widgets/sales_detail_shortcut.dart';
 import 'presentation/widgets/sales_detail_header.dart';
 import 'presentation/widgets/sales_client_selector.dart';
@@ -3275,6 +3278,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     if (_mobileActionsDrawerOpen) return;
     _mobileActionsDrawerOpen = true;
     _MobileQuickAction? action;
+    var phoneDetailsBusy = false;
     try {
       action = await showGeneralDialog<_MobileQuickAction>(
         context: context,
@@ -3289,6 +3293,13 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
             required String subtitle,
             required _MobileQuickAction value,
           }) {
+            if (usesNativePhoneLayout(this.context)) {
+              return MobileSalesActionRow(
+                title: title,
+                icon: Icon(icon, color: AppColors.primary, size: 20),
+                onTap: () => Navigator.of(context).pop(value),
+              );
+            }
             return Material(
               color: Colors.white,
               borderRadius: BorderRadius.circular(18),
@@ -3366,12 +3377,32 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
             );
           }
 
-          final panelWidth = (MediaQuery.sizeOf(context).width * 0.72).clamp(
+          final phone = usesNativePhoneLayout(this.context);
+          final panelWidth = phone
+              ? MediaQuery.sizeOf(context).width * 0.60
+              : (MediaQuery.sizeOf(context).width * 0.72).clamp(
             268.0,
             330.0,
           );
           final hasNote = _note.trim().isNotEmpty;
 
+          return Consumer(builder: (dialogContext, panelRef, _) {
+            if (phone) {
+              panelRef.watch(companySettingsProvider);
+              if (_ecfActive) panelRef.watch(ecfCapabilitiesProvider);
+            }
+            final priceLists = phone && _wholesalePriceListsEnabled
+                ? panelRef.watch(priceListsProvider)
+                : const AsyncData<List<PriceListModel>>([]);
+            return StatefulBuilder(builder: (panelContext, refreshPanel) {
+              Future<void> runPhoneAction(Future<void> Function() operation) async {
+                if (phoneDetailsBusy) return;
+                refreshPanel(() => phoneDetailsBusy = true);
+                try { await operation(); }
+                finally {
+                  if (panelContext.mounted) refreshPanel(() => phoneDetailsBusy = false);
+                }
+              }
           return Align(
             alignment: Alignment.centerRight,
             child: SafeArea(
@@ -3381,16 +3412,20 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                   width: panelWidth,
                   height: double.infinity,
                   child: DecoratedBox(
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.only(
+                    decoration: BoxDecoration(
+                      color: phone ? null : Colors.white,
+                      gradient: phone ? const LinearGradient(
+                        colors: [Color(0x00FFFFFF), Colors.white, Colors.white],
+                        stops: [0, 0.08, 1],
+                      ) : null,
+                      borderRadius: phone ? BorderRadius.zero : const BorderRadius.only(
                         topLeft: Radius.circular(8),
                         bottomLeft: Radius.circular(8),
                       ),
-                      border: Border(
+                      border: phone ? null : const Border(
                         left: BorderSide(color: Color(0xFFE2E8F0), width: 0.8),
                       ),
-                      boxShadow: [
+                      boxShadow: phone ? null : const [
                         BoxShadow(
                           color: Color(0x260B2A3A),
                           blurRadius: 28,
@@ -3399,7 +3434,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                       ],
                     ),
                     child: ClipRRect(
-                      borderRadius: const BorderRadius.only(
+                      borderRadius: phone ? BorderRadius.zero : const BorderRadius.only(
                         topLeft: Radius.circular(8),
                         bottomLeft: Radius.circular(8),
                       ),
@@ -3446,34 +3481,62 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                               ),
                               Expanded(
                                 child: ListView(
-                                  padding: const EdgeInsets.fromLTRB(
+                                  padding: EdgeInsets.fromLTRB(
                                     16,
                                     12,
                                     16,
-                                    84,
+                                    usesNativePhoneLayout(this.context) ? 180 : 84,
                                   ),
                                   children: [
-                                    actionTile(
-                                      icon: Icons.add_circle_outline_rounded,
-                                      title: 'Nuevo ticket',
-                                      subtitle: 'Crear otra venta',
-                                      value: _MobileQuickAction.newTicket,
-                                    ),
-                                    const SizedBox(height: 11),
+                                    if (phone) ...[
+                                      _buildPhoneSaleDetails(
+                                        priceLists: priceLists,
+                                        busy: phoneDetailsBusy,
+                                        onClient: () => unawaited(runPhoneAction(_openClientDialog)),
+                                        onFiscal: (mode) {
+                                          _selectEcfModeInCart(mode);
+                                          refreshPanel(() {});
+                                        },
+                                        onPrice: (id) => unawaited(runPhoneAction(() => _selectManualPriceList(id))),
+                                      ),
+                                      actionTile(
+                                        icon: Icons.receipt_long_outlined,
+                                        title: 'Tickets', subtitle: '',
+                                        value: _MobileQuickAction.tickets,
+                                      ),
+                                      actionTile(
+                                        icon: Icons.qr_code_scanner_rounded,
+                                        title: 'Escanear producto', subtitle: '',
+                                        value: _MobileQuickAction.scan,
+                                      ),
+                                    ],
+                                    if (!usesNativePhoneLayout(
+                                      this.context,
+                                    )) ...[
+                                      actionTile(
+                                        icon: Icons.add_circle_outline_rounded,
+                                        title: 'Nuevo ticket',
+                                        subtitle: 'Crear otra venta',
+                                        value: _MobileQuickAction.newTicket,
+                                      ),
+                                      const SizedBox(height: 11),
+                                    ],
                                     actionTile(
                                       icon: Icons.storefront_outlined,
                                       title: 'Venta rápida',
                                       subtitle: 'Cobro rápido',
                                       value: _MobileQuickAction.externalItem,
                                     ),
-                                    const SizedBox(height: 11),
+                                    if (!usesNativePhoneLayout(this.context))
+                                      const SizedBox(height: 11),
                                     actionTile(
                                       icon: Icons.picture_as_pdf_outlined,
                                       title: 'Ver PDF',
                                       subtitle: 'Abrir documento actual',
                                       value: _MobileQuickAction.pdf,
                                     ),
-                                    const SizedBox(height: 11),
+                                    if (!usesNativePhoneLayout(this.context))
+                                      const SizedBox(height: 11),
                                     actionTile(
                                       icon: hasNote
                                           ? Icons.sticky_note_2_outlined
@@ -3492,7 +3555,13 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                           Positioned(
                             right: 16,
                             bottom: 16,
-                            child: _AnimatedCalculatorFab(
+                            child: usesNativePhoneLayout(this.context)
+                              ? MobileSalesFloatingTools(
+                                  assistantAsset: AiAssistantDockButton.imageAsset,
+                                  onAssistant: () => Navigator.of(context).pop(_MobileQuickAction.assistant),
+                                  onCalculator: () => Navigator.of(context).pop(_MobileQuickAction.calculator),
+                                )
+                              : _AnimatedCalculatorFab(
                               compact: true,
                               filled: true,
                               open: false,
@@ -3509,6 +3578,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
               ),
             ),
           );
+            });
+          });
         },
         transitionBuilder: (context, animation, secondaryAnimation, child) {
           final curved = CurvedAnimation(
@@ -3557,17 +3628,23 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   Widget _buildMobileActionsSwipeRegion() {
+    final phone = usesNativePhoneLayout(context);
+    final navigationInset = phone ? MediaQuery.systemGestureInsetsOf(context).right : 0.0;
     return Positioned(
       top: 0,
       right: 0,
       bottom: 0,
-      width: _mobileActionsSwipeEdgeWidth,
+      width: _mobileActionsSwipeEdgeWidth + navigationInset,
       child: GestureDetector(
         behavior: HitTestBehavior.translucent,
         onHorizontalDragStart: _startMobileActionsEdgeSwipe,
         onHorizontalDragUpdate: _updateMobileActionsEdgeSwipe,
         onHorizontalDragEnd: (_) => _endMobileActionsEdgeSwipe(),
         onHorizontalDragCancel: _endMobileActionsEdgeSwipe,
+        child: phone ? Align(
+          alignment: Alignment.centerRight,
+          child: MobileSalesEdgeHint(onTap: _openMobileActionsDrawer),
+        ) : null,
       ),
     );
   }
@@ -3737,6 +3814,14 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       case _MobileQuickAction.client:
         await _openClientDialog();
         return;
+      case _MobileQuickAction.assistant:
+        ref
+            .read(aiAssistantControllerProvider.notifier)
+            .setContext(
+              buildAiChatContextFromLocation(safeCurrentLocation(context)),
+            );
+        GlobalAiAssistantEntryPoint.showMobilePanel(context, ref);
+        return;
       case _MobileQuickAction.note:
         await _openNoteDialog();
         return;
@@ -3748,6 +3833,12 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         return;
       case _MobileQuickAction.newTicket:
         _createNewDesktopTicket();
+        return;
+      case _MobileQuickAction.tickets:
+        await _openPhoneTickets();
+        return;
+      case _MobileQuickAction.scan:
+        await _openBarcodeScanner();
         return;
       case _MobileQuickAction.pdf:
         await _openPdfPreview();
@@ -4964,6 +5055,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
           busy: _wholesalePricingBusy,
           lists: activeLists,
           onChanged: _selectManualPriceList,
+          phoneCompact: usesNativePhoneLayout(context),
         );
       },
     );
@@ -5055,7 +5147,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                           padding: const EdgeInsets.fromLTRB(16, 14, 10, 12),
                           child: Row(
                             children: [
-                              Icon(
+                              MobileActionIcon(
                                 Icons.filter_alt_outlined,
                                 color: theme.colorScheme.primary,
                               ),
@@ -7572,6 +7664,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       builder: (context) => _CheckoutPaymentDialog(
         total: _total,
         money: _money,
+        mobileClientLabel: usesNativePhoneLayout(this.context) ? _phoneClientLabel : null,
+        mobilePriceLabel: usesNativePhoneLayout(this.context) ? _phonePriceLabel : null,
         hasCreditCustomer:
             (_selectedClientId ?? '').trim().isNotEmpty &&
             _selectedClientName.trim() != 'Sin cliente',
@@ -8001,6 +8095,10 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               const WebSessionActions(),
+                              if (usesNativePhoneLayout(context)) ...[
+                                const CashTurnMenuButton(mobileHeader: true),
+                                const SizedBox(width: 4),
+                              ] else
                               _MobileHeaderIconButton(
                                 tooltip: 'Escanear producto',
                                 onPressed: _openBarcodeScanner,
@@ -8036,6 +8134,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   Widget _buildProductStrip({required bool inventoryEnabled}) {
+    final phone = usesNativePhoneLayout(context);
     final products = _visibleProducts;
     final snapshot = _productSearch.snapshot;
     final isFiltering =
@@ -8065,7 +8164,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                 const SizedBox(height: 10),
                 FilledButton.icon(
                   onPressed: () => unawaited(_productSearch.refresh()),
-                  icon: const Icon(Icons.refresh_rounded),
+                  icon: const MobileActionIcon(Icons.refresh_rounded),
                   label: const Text('Reintentar'),
                 ),
               ],
@@ -8101,11 +8200,24 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
             onLoadMore: () => unawaited(_productSearch.loadMore()),
             child: GridView.builder(
               padding: const EdgeInsets.fromLTRB(8, 5, 8, 8),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: phone && MediaQuery.sizeOf(context).width < 320
+                    ? 1
+                    : 2,
                 crossAxisSpacing: 8,
                 mainAxisSpacing: 8,
                 childAspectRatio: 1.08,
+                mainAxisExtent: phone
+                    ? math.max(
+                        116.0,
+                        ((MediaQuery.sizeOf(context).width - 24) / 2) / 1.9,
+                          ) +
+                          math.max(
+                                0,
+                                MediaQuery.textScalerOf(context).scale(12) - 12,
+                              ) *
+                              3
+                    : null,
               ),
               itemCount: products.length + (snapshot.isLoadingMore ? 1 : 0),
               itemBuilder: (context, index) {
@@ -8128,6 +8240,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                     companyInventoryEnabled: inventoryEnabled,
                     product: product,
                   ),
+                  phoneCompact: phone,
                 );
               },
             ),
@@ -8202,6 +8315,221 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     );
   }
 
+  String get _phoneClientLabel {
+    final name = _selectedClientName.trim();
+    return name.isEmpty || name == 'Sin cliente' ? 'Cliente general' : name;
+  }
+
+  String? get _phonePriceLabel {
+    if (!_wholesalePriceListsEnabled) return null;
+    final id = _effectiveManualPriceListId;
+    if (id == null) return 'Automático según cliente y cantidad';
+    return ref.read(priceListsProvider).valueOrNull
+        ?.where((list) => list.id == id).firstOrNull?.name ?? 'Lista seleccionada';
+  }
+
+  Widget _buildPhoneSaleDetails({
+    required AsyncValue<List<PriceListModel>> priceLists,
+    required bool busy,
+    required VoidCallback onClient,
+    required ValueChanged<EcfPosFiscalMode> onFiscal,
+    required ValueChanged<String?> onPrice,
+  }) {
+    final modes = _ecfModes;
+    final ready = _ecfActive && _ecfCaps?.posReady == true && modes.isNotEmpty;
+    final selected = _ecfModeForCheckout();
+    return Column(
+      key: const ValueKey('phone-sale-details'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        MobileSalesSelector(title: 'Cliente', label: _phoneClientLabel,
+          icon: Icons.person_outline, iconAsset: 'assets/image/billing/mobile_client.png',
+          onTap: busy ? null : onClient),
+        MenuAnchor(
+          menuChildren: [
+            for (final mode in ready ? modes : <EcfPosFiscalMode>[])
+              MenuItemButton(onPressed: busy ? null : () => onFiscal(mode),
+                child: Text(mode.label)),
+          ],
+          builder: (context, controller, _) => MobileSalesSelector(
+            title: 'Comprobante',
+            label: ready ? (selected == EcfPosFiscalMode.normal ? 'Normal' :
+                selected?.label ?? 'Elegir comprobante') : (_ecfActive ? 'No disponible' : 'Normal'),
+            icon: Icons.receipt_long_outlined,
+            onTap: ready && !busy ? () => controller.isOpen ? controller.close() : controller.open() : null,
+          ),
+        ),
+        if (_wholesalePriceListsEnabled)
+          priceLists.when(
+            loading: () => const Padding(padding: EdgeInsets.only(top: 8),
+              child: LinearProgressIndicator(minHeight: 2)),
+            error: (_, __) => Padding(padding: const EdgeInsets.only(top: 8),
+              child: Text('No se pudieron cargar las listas de precios.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary))),
+            data: (lists) {
+              final active = lists.where((list) => list.active).toList();
+              if (active.isEmpty) return const SizedBox.shrink();
+              final selectedId = active.any((list) => list.id == _effectiveManualPriceListId)
+                  ? _effectiveManualPriceListId : null;
+              return Padding(padding: const EdgeInsets.only(top: 8),
+                child: _QuotePriceListSelector(
+                  compact: true, phoneCompact: true, selectedId: selectedId,
+                  clientListName: null, busy: busy || _wholesalePricingBusy,
+                  lists: active, onChanged: onPrice,
+                ));
+            },
+          ),
+      ],
+    );
+  }
+
+  Future<void> _openPhoneTickets() async {
+    _writeActiveDesktopDraft();
+    final result = await showGeneralDialog<String>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Cerrar tickets',
+      barrierColor: AppColors.overlay,
+      transitionDuration: const Duration(milliseconds: 180),
+      pageBuilder: (dialogContext, _, __) => Align(
+        alignment: Alignment.centerRight,
+        child: SafeArea(
+          child: Material(
+            color: AppColors.surface,
+            child: SizedBox(
+              width: math.min(MediaQuery.sizeOf(dialogContext).width, 380),
+              height: double.infinity,
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 6, 4, 6),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Tickets',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Cerrar tickets',
+                          onPressed: () => Navigator.of(dialogContext).pop(),
+                          icon: const Icon(Icons.close),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: MobileSalesActionRow(
+                      title: 'Nuevo ticket',
+                      icon: const Icon(Icons.add, color: AppColors.primary),
+                      onTap: () => Navigator.of(dialogContext).pop('__new__'),
+                    ),
+                  ),
+                  Expanded(
+                    child: ListView.separated(
+                      padding: const EdgeInsets.all(12),
+                      itemCount: _desktopTickets.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (_, index) {
+                        final ticket = _desktopTickets[index];
+                        final selected = ticket.id == _activeDesktopTicketId;
+                        final settings = _currentTaxConfig?.settings;
+                        final summary =
+                            ProductTaxPreviewCalculator.calculateCart(
+                              lines: [
+                                for (final item in ticket.items)
+                                  ProductCartTaxLineInput(
+                                    price: item.unitPrice,
+                                    quantity: item.qty,
+                                    taxTreatment: item.taxTreatment,
+                                    taxRate: item.taxRate > 0
+                                        ? item.taxRate
+                                        : null,
+                                    taxPriceMode: item.taxPriceMode,
+                                  ),
+                              ],
+                              companyTaxEnabled: settings?.taxEnabled == true,
+                              companyPricesIncludeTax:
+                                  settings?.pricesIncludeTax ?? true,
+                              companyDefaultTaxRate:
+                                  _currentTaxConfig?.defaultRate ??
+                                  settings?.defaultTaxRate ??
+                                  0.18,
+                              globalDiscountAmount: ticket.globalDiscountAmount,
+                            );
+                        final client = ticket.selectedClientName.trim();
+                        return ListTile(
+                          key: ValueKey('phone-ticket-${ticket.id}'),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 4,
+                          ),
+                          selected: selected,
+                          leading: Icon(
+                            selected
+                                ? Icons.check_circle
+                                : Icons.receipt_long_outlined,
+                            size: 20,
+                            color: selected
+                                ? AppColors.primary
+                                : AppColors.textMuted,
+                          ),
+                          title: Text(
+                            ticket.title.trim().isEmpty
+                                ? 'Ticket ${index + 1}'
+                                : ticket.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          subtitle: Text(
+                            [
+                              if (client.isNotEmpty && client != 'Sin cliente')
+                                client,
+                              '${ticket.items.length} artículos · ${_money(summary.total)}',
+                            ].join('\n'),
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          onTap: () =>
+                              Navigator.of(dialogContext).pop(ticket.id),
+                          trailing: PopupMenuButton<_FooterTicketAction>(
+                            tooltip: 'Opciones del ticket',
+                            onSelected: (action) => Navigator.of(dialogContext).pop(
+                              action == _FooterTicketAction.rename ? 'rename:${ticket.id}' : 'delete:${ticket.id}'),
+                            itemBuilder: (_) => const [
+                              PopupMenuItem(value: _FooterTicketAction.rename, child: Text('Editar')),
+                              PopupMenuItem(value: _FooterTicketAction.delete, child: Text('Eliminar')),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    if (!mounted || result == null) return;
+    if (result.startsWith('rename:')) {
+      await _renameDesktopTicket(result.substring(7));
+      return;
+    }
+    if (result.startsWith('delete:')) {
+      await _deleteDesktopTicket(result.substring(7));
+      return;
+    }
+    if (result == '__new__') {
+      _createNewDesktopTicket();
+    } else {
+      _switchDesktopTicket(result);
+    }
+  }
+
   Widget _buildMobileTicketInfoBar() {
     final ticketNumber = _desktopTickets.indexWhere(
       (ticket) => ticket.id == _activeDesktopTicketId,
@@ -8255,7 +8583,68 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     );
   }
 
+  Widget _buildPhoneCatalogSearch() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+      child: Row(
+        key: const ValueKey('phone-catalog-search-row'),
+        children: [
+          Expanded(
+            child: TextField(
+              key: const ValueKey('phone-catalog-search'),
+              controller: _searchCtrl,
+              focusNode: _mobileSearchFocusNode,
+              textInputAction: TextInputAction.search,
+              textAlignVertical: TextAlignVertical.center,
+              onTapOutside: (_) => _mobileSearchFocusNode.unfocus(),
+              onChanged: (_) => _commitEditorChange(() {}),
+              onSubmitted: (_) => unawaited(_submitSearchAndAddFirstVisibleProduct()),
+              style: Theme.of(context).textTheme.bodySmall,
+              decoration: InputDecoration(
+                hintText: 'Buscar productos...', isDense: true,
+                filled: true, fillColor: AppColors.surface,
+                constraints: const BoxConstraints.tightFor(height: 36),
+                prefixIcon: const SizedBox(width: 32, height: 36,
+                  child: Center(child: ImageIcon(AssetImage('assets/image/billing/mobile_search.png'),
+                    color: AppColors.textSecondary, size: 16))),
+                prefixIconConstraints: const BoxConstraints.tightFor(width: 32, height: 36),
+                suffixIcon: _searchCtrl.text.isEmpty ? null : IconButton(
+                  tooltip: 'Limpiar búsqueda', onPressed: _clearSearchQuery,
+                  icon: const Icon(Icons.close_rounded, size: 18)),
+                suffixIconConstraints: const BoxConstraints.tightFor(width: 36, height: 36),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(4), borderSide: BorderSide.none),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(4), borderSide: BorderSide.none),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          SizedBox(width: 36, height: 36,
+            child: Badge(
+              isLabelVisible: _hasCategoryFilter,
+              child: IconButton(
+                key: const ValueKey('phone-catalog-category'),
+                tooltip: _hasCategoryFilter ? 'Categorías: $_selectedCategoryLabel' : 'Filtrar productos',
+                onPressed: _pickCategory,
+                style: IconButton.styleFrom(
+                  padding: EdgeInsets.zero,
+                  minimumSize: const Size(36, 36),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  backgroundColor: AppColors.surface,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4))),
+                icon: const ImageIcon(AssetImage('assets/image/billing/mobile_category.png'),
+                  color: AppColors.primary, size: 22),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildMobileSearchBar() {
+    final phone = usesNativePhoneLayout(context);
+    if (phone) return _buildPhoneCatalogSearch();
     final hasSearchQuery = _searchCtrl.text.trim().isNotEmpty;
     final suffixWidth = hasSearchQuery ? 72.0 : 36.0;
     return Padding(
@@ -8300,11 +8689,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
               fontSize: 13,
               fontWeight: FontWeight.w400,
             ),
-            prefixIcon: const Icon(
-              Icons.search_rounded,
-              color: Color(0xFF334155),
-              size: 18,
-            ),
+            prefixIcon: phone
+              ? const ImageIcon(AssetImage('assets/image/billing/search.png'), color: AppColors.textSecondary, size: 18)
+              : const MobileActionIcon(Icons.search_rounded, color: Color(0xFF334155), size: 18),
             prefixIconConstraints: const BoxConstraints(
               minWidth: 34,
               minHeight: 34,
@@ -8356,11 +8743,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                             width: 36,
                             height: 34,
                           ),
-                          icon: const Icon(
-                            Icons.tune_rounded,
-                            color: Color(0xFF2563EB),
-                            size: 19,
-                          ),
+                          icon: phone
+                            ? const ImageIcon(AssetImage('assets/image/billing/mobile_category.png'), color: AppColors.primary, size: 19)
+                            : const Icon(Icons.tune_rounded, color: Color(0xFF2563EB), size: 19),
                         ),
                         if (_hasCategoryFilter)
                           Positioned(
@@ -8535,6 +8920,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     required double availableHeight,
     required bool keyboardVisible,
   }) {
+    final phone = usesNativePhoneLayout(context);
     final isAdmin = currentUser?.appRole == AppRole.admin;
     final itemCount = _items.fold<double>(0, (sum, item) => sum + item.qty);
     final itemCountLabel = itemCount == 1
@@ -8545,7 +8931,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         .clamp(collapsedSize, expandedSize)
         .toDouble();
     final panelHeight = availableHeight * currentExtent;
-    final compactForKeyboard = keyboardVisible && panelHeight < 210;
+    final compactForKeyboard = (keyboardVisible && panelHeight < 210) || (phone && panelHeight < 145);
 
     void dragCartBy(double delta) {
       if (!hasItems) return;
@@ -8611,7 +8997,26 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         onTap: hasItems
             ? () => unawaited(_animateMobileCartTo(nextExtent))
             : null,
-        child: Padding(
+        child: phone ? Padding(
+          key: const ValueKey('phone-cart-handle'),
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: SizedBox(height: 28, child: Stack(children: [
+            Align(alignment: Alignment.center,
+              child: KeyedSubtree(key: const ValueKey('phone-cart-drag-indicator'), child: cartDragHandle())),
+            Align(alignment: Alignment.centerLeft, child: SizedBox(width: 100,
+              child: Text(itemCountLabel, key: const ValueKey('phone-cart-count'),
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 10, color: AppColors.textSecondary)))),
+            Align(alignment: Alignment.centerRight, child: Row(mainAxisSize: MainAxisSize.min, children: [
+              if (compactForKeyboard) SizedBox(width: 90, child: Text(_money(_total),
+                textAlign: TextAlign.right, maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
+              const SizedBox(width: 4),
+              Icon(isExpanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_up, size: 18,
+                color: hasItems ? AppColors.textSecondary : AppColors.textMuted),
+            ])),
+          ])),
+        ) : Padding(
           padding: EdgeInsets.fromLTRB(14, compactForKeyboard ? 0 : 1, 12, 4),
           child: Column(
             children: [
@@ -8692,10 +9097,10 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       }
 
       return ListView.separated(
-        padding: const EdgeInsets.fromLTRB(14, 0, 14, 2),
+        padding: EdgeInsets.fromLTRB(phone ? 8 : 14, 0, phone ? 8 : 14, 2),
         itemCount: _items.length,
         separatorBuilder: (context, index) =>
-            const Divider(height: 6, thickness: 1, color: Color(0xFFE8EEF5)),
+            Divider(height: phone ? 4 : 6, thickness: 1, color: const Color(0xFFE8EEF5)),
         itemBuilder: (context, index) => _buildTicketLine(
           item: _items[index],
           index: index,
@@ -8712,7 +9117,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     Widget checkoutFooter() {
       if (compactForKeyboard) {
         return Padding(
-          padding: const EdgeInsets.fromLTRB(14, 0, 14, 6),
+          padding: EdgeInsets.fromLTRB(phone ? 8 : 14, 0, phone ? 8 : 14, 6),
           child: Row(
             children: [
               Expanded(
@@ -8730,7 +9135,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                       backgroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(horizontal: 6),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(phone ? 4 : 10),
                       ),
                       textStyle: const TextStyle(
                         fontSize: 12,
@@ -8755,7 +9160,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                     disabledBackgroundColor: const Color(0xFF93C5FD),
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(phone ? 4 : 10),
                     ),
                     textStyle: const TextStyle(
                       fontSize: 13,
@@ -8770,7 +9175,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       }
 
       return Padding(
-        padding: const EdgeInsets.fromLTRB(14, 0, 14, 0),
+        key: phone ? const ValueKey('phone-checkout-footer') : null,
+        padding: phone ? EdgeInsets.zero : const EdgeInsets.fromLTRB(14, 0, 14, 0),
         child: DecoratedBox(
           decoration: BoxDecoration(
             gradient: LinearGradient(
@@ -8781,8 +9187,10 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                 Colors.white,
               ],
             ),
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(phone ? 4 : 14),
             border: Border.all(color: const Color(0xFFDDE7F3)),
+            boxShadow: phone ? const [BoxShadow(color: Color(0x220B2A3A),
+              blurRadius: 12, offset: Offset(0, -3))] : null,
           ),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(9, 5, 9, 6),
@@ -8910,7 +9318,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                     Expanded(
                       flex: 3,
                       child: SizedBox(
-                        height: 40,
+                        height: phone ? 44 : 40,
                         child: OutlinedButton(
                           onPressed: hasItems ? _saveCurrentAsQuotation : null,
                           style: OutlinedButton.styleFrom(
@@ -8922,7 +9330,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                             backgroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(horizontal: 8),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(11),
+                              borderRadius: BorderRadius.circular(phone ? 4 : 11),
                             ),
                             textStyle: const TextStyle(
                               fontSize: 13,
@@ -8941,12 +9349,14 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                         icon: const Icon(Icons.check_rounded, size: 20),
                         label: const Text('Cobrar'),
                         style: FilledButton.styleFrom(
-                          minimumSize: const Size.fromHeight(40),
+                          minimumSize: Size.fromHeight(phone ? 44 : 40),
                           backgroundColor: const Color(0xFF2F6BFF),
                           foregroundColor: Colors.white,
                           disabledBackgroundColor: const Color(0xFF93C5FD),
+                          elevation: phone ? 3 : null,
+                          shadowColor: phone ? AppColors.primary.withValues(alpha: 0.25) : null,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(11),
+                            borderRadius: BorderRadius.circular(phone ? 4 : 11),
                           ),
                           textStyle: const TextStyle(
                             fontSize: 14,
@@ -8973,7 +9383,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         color: Colors.white,
         elevation: 22,
         shadowColor: const Color(0xFF0F172A).withValues(alpha: 0.26),
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(phone ? 6 : 20)),
         clipBehavior: Clip.antiAlias,
         child: DecoratedBox(
           decoration: BoxDecoration(
@@ -8982,11 +9392,11 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
               end: Alignment.bottomCenter,
               colors: [Color(0xFFFFFFFF), Color(0xFFF7FAFF)],
             ),
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(phone ? 6 : 20)),
             border: Border.all(color: const Color(0xFFDDE7F3)),
           ),
           child: ClipRRect(
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(phone ? 6 : 20)),
             child: Column(
               children: [
                 const SizedBox(
@@ -9002,7 +9412,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                   ),
                 ),
                 cartHeader(),
-                Expanded(child: cartProductsList()),
+                Expanded(child: phone && (compactForKeyboard || currentExtent <= collapsedSize + 0.04)
+                    ? const SizedBox.shrink() : cartProductsList()),
                 checkoutFooter(),
               ],
             ),
@@ -9017,6 +9428,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     UserModel? currentUser, {
     required bool inventoryEnabled,
   }) {
+    final phone = usesNativePhoneLayout(context);
     final bannerState = (aiState != null && _shouldShowAiBanner(aiState))
         ? aiState
         : null;
@@ -9026,12 +9438,12 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
         final keyboardVisible = MediaQuery.viewInsetsOf(context).bottom > 0;
         final lineCount = _items.length;
         final defaultVisibleRows = lineCount <= 2 ? lineCount : 2;
-        const cartLineHeight = 58.0;
+        final cartLineHeight = phone ? 52.0 : 58.0;
         final fiscalTotalsExtraHeight = !keyboardVisible && _shouldShowItbis
             ? 8.0
             : 0.0;
         final collapsedBaseHeight =
-            (keyboardVisible ? 112.0 : 182.0) + fiscalTotalsExtraHeight;
+            (keyboardVisible ? (phone ? 104.0 : 112.0) : (phone ? 150.0 : 182.0)) + fiscalTotalsExtraHeight;
         final collapsedMaxRatio = keyboardVisible ? 0.24 : 0.28;
         final maxCollapsedCartHeight =
             constraints.maxHeight * collapsedMaxRatio;
@@ -9043,7 +9455,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
             .clamp(minCollapsedCartHeight, maxCollapsedCartHeight)
             .toDouble();
         final collapsedSize = (collapsedCartHeight / constraints.maxHeight)
-            .clamp(0.20, 0.36)
+            .clamp(phone ? 0.14 : 0.20, 0.36)
             .toDouble();
         final mediumCartHeight =
             collapsedCartHeight + (defaultVisibleRows * cartLineHeight);
@@ -9102,8 +9514,10 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              _buildMobileTicketInfoBar(),
-                              _buildMobileSearchBar(),
+                              if (!phone)
+                                _buildMobileTicketInfoBar(),
+                              Padding(padding: EdgeInsets.only(top: phone ? 6 : 0),
+                                child: _buildMobileSearchBar()),
                               if (bannerState != null)
                                 Padding(
                                   padding: const EdgeInsets.fromLTRB(
@@ -9137,9 +9551,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                       duration: const Duration(milliseconds: 180),
                       curve: Curves.easeOutCubic,
                       padding: EdgeInsets.only(bottom: collapsedCartHeight),
-                      child: _buildProductStrip(
-                        inventoryEnabled: inventoryEnabled,
-                      ),
+                      child: _buildProductStrip(inventoryEnabled: inventoryEnabled),
                     ),
                   ),
                 ],
@@ -9849,7 +10261,7 @@ class _MobileBarcodeScannerPageState extends State<_MobileBarcodeScannerPage> {
                   IconButton(
                     tooltip: 'Volver',
                     onPressed: () => Navigator.of(context).maybePop(),
-                    icon: const Icon(Icons.arrow_back_rounded),
+                    icon: const MobileActionIcon(Icons.arrow_back_rounded),
                     color: Colors.white,
                   ),
                   const Expanded(
@@ -10084,6 +10496,9 @@ class _ScannerFramePainter extends CustomPainter {
 }
 
 enum _MobileQuickAction {
+  scan,
+  tickets,
+  assistant,
   client,
   note,
   externalItem,
@@ -12382,11 +12797,15 @@ class _CheckoutPaymentDialog extends StatefulWidget {
     this.ecfModes = const [],
     this.initialEcfMode,
     this.ecfBuyerComplete = true,
+    this.mobileClientLabel,
+    this.mobilePriceLabel,
   });
 
   final double total;
   final String Function(double value) money;
   final bool hasCreditCustomer;
+  final String? mobileClientLabel;
+  final String? mobilePriceLabel;
   final ValueChanged<_CheckoutResult> onConfirm;
 
   /// Tipos de comprobante disponibles con la numeración autorizada. Vacío
@@ -12734,7 +13153,19 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         // El comprobante se elige al cobrar, no al cotizar.
-                        if (widget.ecfModes.isNotEmpty) ...[
+                        if (widget.mobileClientLabel != null) ...[
+                          MobileSalesCheckoutSummary(
+                            clientName: widget.mobileClientLabel!,
+                            priceLabel: widget.mobilePriceLabel,
+                            voucherSelector: widget.ecfModes.isEmpty ? null : EcfPosFiscalSelector(
+                              modes: widget.ecfModes, selected: _ecfMode,
+                              missingBuyer: _ecfMode == EcfPosFiscalMode.e31 && !widget.ecfBuyerComplete,
+                              compact: true, embedded: true,
+                              onSelected: (mode) => setState(() => _ecfMode = mode),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                        ] else if (widget.ecfModes.isNotEmpty) ...[
                           EcfPosFiscalSelector(
                             modes: widget.ecfModes,
                             selected: _ecfMode,
@@ -13387,7 +13818,7 @@ class _QuoteClientInlineDetail extends StatelessWidget {
             IconButton(
               tooltip: 'Volver a clientes',
               onPressed: onBack,
-              icon: const Icon(Icons.arrow_back_rounded),
+              icon: const MobileActionIcon(Icons.arrow_back_rounded),
             ),
             const SizedBox(width: 4),
             Expanded(
@@ -13686,6 +14117,7 @@ class _ProductThumbCard extends StatelessWidget {
     required this.onImageTap,
     required this.money,
     required this.showStockState,
+    this.phoneCompact = false,
   });
 
   final ProductModel product;
@@ -13693,6 +14125,7 @@ class _ProductThumbCard extends StatelessWidget {
   final VoidCallback onImageTap;
   final String Function(double) money;
   final bool showStockState;
+  final bool phoneCompact;
 
   @override
   Widget build(BuildContext context) {
@@ -13700,6 +14133,32 @@ class _ProductThumbCard extends StatelessWidget {
     final outOfStock =
         showStockState && (stockValue == null || stockValue <= 0);
     final stockText = showStockState ? _formatProductStock(product) : null;
+
+    if (phoneCompact) {
+      return MobileSalesProductCard(
+        name: product.nombre,
+        price: money(product.precio),
+        stock: stockText,
+        onTap: onTap,
+        onImageTap: onImageTap,
+        image: (product.displayFotoUrl ?? '').trim().isEmpty
+            ? const Center(
+                child: Icon(
+                  Icons.inventory_2_outlined,
+                  color: AppColors.textMuted,
+                ),
+              )
+            : ProductNetworkImage(
+                imageUrl: product.displayFotoUrl!,
+                productId: product.id,
+                productName: product.nombre,
+                originalUrl: product.originalFotoUrl,
+                fit: BoxFit.contain,
+                fallback: const Center(child: Icon(Icons.broken_image_outlined,
+                  color: AppColors.textMuted)),
+              ),
+      );
+    }
 
     return Material(
       color: Colors.white,
@@ -15650,6 +16109,7 @@ class _QuotePriceListSelector extends StatelessWidget {
     required this.lists,
     required this.onChanged,
     this.compact = false,
+    this.phoneCompact = false,
   });
 
   final String? selectedId;
@@ -15658,6 +16118,7 @@ class _QuotePriceListSelector extends StatelessWidget {
   final List<PriceListModel> lists;
   final ValueChanged<String?> onChanged;
   final bool compact;
+  final bool phoneCompact;
 
   @override
   Widget build(BuildContext context) {
@@ -15676,6 +16137,22 @@ class _QuotePriceListSelector extends StatelessWidget {
           child: Text(list.name, overflow: TextOverflow.ellipsis),
         ),
     ];
+    if (phoneCompact) {
+      final selected = lists.where((list) => list.id == selectedId).firstOrNull;
+      return MenuAnchor(
+        menuChildren: [
+          MenuItemButton(onPressed: busy ? null : () => onChanged(null), child: Text(defaultLabel)),
+          for (final list in lists) MenuItemButton(
+            onPressed: busy ? null : () => onChanged(list.id), child: Text(list.name)),
+        ],
+        builder: (context, controller, _) => MobileSalesSelector(
+          title: 'Lista de precios', label: selected?.name ?? defaultLabel,
+          icon: Icons.sell_outlined,
+          iconAsset: 'assets/image/billing/mobile_price_list.png',
+          onTap: busy ? null : () => controller.isOpen ? controller.close() : controller.open(),
+        ),
+      );
+    }
     if (!compact) {
       return SalesDetailPriceListSelector(
         value: selectedId,
@@ -18594,6 +19071,7 @@ class _LineEditDialogState extends State<_LineEditDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final phone = usesNativePhoneLayout(context);
     final theme = Theme.of(context);
     final item = widget.item;
 
@@ -18612,10 +19090,10 @@ class _LineEditDialogState extends State<_LineEditDialog> {
             horizontal: 20,
             vertical: 24,
           ),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(phone ? 4 : 8)),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 480),
-            child: Padding(
+            child: MobileSalesLineEditorContent(compact: phone, child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -18741,7 +19219,7 @@ class _LineEditDialogState extends State<_LineEditDialog> {
                           minimumSize: const Size(42, 38),
                           padding: EdgeInsets.zero,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
+                            borderRadius: BorderRadius.circular(phone ? 4 : 8),
                           ),
                         ),
                         child: const Icon(Icons.check_rounded, size: 19),
@@ -18761,7 +19239,7 @@ class _LineEditDialogState extends State<_LineEditDialog> {
                   ],
                 ],
               ),
-            ),
+            )),
           ),
         ),
       ),
@@ -18769,6 +19247,7 @@ class _LineEditDialogState extends State<_LineEditDialog> {
   }
 
   InputDecoration _lineInputDecoration({String? hintText}) {
+    final radius = usesNativePhoneLayout(context) ? 4.0 : 8.0;
     return InputDecoration(
       hintText: hintText,
       isDense: true,
@@ -18776,15 +19255,15 @@ class _LineEditDialogState extends State<_LineEditDialog> {
       fillColor: const Color(0xFFF8FBFF),
       contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(radius),
         borderSide: const BorderSide(color: _billingBorderColor),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(radius),
         borderSide: const BorderSide(color: _billingBorderColor),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(radius),
         borderSide: const BorderSide(color: Color(0xFF1957E6), width: 1.2),
       ),
     );
@@ -18811,7 +19290,7 @@ class _LineEditIconButton extends StatelessWidget {
         foregroundColor: const Color(0xFF43566B),
         side: const BorderSide(color: Color(0xFFD8E5F3)),
         fixedSize: const Size(34, 34),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(usesNativePhoneLayout(context) ? 4 : 8)),
       ),
     );
   }
@@ -19734,6 +20213,7 @@ class _TicketCompactItem extends ConsumerStatefulWidget {
 class _TicketCompactItemState extends ConsumerState<_TicketCompactItem> {
   @override
   Widget build(BuildContext context) {
+    final phone = usesNativePhoneLayout(context);
     final item = widget.item;
     final editAction = widget.onEdit ?? widget.onEditLine;
     final measurementUnitsEnabled =
@@ -19751,9 +20231,9 @@ class _TicketCompactItemState extends ConsumerState<_TicketCompactItem> {
 
     return Material(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(phone ? 4 : 10),
       child: InkWell(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(phone ? 4 : 10),
         onTap: editAction,
         onDoubleTap: widget.onEditLine,
         child: Padding(
@@ -19761,6 +20241,7 @@ class _TicketCompactItemState extends ConsumerState<_TicketCompactItem> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              if (!phone) ...[
               ClipRRect(
                 borderRadius: BorderRadius.circular(7),
                 child: SizedBox(
@@ -19798,6 +20279,7 @@ class _TicketCompactItemState extends ConsumerState<_TicketCompactItem> {
                 ),
               ),
               const SizedBox(width: 8),
+              ],
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -19879,6 +20361,22 @@ class _TicketCompactItemState extends ConsumerState<_TicketCompactItem> {
                 ),
               ),
               const SizedBox(width: 7),
+              if (phone)
+                Row(mainAxisSize: MainAxisSize.min, children: [
+                  ConstrainedBox(constraints: const BoxConstraints(maxWidth: 100),
+                    child: Text(widget.money(item.total), maxLines: 1,
+                      overflow: TextOverflow.ellipsis, textAlign: TextAlign.right,
+                      style: const TextStyle(color: AppColors.textPrimary,
+                        fontSize: 12, fontWeight: FontWeight.w700))),
+                  IconButton(
+                    tooltip: 'Eliminar', padding: const EdgeInsets.all(10),
+                    constraints: const BoxConstraints.tightFor(width: 44, height: 44),
+                    icon: const ImageIcon(AssetImage('assets/image/billing/mobile_delete.png'),
+                      color: AppColors.textSecondary, size: 22),
+                    onPressed: widget.onRemove,
+                  ),
+                ])
+              else
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
@@ -19894,46 +20392,44 @@ class _TicketCompactItemState extends ConsumerState<_TicketCompactItem> {
                     overflow: TextOverflow.ellipsis,
                   ),
                   SizedBox(
-                    width: 68,
+                    width: phone ? 92 : 68,
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
                         Container(
-                          width: 30,
-                          height: 30,
+                          width: phone ? 44 : 30,
+                          height: phone ? 44 : 30,
                           decoration: BoxDecoration(
                             color: const Color(0xFFF8FBFF),
-                            borderRadius: BorderRadius.circular(9),
+                            borderRadius: BorderRadius.circular(phone ? 4 : 9),
                             border: Border.all(color: const Color(0xFFDDE7F3)),
                           ),
                           child: IconButton(
                             padding: EdgeInsets.zero,
                             tooltip: 'Editar',
                             iconSize: 16,
-                            icon: const Icon(
-                              Icons.edit_outlined,
-                              color: Color(0xFF334155),
-                            ),
+                            icon: phone
+                              ? const ImageIcon(AssetImage('assets/image/billing/mobile_edit.png'), color: AppColors.textSecondary, size: 18)
+                              : const Icon(Icons.edit_outlined, color: Color(0xFF334155)),
                             onPressed: editAction,
                           ),
                         ),
-                        const SizedBox(width: 6),
+                        SizedBox(width: phone ? 4 : 6),
                         Container(
-                          width: 30,
-                          height: 30,
+                          width: phone ? 44 : 30,
+                          height: phone ? 44 : 30,
                           decoration: BoxDecoration(
                             color: const Color(0xFFF1F5F9),
-                            borderRadius: BorderRadius.circular(9),
+                            borderRadius: BorderRadius.circular(phone ? 4 : 9),
                             border: Border.all(color: const Color(0xFFDDE7F3)),
                           ),
                           child: IconButton(
                             padding: EdgeInsets.zero,
                             tooltip: 'Eliminar',
                             iconSize: 16,
-                            icon: const Icon(
-                              Icons.delete_outline,
-                              color: Color(0xFF111827),
-                            ),
+                            icon: phone
+                              ? const ImageIcon(AssetImage('assets/image/billing/mobile_delete.png'), color: AppColors.textSecondary, size: 18)
+                              : const Icon(Icons.delete_outline, color: Color(0xFF111827)),
                             onPressed: widget.onRemove,
                           ),
                         ),

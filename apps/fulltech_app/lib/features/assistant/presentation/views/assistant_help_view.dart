@@ -1,3 +1,4 @@
+import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/support/support_config.dart';
@@ -159,7 +160,7 @@ class _AssistantCoursesViewState extends State<AssistantCoursesView> {
               assistantFieldDecoration(
                 hint: 'Buscar en guías y cursos…',
               ).copyWith(
-                prefixIcon: const Icon(
+                prefixIcon: const MobileActionIcon(
                   Icons.search_rounded,
                   size: 17,
                   color: AppColors.textMuted,

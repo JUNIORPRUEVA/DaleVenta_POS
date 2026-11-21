@@ -118,53 +118,107 @@ void main() {
     return router;
   }
 
-  testWidgets('iOS login keeps access fields and offers web registration', (
-    tester,
-  ) async {
-    await pumpLogin(
-      tester,
-      registrationDisabled: true,
-      platform: TargetPlatform.iOS,
-    );
+  testWidgets(
+    'iOS login keeps access fields and shows existing account notice',
+    (tester) async {
+      await pumpLogin(
+        tester,
+        registrationDisabled: true,
+        platform: TargetPlatform.iOS,
+      );
 
-    expect(find.text('FullPOS Cloud', findRichText: true), findsOneWidget);
-    expect(find.text('Usuario'), findsOneWidget);
-    expect(find.text('Contraseña'), findsOneWidget);
-    expect(find.text('Iniciar sesión'), findsOneWidget);
-    expect(find.text('¿Olvidaste tu contraseña?'), findsOneWidget);
-    expect(find.text('Crear mi negocio'), findsNothing);
-    expect(find.text('Crear mi empresa'), findsNothing);
-    expect(find.text('¿No tienes una cuenta?'), findsOneWidget);
-    expect(find.text('Crear cuenta'), findsOneWidget);
+      expect(find.text('FullPOS Cloud', findRichText: true), findsOneWidget);
+      expect(find.text('Usuario'), findsOneWidget);
+      expect(find.text('Contraseña'), findsOneWidget);
+      expect(find.text('Iniciar sesión'), findsOneWidget);
+      expect(find.text('¿Olvidaste tu contraseña?'), findsOneWidget);
+      expect(find.text('Crear mi negocio'), findsNothing);
+      expect(find.text('Crear mi empresa'), findsNothing);
+      expect(find.text('¿No tienes una cuenta?'), findsNothing);
+      expect(find.text('Crear cuenta'), findsNothing);
+      expect(
+        find.text(
+          'Para usar la app, necesitas una cuenta de FullPOS Cloud previamente creada.',
+        ),
+        findsOneWidget,
+      );
 
-    expect(tester.takeException(), isNull);
-  });
+      expect(tester.takeException(), isNull);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+  );
 
-  testWidgets('Android login offers web registration', (tester) async {
-    await pumpLogin(tester, registrationDisabled: true);
+  testWidgets(
+    'Android login shows existing account notice without registration',
+    (tester) async {
+      await pumpLogin(tester, registrationDisabled: true);
 
-    expect(find.text('Iniciar sesión'), findsOneWidget);
-    expect(find.text('Crear mi negocio'), findsNothing);
-    expect(find.text('Crear mi empresa'), findsNothing);
-    expect(find.text('¿No tienes una cuenta?'), findsOneWidget);
-    expect(find.text('Crear cuenta'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
+      expect(find.text('Iniciar sesión'), findsOneWidget);
+      expect(find.text('Crear mi negocio'), findsNothing);
+      expect(find.text('Crear mi empresa'), findsNothing);
+      expect(find.text('¿No tienes una cuenta?'), findsNothing);
+      expect(find.text('Crear cuenta'), findsNothing);
+      expect(
+        find.text(
+          'Para usar la app, necesitas una cuenta de FullPOS Cloud previamente creada.',
+        ),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.android),
+  );
 
-  testWidgets('Windows login keeps business registration entry point', (
-    tester,
-  ) async {
-    await pumpLogin(
-      tester,
-      registrationDisabled: false,
-      platform: TargetPlatform.windows,
-    );
+  testWidgets(
+    'Windows login keeps business registration entry point',
+    (tester) async {
+      await pumpLogin(
+        tester,
+        registrationDisabled: false,
+        platform: TargetPlatform.windows,
+      );
 
-    expect(find.text('Iniciar sesión'), findsOneWidget);
-    expect(find.text('Crear cuenta'), findsOneWidget);
-    expect(find.text('¿No tienes una cuenta?'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
+      expect(find.text('Iniciar sesión'), findsOneWidget);
+      expect(find.text('Crear cuenta'), findsOneWidget);
+      expect(find.text('¿No tienes una cuenta?'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.windows),
+  );
+
+  testWidgets(
+    'mobile keyboard keeps credentials reachable and Next focuses password',
+    (tester) async {
+      tester.view.physicalSize = const Size(360, 740);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await pumpLogin(tester, registrationDisabled: true);
+      final fields = find.byType(TextFormField);
+      await tester.tap(fields.first);
+      await tester.enterText(fields.first, 'usuario@ejemplo.com');
+      await tester.testTextInput.receiveAction(TextInputAction.next);
+      await tester.pumpAndSettle();
+      final password = tester.widget<TextField>(find.byType(TextField).last);
+      expect(password.focusNode!.hasFocus, isTrue);
+      tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(fields.last);
+      await tester.pumpAndSettle();
+      final passwordRect = tester.getRect(fields.last);
+      expect(passwordRect.bottom, lessThanOrEqualTo(440));
+      expect(passwordRect.top, greaterThanOrEqualTo(0));
+      await tester.enterText(fields.last, 'clave-de-prueba');
+      expect(tester.takeException(), isNull);
+      final inputs = tester.widgetList<TextField>(find.byType(TextField));
+      expect(inputs.every((field) => field.autocorrect == false), isTrue);
+      expect(password.enableSuggestions, isFalse);
+      expect(password.autofillHints, contains(AutofillHints.password));
+    },
+    variant: TargetPlatformVariant({
+      TargetPlatform.android,
+      TargetPlatform.iOS,
+    }),
+  );
 
   testWidgets('iOS register route redirects to login', (tester) async {
     final router = await pumpAppRouter(

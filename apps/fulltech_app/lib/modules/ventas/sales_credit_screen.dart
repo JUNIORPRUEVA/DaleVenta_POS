@@ -1,3 +1,4 @@
+import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -165,7 +166,7 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
                   onPressed: _loading
                       ? null
                       : () => unawaited(_refreshCredits()),
-                  icon: const Icon(Icons.refresh_rounded),
+                  icon: const MobileActionIcon(Icons.refresh_rounded),
                 ),
                 const SizedBox(width: 8),
                 const CashTurnMenuButton(refined: true),
@@ -179,7 +180,7 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
                 IconButton(
                   tooltip: 'Filtros',
                   onPressed: _openCreditFilters,
-                  icon: const Icon(Icons.filter_alt_outlined),
+                  icon: const MobileActionIcon(Icons.filter_alt_outlined),
                 ),
                 IconButton(
                   tooltip: _searchOpen ? 'Cerrar búsqueda' : 'Buscar',
@@ -197,7 +198,7 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
                     onPressed: () {
                       if (!_loading) unawaited(_refreshCredits());
                     },
-                    icon: const Icon(Icons.refresh_rounded),
+                    icon: const MobileActionIcon(Icons.refresh_rounded),
                   ),
               ],
               trailing: const SizedBox.shrink(),
@@ -221,7 +222,7 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
                             borderRadius: BorderRadius.all(Radius.circular(6)),
                           ),
                         ),
-                        icon: const Icon(Icons.filter_alt_outlined, size: 18),
+                        icon: const MobileActionIcon(Icons.filter_alt_outlined, size: 18),
                         label: const Text('Filtro'),
                       ),
                       if (_credits.isNotEmpty)
@@ -422,7 +423,7 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
               borderRadius: BorderRadius.zero,
               borderSide: BorderSide.none,
             ),
-            prefixIcon: const Icon(
+            prefixIcon: const MobileActionIcon(
               Icons.search_rounded,
               color: Color(0xFF8A9AA8),
             ),

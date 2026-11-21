@@ -1,3 +1,4 @@
+import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -18,6 +19,7 @@ import '../../features/ecf/data/ecf_connection_guard.dart';
 import '../../features/ecf/ecf_sale_fiscal.dart';
 import '../../features/ecf/ui/ecf_sale_history_panel.dart';
 import '../../core/utils/app_feedback.dart';
+import '../../core/utils/native_phone_layout.dart';
 import '../../core/realtime/operations_refresh_signals.dart';
 import '../../core/routing/app_navigator.dart';
 import '../../core/routing/route_access.dart';
@@ -730,12 +732,12 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
                   IconButton(
                     tooltip: 'Filtros',
                     onPressed: _openFilterPanel,
-                    icon: const Icon(Icons.filter_alt_outlined),
+                    icon: const MobileActionIcon(Icons.filter_alt_outlined),
                   ),
                   IconButton(
                     tooltip: 'Actualizar',
                     onPressed: _load,
-                    icon: const Icon(Icons.refresh_rounded),
+                    icon: const MobileActionIcon(Icons.refresh_rounded),
                   ),
                 ],
               ],
@@ -910,7 +912,7 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
               borderRadius: BorderRadius.zero,
               borderSide: BorderSide.none,
             ),
-            prefixIcon: const Icon(
+            prefixIcon: const MobileActionIcon(
               Icons.search_rounded,
               color: Color(0xFF8A9AA8),
             ),
@@ -1055,7 +1057,7 @@ class _Toolbar extends StatelessWidget {
       child: TextField(
         controller: controller,
         decoration: InputDecoration(
-          prefixIcon: const Icon(Icons.search_rounded, size: 22),
+          prefixIcon: const MobileActionIcon(Icons.search_rounded, size: 22),
           hintText: 'Buscar factura, cliente o total',
           filled: true,
           fillColor: Colors.white,
@@ -1124,7 +1126,7 @@ class _Toolbar extends StatelessWidget {
                     ),
                     child: Row(
                       children: [
-                        const Icon(
+                        const MobileActionIcon(
                           Icons.filter_alt_outlined,
                           size: 18,
                           color: Colors.white,
@@ -1327,7 +1329,7 @@ class _InvoiceListCard extends StatelessWidget {
                         height: 32,
                       ),
                       padding: EdgeInsets.zero,
-                      icon: const Icon(Icons.refresh_rounded, size: 18),
+                      icon: const MobileActionIcon(Icons.refresh_rounded, size: 18),
                     ),
                   ],
                 ),
@@ -1373,7 +1375,7 @@ class _InvoiceListCard extends StatelessWidget {
                           const SizedBox(height: 14),
                           OutlinedButton.icon(
                             onPressed: onReload,
-                            icon: const Icon(Icons.refresh_rounded),
+                            icon: const MobileActionIcon(Icons.refresh_rounded),
                             label: const Text('Reintentar'),
                           ),
                         ],
@@ -1693,7 +1695,7 @@ class _SalesFilterPanelState extends State<_SalesFilterPanel> {
                           color: const Color(0xFFEAF1FF),
                           borderRadius: BorderRadius.circular(6),
                         ),
-                        child: const Icon(
+                        child: const MobileActionIcon(
                           Icons.filter_alt_rounded,
                           color: AppColors.secondary,
                         ),
@@ -1739,6 +1741,7 @@ class _SalesFilterPanelState extends State<_SalesFilterPanel> {
                     children: [
                       _FilterSectionTitle('Intervalo de fecha'),
                       SegmentedButton<_DateQuickFilter>(
+                        showSelectedIcon: !usesNativePhoneLayout(context),
                         segments: [
                           ButtonSegment(
                             value: _DateQuickFilter.today,
@@ -1782,6 +1785,7 @@ class _SalesFilterPanelState extends State<_SalesFilterPanel> {
                       const SizedBox(height: 12),
                       _FilterSectionTitle('Estado'),
                       SegmentedButton<_InvoiceFilter>(
+                        showSelectedIcon: !usesNativePhoneLayout(context),
                         segments: [
                           ButtonSegment(
                             value: _InvoiceFilter.active,
@@ -2173,17 +2177,18 @@ class _MobileInvoiceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final phone = usesNativePhoneLayout(context);
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(phone ? 4 : 14),
         border: Border.all(color: const Color(0xFFE2EAF1)),
       ),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(phone ? 4 : 14),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          padding: EdgeInsets.symmetric(horizontal: 12, vertical: phone ? 6 : 10),
           child: Row(
             children: [
               Expanded(
@@ -2194,7 +2199,7 @@ class _MobileInvoiceCard extends StatelessWidget {
                       children: [
                         Expanded(
                           child: Text(
-                            'Factura ${invoiceNumber(sale)}',
+                            phone ? invoiceNumber(sale) : 'Factura ${invoiceNumber(sale)}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
@@ -2246,7 +2251,8 @@ class _MobileInvoiceCard extends StatelessWidget {
                       children: [
                         Expanded(
                           child: Text(
-                            '${dateFmt.format(sale.saleDate ?? DateTime.now())} · ${sale.userName ?? sale.userId}',
+                            phone ? dateFmt.format(sale.saleDate ?? DateTime.now()) :
+                              '${dateFmt.format(sale.saleDate ?? DateTime.now())} · ${sale.userName ?? sale.userId}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(

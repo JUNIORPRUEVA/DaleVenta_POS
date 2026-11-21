@@ -1,3 +1,4 @@
+import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
 import 'package:flutter/material.dart';
 
 class AppLoadingScreen extends StatelessWidget {
@@ -164,7 +165,7 @@ class AppLoadingScreen extends StatelessWidget {
                         const SizedBox(height: 18),
                         FilledButton.icon(
                           onPressed: onAction,
-                          icon: const Icon(Icons.refresh_rounded),
+                          icon: const MobileActionIcon(Icons.refresh_rounded),
                           label: Text(actionLabel!),
                         ),
                       ],
