@@ -20,6 +20,7 @@ import 'ai_assistant_resource_card.dart';
 import 'ai_chat_panel_host.dart';
 import 'ai_chat_experience.dart';
 import 'ai_support_case_link.dart';
+import '../../../utils/native_phone_layout.dart';
 
 final aiAssistantSoundEnabledProvider = StateProvider<bool>((ref) => true);
 
@@ -120,6 +121,7 @@ class _GlobalAiChatSheetState extends ConsumerState<GlobalAiChatSheet> {
     final isDesktop = size.width >= 900;
     final embedded = widget.embeddedInScreen;
     final docked = isDesktop && widget.panelWidth != null;
+    final nativePhone = usesNativePhoneLayout(context);
     final narrow = (widget.panelWidth ?? size.width) < 460;
     final busy =
         aiState.sending || aiState.uploadingAttachment || _finishingRecording;
@@ -142,7 +144,7 @@ class _GlobalAiChatSheetState extends ConsumerState<GlobalAiChatSheet> {
               maxWidth: embedded
                   ? (isDesktop ? 980 : size.width)
                   : (isDesktop ? (widget.panelWidth ?? 468) : size.width),
-              maxHeight: embedded || docked
+              maxHeight: embedded || docked || nativePhone
                   ? size.height
                   : (isDesktop ? 820 : size.height * 0.84),
             ),

@@ -11,6 +11,9 @@ class MobilePresentationTheme extends StatelessWidget {
     final theme = Theme.of(context);
     return Theme(
       data: theme.copyWith(
+        popupMenuTheme: theme.popupMenuTheme.copyWith(
+          shape: const RoundedRectangleBorder(),
+        ),
         listTileTheme: theme.listTileTheme.copyWith(
           dense: true,
           minTileHeight: 48,

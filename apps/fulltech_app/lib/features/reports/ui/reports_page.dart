@@ -2769,7 +2769,7 @@ class _RecentSalesTable extends StatelessWidget {
                   ListTile(
                     dense: true,
                     contentPadding: EdgeInsets.zero,
-                    leading: const CircleAvatar(
+                    leading: usesNativePhoneLayout(context) ? null : const CircleAvatar(
                       backgroundColor: Color(0xFFEFF6FF),
                       foregroundColor: _primaryBlue,
                       child: Icon(Icons.receipt_long_outlined),

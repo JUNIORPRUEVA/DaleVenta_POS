@@ -2271,7 +2271,7 @@ class _MobileInvoiceCard extends StatelessWidget {
                 tooltip: 'Acciones',
                 onPressed: () => _openActions(context),
                 visualDensity: VisualDensity.compact,
-                icon: const Icon(Icons.more_vert_rounded),
+                icon: const MobileActionIcon(Icons.more_vert_rounded),
               ),
             ],
           ),

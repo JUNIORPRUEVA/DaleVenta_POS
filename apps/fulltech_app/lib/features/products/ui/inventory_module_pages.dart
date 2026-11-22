@@ -1915,7 +1915,7 @@ class _InventoryModulePagesState extends ConsumerState<InventoryModulePages> {
                   if (!_mobileSearchOpen && initialTabIndex == 0)
                     PopupMenuButton<String>(
                       tooltip: 'Más opciones',
-                      icon: const Icon(Icons.more_vert_rounded),
+                      icon: const MobileActionIcon(Icons.more_vert_rounded),
                       onSelected: (value) =>
                           unawaited(_handleMobileOverflow(value)),
                       itemBuilder: (context) => const [
@@ -6850,7 +6850,7 @@ class _ProductActionsMenu extends StatelessWidget {
       height: 44,
       child: PopupMenuButton<String>(
         tooltip: 'Acciones',
-        icon: const Icon(
+        icon: const MobileActionIcon(
           Icons.more_vert_rounded,
           size: 20,
           color: Color(0xFF64748B),

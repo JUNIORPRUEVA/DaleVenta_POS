@@ -83,10 +83,10 @@ class MobileDrawerAccountFooter extends StatelessWidget {
                 IconButton(
                   tooltip: 'Cerrar sesión',
                   onPressed: onLogout,
-                  icon: Image.asset(
-                    'assets/image/mobile_navigation/logout.png',
-                    width: 20,
-                    height: 20,
+                  icon: const ImageIcon(
+                    AssetImage('assets/image/mobile_navigation/logout_outline.png'),
+                    size: 20,
+                    color: AppColors.primary,
                   ),
                 ),
               ],
@@ -98,11 +98,7 @@ class MobileDrawerAccountFooter extends StatelessWidget {
               'Usuario',
               'users',
               onUsers,
-              IconButton(
-                tooltip: 'Administrar usuarios',
-                onPressed: onUsers,
-                icon: glyph('add_users'),
-              ),
+              const SizedBox(width: 12),
             ),
           ],
         ],

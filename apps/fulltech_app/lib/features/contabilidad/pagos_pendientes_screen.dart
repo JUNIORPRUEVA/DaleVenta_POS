@@ -1,5 +1,6 @@
 import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
 import 'package:flutter/material.dart';
+import '../../core/utils/native_phone_layout.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:printing/printing.dart';
@@ -1787,7 +1788,7 @@ class _HistoryRow extends StatelessWidget {
       child: ListTile(
         dense: true,
         contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
-        leading: Container(
+        leading: usesNativePhoneLayout(context) ? null : Container(
           width: 36,
           height: 36,
           decoration: BoxDecoration(

@@ -34,6 +34,10 @@ Future<void> pumpPreview(WidgetTester tester, Size size) async {
       precacheImage(const AssetImage(SalesTicketBar.addIconAsset), context),
       precacheImage(const AssetImage(SalesTicketTab.cartIconAsset), context),
       precacheImage(const AssetImage('assets/image/nuevologo.png'), context),
+      precacheImage(
+        const AssetImage('assets/image/mobile_navigation/more.png'),
+        context,
+      ),
     ]);
   });
   await tester.pumpAndSettle();

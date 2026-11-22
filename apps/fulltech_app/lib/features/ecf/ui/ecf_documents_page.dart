@@ -667,11 +667,11 @@ class _DocumentTile extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Padding(
+              if (!usesNativePhoneLayout(context)) ...[Padding(
                 padding: const EdgeInsets.only(top: 2),
                 child: Icon(status.icon, color: status.color(scheme), size: 18),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 12)],
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

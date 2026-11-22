@@ -166,7 +166,7 @@ Future<void> _pump(
   await tester.pumpAndSettle();
   await tester.runAsync(() async {
     final context = tester.element(find.byType(TpvSalesHistoryScreen));
-    for (final name in ['back', 'search', 'filter', 'refresh']) {
+    for (final name in ['back', 'search', 'filter', 'refresh', 'more']) {
       await precacheImage(AssetImage('assets/image/mobile_navigation/$name.png'), context);
     }
   });

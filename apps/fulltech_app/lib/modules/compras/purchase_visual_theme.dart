@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/widgets/mobile_action_icon.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/provided_action_icon.dart';
 
@@ -108,7 +109,7 @@ class PurchaseIcon extends StatelessWidget {
       _ => null,
     };
     return action == null
-        ? Icon(icon, size: size, color: color)
+        ? MobileActionIcon(icon, size: size, color: color)
         : Center(
             widthFactor: 1,
             heightFactor: 1,

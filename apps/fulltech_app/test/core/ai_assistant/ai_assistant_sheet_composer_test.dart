@@ -63,6 +63,11 @@ void main() {
       ),
     );
     await tester.pump();
+    await tester.runAsync(() async {
+      await precacheImage(const AssetImage(AiAssistantDockButton.imageAsset),
+        tester.element(find.byType(GlobalAiChatSheet)));
+    });
+    await tester.pump();
   }
 
   testWidgets('ofrece texto, adjuntar archivo y nota de voz', (tester) async {
@@ -78,6 +83,20 @@ void main() {
     expect(find.bySemanticsLabel('Grabar nota de voz'), findsOneWidget);
     expect(find.text('Escribe tu pregunta…'), findsOneWidget);
   });
+
+  for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {
+    testWidgets('el chat llena el área útil en $platform', (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      tester.view.padding = const FakeViewPadding(top: 24, bottom: 24);
+      addTearDown(tester.view.reset);
+      await pumpSheet(tester);
+      final rect = tester.getRect(find.byType(AiChatPanelHost));
+      expect(rect.top, closeTo(24, 1));
+      expect(rect.bottom, closeTo(820, 1));
+      expect(tester.takeException(), isNull);
+    }, variant: TargetPlatformVariant({platform}));
+  }
 
   testWidgets('solo ofrece avería y presenta una bienvenida breve', (tester) async {
     await pumpSheet(tester);

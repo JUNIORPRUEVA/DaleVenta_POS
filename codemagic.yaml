@@ -4,12 +4,35 @@ workflows:
     max_build_duration: 60
     instance_type: mac_mini_m2
     environment:
-      flutter: stable
+      flutter: 3.41.6
       xcode: latest
       vars:
         APP_DIR: apps/fulltech_app
         BUNDLE_ID: com.fulltechrd.fullposcloud
     scripts:
+      - &create_mobile_ci_env
+        name: Create CI env file
+        script: |
+          set -euo pipefail
+          cd "$APP_DIR"
+          API_BASE_URL_VALUE="${API_BASE_URL:-https://daleventapos-backend.gcdndd.easypanel.host}"
+          APP_BASE_URL_VALUE="${APP_BASE_URL:-https://fullposcloud.fulltechrd.com}"
+          API_TIMEOUT_MS_VALUE="${API_TIMEOUT_MS:-15000}"
+          {
+            echo "APP_ENV=production"
+            echo "API_BASE_URL=$API_BASE_URL_VALUE"
+            echo "APP_BASE_URL=$APP_BASE_URL_VALUE"
+            echo "API_TIMEOUT_MS=$API_TIMEOUT_MS_VALUE"
+            if [ -n "${QUOTATION_APPROVAL_ADMIN_PHONE:-}" ]; then
+              echo "QUOTATION_APPROVAL_ADMIN_PHONE=$QUOTATION_APPROVAL_ADMIN_PHONE"
+            fi
+            if [ -n "${RELEASES_API_BASE_URL:-}" ]; then
+              echo "RELEASES_API_BASE_URL=$RELEASES_API_BASE_URL"
+            fi
+            if [ -n "${RELEASES_API_KEY:-}" ]; then
+              echo "RELEASES_API_KEY=$RELEASES_API_KEY"
+            fi
+          } > .env
       - name: Flutter clean
         script: |
           cd "$APP_DIR"
@@ -21,7 +44,25 @@ workflows:
       - name: Static analysis
         script: |
           cd "$APP_DIR"
-          flutter analyze || true
+          flutter analyze
+      - &mobile_ui_regression
+        name: Mobile UI regression
+        script: |
+          set -euo pipefail
+          cd "$APP_DIR"
+          flutter test \
+            test/features/account/account_settings_navigation_test.dart \
+            test/core/widgets/mobile_options_icon_test.dart \
+            test/core/widgets/mobile_page_presentation_test.dart \
+            test/features/user/users_mobile_presentation_test.dart \
+            test/features/settings/printer_settings_platform_test.dart \
+            test/modules/clientes/cliente_detail_screen_widget_test.dart \
+            test/modules/clientes/cliente_form_screen_widget_test.dart \
+            test/modules/cotizaciones/quotation_mobile_menu_test.dart \
+            --reporter expanded --concurrency=1
+          flutter test test/core/ai_assistant/ai_assistant_sheet_composer_test.dart \
+            --name 'el chat llena el área útil|el compositor móvil sigue visible' \
+            --reporter expanded --concurrency=1
       - name: Build iOS release without codesign
         script: |
           #!/usr/bin/env bash
@@ -95,7 +136,7 @@ workflows:
     integrations:
       app_store_connect: CodemagicKey
     environment:
-      flutter: stable
+      flutter: 3.41.6
       xcode: latest
       ios_signing:
         distribution_type: app_store
@@ -110,29 +151,7 @@ workflows:
         IOS_MIN_MARKETING_VERSION: 1.0.6
         IOS_MIN_BUILD_NUMBER: 130
     scripts:
-      - name: Create CI env file
-        script: |
-          cd "$APP_DIR"
-          ENV_FILE=".env"
-          API_BASE_URL_VALUE="${API_BASE_URL:-https://daleventapos-backend.gcdndd.easypanel.host}"
-          APP_BASE_URL_VALUE="${APP_BASE_URL:-$API_BASE_URL_VALUE}"
-          API_TIMEOUT_MS_VALUE="${API_TIMEOUT_MS:-15000}"
-
-          {
-            echo "APP_ENV=production"
-            echo "API_BASE_URL=$API_BASE_URL_VALUE"
-            echo "APP_BASE_URL=$APP_BASE_URL_VALUE"
-            echo "API_TIMEOUT_MS=$API_TIMEOUT_MS_VALUE"
-            if [ -n "${QUOTATION_APPROVAL_ADMIN_PHONE:-}" ]; then
-              echo "QUOTATION_APPROVAL_ADMIN_PHONE=$QUOTATION_APPROVAL_ADMIN_PHONE"
-            fi
-            if [ -n "${RELEASES_API_BASE_URL:-}" ]; then
-              echo "RELEASES_API_BASE_URL=$RELEASES_API_BASE_URL"
-            fi
-            if [ -n "${RELEASES_API_KEY:-}" ]; then
-              echo "RELEASES_API_KEY=$RELEASES_API_KEY"
-            fi
-          } > "$ENV_FILE"
+      - *create_mobile_ci_env
       - name: Flutter pub get
         script: |
           cd "$APP_DIR"
@@ -141,12 +160,7 @@ workflows:
         script: |
           cd "$APP_DIR"
           flutter analyze
-      - name: Unit and widget tests
-        script: |
-          cd "$APP_DIR"
-          flutter test test/features/account/account_settings_navigation_test.dart \
-            -r expanded \
-            --concurrency=1
+      - *mobile_ui_regression
       - name: Apply Xcode signing settings
         script: |
           cd "$APP_DIR"

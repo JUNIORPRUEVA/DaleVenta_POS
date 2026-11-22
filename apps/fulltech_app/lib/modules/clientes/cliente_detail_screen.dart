@@ -1,4 +1,7 @@
 import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
+import '../../core/utils/native_phone_layout.dart';
+import '../../core/widgets/mobile_page_app_bar.dart';
+import '../../core/theme/app_colors.dart';
 import 'dart:async';
 
 import 'package:flutter_map/flutter_map.dart';
@@ -224,16 +227,27 @@ class _ClienteDetailScreenState extends ConsumerState<ClienteDetailScreen> {
       context: context,
       builder: (context) {
         return AlertDialog(
+          shape: usesNativePhoneLayout(context)
+              ? const RoundedRectangleBorder()
+              : null,
           title: const Text('Eliminar cliente'),
           content: Text(
             'Se eliminara el cliente ${client.nombre}. Esta accion no se puede deshacer.',
           ),
           actions: [
             TextButton(
+              style: usesNativePhoneLayout(context)
+                  ? TextButton.styleFrom(shape: const RoundedRectangleBorder())
+                  : null,
               onPressed: () => Navigator.pop(context, false),
               child: const Text('Cancelar'),
             ),
             FilledButton(
+              style: usesNativePhoneLayout(context)
+                  ? FilledButton.styleFrom(
+                      shape: const RoundedRectangleBorder(),
+                    )
+                  : null,
               onPressed: () => Navigator.pop(context, true),
               child: const Text('Eliminar'),
             ),
@@ -531,6 +545,7 @@ class _ClienteDetailScreenState extends ConsumerState<ClienteDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final profile = _profile;
+    final phone = usesNativePhoneLayout(context);
     final profileClient = profile?.client;
     final metrics = profile?.metrics;
     final fallbackLocation = parseClientLocationPreview(_cliente?.locationUrl);
@@ -598,10 +613,73 @@ class _ClienteDetailScreenState extends ConsumerState<ClienteDetailScreen> {
             .where((row) => row.value.isNotEmpty && row.value != '-')
             .toList(growable: false);
 
+    void onClientAction(_ClienteHeaderAction action) {
+      if (_deleting) return;
+      if (action == _ClienteHeaderAction.edit && resolvedClientId.isNotEmpty) {
+        context.push(Routes.clienteEdit(resolvedClientId));
+      } else if (action == _ClienteHeaderAction.delete && _cliente != null) {
+        _deleteClient();
+      }
+    }
+
     return Scaffold(
-      backgroundColor: Theme.of(
-        context,
-      ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+      appBar: phone
+          ? MobilePageAppBar(
+              appBar: AppBar(
+                leading: IconButton(
+                  tooltip: 'Regresar',
+                  icon: const MobileActionIcon(Icons.arrow_back_rounded),
+                  onPressed: () => AppNavigator.goBack(
+                    context,
+                    fallbackRoute: Routes.clientes,
+                  ),
+                ),
+                title: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      displayName.isEmpty ? 'Cliente' : displayName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (displayPhone.isNotEmpty)
+                      Text(
+                        displayPhone,
+                        maxLines: 1,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.white70,
+                        ),
+                      ),
+                  ],
+                ),
+                actions: [
+                  PopupMenuButton<_ClienteHeaderAction>(
+                    tooltip: 'Opciones',
+                    enabled: !_deleting,
+                    onSelected: onClientAction,
+                    shape: const RoundedRectangleBorder(),
+                    icon: const MobileActionIcon(Icons.more_vert_rounded),
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(
+                        value: _ClienteHeaderAction.edit,
+                        child: Text('Editar'),
+                      ),
+                      PopupMenuItem(
+                        value: _ClienteHeaderAction.delete,
+                        child: Text('Eliminar'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            )
+          : null,
+      backgroundColor: phone
+          ? AppColors.background
+          : Theme.of(
+              context,
+            ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
       body: SafeArea(
         bottom: false,
         child: Stack(
@@ -613,7 +691,9 @@ class _ClienteDetailScreenState extends ConsumerState<ClienteDetailScreen> {
                 onRefresh: _load,
                 child: ListView(
                   physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 34),
+                  padding: phone
+                      ? const EdgeInsets.fromLTRB(12, 12, 12, 24)
+                      : const EdgeInsets.fromLTRB(24, 20, 24, 34),
                   children: [
                     Center(
                       child: ConstrainedBox(
@@ -621,46 +701,49 @@ class _ClienteDetailScreenState extends ConsumerState<ClienteDetailScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            _ElegantSectionCard(
-                              padding: const EdgeInsets.fromLTRB(
-                                16,
-                                14,
-                                14,
-                                14,
-                              ),
-                              child: _CompactDetailHeader(
-                                name: displayName.isEmpty
-                                    ? 'Cliente'
-                                    : displayName,
-                                phone: displayPhone,
-                                deleted:
-                                    profileClient?.isDeleted ??
-                                    _cliente?.isDeleted ??
-                                    false,
-                                deleting: _deleting,
-                                onBack: () => AppNavigator.goBack(
-                                  context,
-                                  fallbackRoute: Routes.clientes,
+                            if (!phone)
+                              _ElegantSectionCard(
+                                padding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  14,
+                                  14,
+                                  14,
                                 ),
-                                onActionSelected: (action) {
-                                  switch (action) {
-                                    case _ClienteHeaderAction.edit:
-                                      if (resolvedClientId.isNotEmpty &&
-                                          !_deleting) {
-                                        context.push(
-                                          Routes.clienteEdit(resolvedClientId),
-                                        );
-                                      }
-                                      break;
-                                    case _ClienteHeaderAction.delete:
-                                      if (_cliente != null && !_deleting) {
-                                        _deleteClient();
-                                      }
-                                      break;
-                                  }
-                                },
+                                child: _CompactDetailHeader(
+                                  name: displayName.isEmpty
+                                      ? 'Cliente'
+                                      : displayName,
+                                  phone: displayPhone,
+                                  deleted:
+                                      profileClient?.isDeleted ??
+                                      _cliente?.isDeleted ??
+                                      false,
+                                  deleting: _deleting,
+                                  onBack: () => AppNavigator.goBack(
+                                    context,
+                                    fallbackRoute: Routes.clientes,
+                                  ),
+                                  onActionSelected: (action) {
+                                    switch (action) {
+                                      case _ClienteHeaderAction.edit:
+                                        if (resolvedClientId.isNotEmpty &&
+                                            !_deleting) {
+                                          context.push(
+                                            Routes.clienteEdit(
+                                              resolvedClientId,
+                                            ),
+                                          );
+                                        }
+                                        break;
+                                      case _ClienteHeaderAction.delete:
+                                        if (_cliente != null && !_deleting) {
+                                          _deleteClient();
+                                        }
+                                        break;
+                                    }
+                                  },
+                                ),
                               ),
-                            ),
                             if (_refreshing) ...[
                               const SizedBox(height: 10),
                               const LinearProgressIndicator(),
@@ -672,8 +755,10 @@ class _ClienteDetailScreenState extends ConsumerState<ClienteDetailScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const _SectionLabel(
-                                    title: 'Datos importantes del cliente',
+                                  _SectionLabel(
+                                    title: phone
+                                        ? 'Datos del cliente'
+                                        : 'Datos importantes del cliente',
                                   ),
                                   const SizedBox(height: 14),
                                   _SimpleDetailList(rows: importantInfo),
@@ -761,8 +846,19 @@ class _ElegantSectionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final mobile = MediaQuery.sizeOf(context).width < 700;
+    final mobile = usesNativePhoneLayout(context);
     if (mobile) {
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          border: Border.all(color: AppColors.border),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: child,
+      );
+    }
+    if (MediaQuery.sizeOf(context).width < 700) {
       return Padding(padding: padding, child: child);
     }
     return DecoratedBox(
@@ -889,7 +985,7 @@ class _CompactDetailHeader extends StatelessWidget {
                   height: 18,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Icon(Icons.more_vert_rounded),
+              : const MobileActionIcon(Icons.more_vert_rounded),
         ),
       ],
     );
@@ -952,10 +1048,20 @@ class _MetricCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final mobile = MediaQuery.sizeOf(context).width < 700;
+    final nativePhone = usesNativePhoneLayout(context);
+    final mobile = nativePhone || MediaQuery.sizeOf(context).width < 700;
     if (mobile) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+      return Container(
+        padding: nativePhone
+            ? const EdgeInsets.all(12)
+            : const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+        decoration: nativePhone
+            ? BoxDecoration(
+                color: AppColors.surface,
+                border: Border.all(color: AppColors.border),
+                borderRadius: BorderRadius.circular(6),
+              )
+            : null,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
@@ -1264,7 +1370,12 @@ class _LocationDetailCard extends StatelessWidget {
             label: const Text('Abrir ubicacion'),
             style: TextButton.styleFrom(
               padding: EdgeInsets.zero,
-              minimumSize: const Size(0, 0),
+              minimumSize: usesNativePhoneLayout(context)
+                  ? const Size(44, 44)
+                  : const Size(0, 0),
+              shape: usesNativePhoneLayout(context)
+                  ? const RoundedRectangleBorder()
+                  : null,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               alignment: Alignment.centerLeft,
             ),
@@ -1364,24 +1475,26 @@ class _TimelineEventCard extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 26,
-                height: 26,
-                margin: const EdgeInsets.only(top: 1),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primaryContainer.withValues(
-                    alpha: 0.75,
+              if (!usesNativePhoneLayout(context)) ...[
+                Container(
+                  width: 26,
+                  height: 26,
+                  margin: const EdgeInsets.only(top: 1),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primaryContainer.withValues(
+                      alpha: 0.75,
+                    ),
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  borderRadius: BorderRadius.circular(8),
+                  alignment: Alignment.center,
+                  child: Icon(
+                    icon,
+                    size: 14,
+                    color: theme.colorScheme.onPrimaryContainer,
+                  ),
                 ),
-                alignment: Alignment.center,
-                child: Icon(
-                  icon,
-                  size: 14,
-                  color: theme.colorScheme.onPrimaryContainer,
-                ),
-              ),
-              const SizedBox(width: 10),
+                const SizedBox(width: 10),
+              ],
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

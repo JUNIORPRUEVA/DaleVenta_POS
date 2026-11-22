@@ -156,6 +156,27 @@ keeps its four primary KPIs visible and reveals detailed sections on request.
 Fiscal pages without a desktop-independent header receive a native-only bar.
 Coverage and remaining visual checks: AUDITORIA_UI_MOVIL_MODULOS_20261121.md.
 
+Owner refinement after PR53 (2026-11-21): native phone Actions uses a solid white
+75%-width panel with square edges, without a faded edge. The account footer has
+one Users entry and the supplied outline logout icon. Usuario shows Back, PIN
+and Filter without a department subtitle, search action or avatar; its Permisos
+menu entry opens the existing permission editor directly. Native phone settings
+omit the Windows update destination. Mobile printer settings retain all controls,
+with square buttons and less common options under Opciones avanzadas. These
+overrides do not change Windows/web presentation or authorization behavior.
+
+Native phone refinement (2026-11-22): client detail uses the shared gradient
+header, compact metric and information surfaces, and square form/dialog actions.
+Native quotation history opens detail from the record tap and omits its duplicate
+Ver detalle menu entry. Record-leading document ornaments are omitted on phone
+quotation, purchase-invoice, client-timeline, fiscal-document and recent-report
+lists; product photos, selection indicators and functional navigation icons stay.
+The approved more.png asset replaces option ellipses through MobileActionIcon
+and AppIcon only on native phones. Native popup menus use square corners.
+The phone assistant fills the usable screen height, retaining system/keyboard
+insets. Windows/web, including narrow Windows windows, keep their existing
+presentation. Evidence: AJUSTES_MOVILES_CLIENTES_COTIZACIONES_IA_20261122.md.
+
 - `DataTableTheme` uses muted heading row and medium body weight.
 - `ListTileTheme` uses rounded 16px shape and role primary icons.
 - Popup menus are white, transparent tint, rounded 14px.

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/utils/native_phone_layout.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -289,9 +290,7 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
                 padding: const EdgeInsets.fromLTRB(20, 16, 10, 12),
                 decoration: const BoxDecoration(
                   color: Colors.white,
-                  border: Border(
-                    bottom: BorderSide(color: Color(0xFFEDF1F6)),
-                  ),
+                  border: Border(bottom: BorderSide(color: Color(0xFFEDF1F6))),
                 ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -350,9 +349,7 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 14),
                 decoration: const BoxDecoration(
                   color: Colors.white,
-                  border: Border(
-                    top: BorderSide(color: Color(0xFFEDF1F6)),
-                  ),
+                  border: Border(top: BorderSide(color: Color(0xFFEDF1F6))),
                 ),
                 child: SafeArea(
                   top: false,
@@ -417,19 +414,27 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
         color: Color(0xFF9AA7B2),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(
+          usesNativePhoneLayout(context) ? 0 : 12,
+        ),
         borderSide: const BorderSide(color: Color(0xFFE2E8F0), width: 1),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(
+          usesNativePhoneLayout(context) ? 0 : 12,
+        ),
         borderSide: const BorderSide(color: Color(0xFF1957E6), width: 1.5),
       ),
       errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(
+          usesNativePhoneLayout(context) ? 0 : 12,
+        ),
         borderSide: const BorderSide(color: Color(0xFFDC2626), width: 1),
       ),
       focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(
+          usesNativePhoneLayout(context) ? 0 : 12,
+        ),
         borderSide: const BorderSide(color: Color(0xFFDC2626), width: 1.5),
       ),
     );
@@ -456,9 +461,7 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
       style: const TextStyle(fontSize: 14.5),
       decoration: _fieldDecoration(
         label: _isCreditFiscal ? 'Razón social *' : 'Nombre *',
-        hint: _isCreditFiscal
-            ? 'Como aparece en el RNC'
-            : 'Nombre del cliente',
+        hint: _isCreditFiscal ? 'Como aparece en el RNC' : 'Nombre del cliente',
       ),
       onFieldSubmitted: (_) => _save(),
       validator: (value) {
@@ -664,7 +667,9 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
               side: const BorderSide(color: Color(0xFFE2E8F0), width: 1),
               minimumSize: const Size.fromHeight(46),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(
+                  usesNativePhoneLayout(context) ? 0 : 10,
+                ),
               ),
               textStyle: const TextStyle(
                 fontSize: 13.5,
@@ -683,7 +688,9 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
               foregroundColor: Colors.white,
               minimumSize: const Size.fromHeight(46),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(
+                  usesNativePhoneLayout(context) ? 0 : 10,
+                ),
               ),
               textStyle: const TextStyle(
                 fontSize: 13.5,

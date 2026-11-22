@@ -120,6 +120,10 @@ Future<_Categories> _pump(WidgetTester tester, Size size) async {
     for (final name in ['search', 'edit', 'delete']) {
       await precacheImage(AssetImage('assets/image/action_$name.png'), context);
     }
+    await precacheImage(
+      const AssetImage('assets/image/mobile_navigation/more.png'),
+      context,
+    );
   });
   await tester.pumpAndSettle();
   return controller;

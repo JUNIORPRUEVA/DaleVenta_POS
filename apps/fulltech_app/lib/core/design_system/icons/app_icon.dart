@@ -3,6 +3,8 @@ import 'package:hugeicons/hugeicons.dart';
 
 import 'app_icons.dart';
 import 'app_icon_sizes.dart';
+import '../../widgets/mobile_action_icon.dart';
+import '../../utils/native_phone_layout.dart';
 
 class AppIcon extends StatelessWidget {
   const AppIcon(
@@ -25,6 +27,16 @@ class AppIcon extends StatelessWidget {
     final iconTheme = IconTheme.of(context);
     final effectiveColor = color ?? iconTheme.color ?? Colors.black;
     final effectiveSize = size ?? iconTheme.size ?? AppIconSizes.normal;
+
+    if (usesNativePhoneLayout(context) &&
+        (icon == AppIcons.more || icon == AppIcons.moreVertical)) {
+      return MobileActionIcon(
+        Icons.more_horiz,
+        size: effectiveSize,
+        color: effectiveColor,
+        semanticLabel: semanticLabel,
+      );
+    }
 
     final child = HugeIcon(
       icon: icon,

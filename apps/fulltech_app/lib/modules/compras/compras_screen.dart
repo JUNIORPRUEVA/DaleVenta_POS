@@ -2517,7 +2517,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
             padding: const EdgeInsets.fromLTRB(10, 8, 8, 8),
             child: Row(
               children: [
-                Container(
+                if (!usesNativePhoneLayout(context)) ...[Container(
                   width: 38,
                   height: 38,
                   decoration: BoxDecoration(
@@ -2533,7 +2533,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
                     color: theme.colorScheme.onPrimaryContainer,
                   ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 10)],
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -2583,7 +2583,7 @@ class _ComprasScreenState extends ConsumerState<ComprasScreen>
       selectedTileColor: theme.colorScheme.primaryContainer.withValues(
         alpha: .35,
       ),
-      leading: const PurchaseIcon(Icons.description_outlined),
+      leading: usesNativePhoneLayout(context) ? null : const PurchaseIcon(Icons.description_outlined),
       title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
       subtitle: Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
       trailing: Text(

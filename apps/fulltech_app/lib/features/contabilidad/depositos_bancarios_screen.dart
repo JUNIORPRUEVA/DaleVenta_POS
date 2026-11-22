@@ -2743,7 +2743,7 @@ class _DepositOrderTile extends StatelessWidget {
       ],
       child: const Padding(
         padding: EdgeInsets.all(8),
-        child: Icon(Icons.more_vert_rounded),
+        child: MobileActionIcon(Icons.more_vert_rounded),
       ),
     );
 

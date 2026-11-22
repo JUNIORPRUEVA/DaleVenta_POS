@@ -1,0 +1,54 @@
+commit,fecha_y_titulo,archivos,archivos_codigo_o_pruebas,clasificacion
+021dd46f8dcef1b10749966bd81a1f4438ff6832,021dd46f 2026-11-14 docs(ecf): confirm authorized PWA source preparation without deploy,2,0,documentacion_o_configuracion_historica_no_reaplicar_automaticamente
+0bc55cb35da11e7a70904ddc94e10ad243b97fa5,0bc55cb3 2026-11-12 fix(app): recuperar interfaz aprobada y unificar ejecucion Windows,19,10,historico_no_equivalente_requiere_revision_funcional
+0cc634a356ce6eb891f279738a0828015e44ba6f,0cc634a3 2026-10-08 fix(auth): stabilize Riverpod login routing,5,5,historico_no_equivalente_requiere_revision_funcional
+0d869212ac286ad27ce97b3e20441e2fba761048,0d869212 2026-08-19 test(auth): cover deferred tenant identity restoration,1,1,historico_no_equivalente_requiere_revision_funcional
+13e039b19f32efc244f565bdf71d9669cb577b5b,"13e039b1 2026-11-17 chore(app): quitar ponche, publicidad, amonestaciones, CRM de WhatsApp, red tecnica y manual interno",7,7,retiro_modulos_excluido_no_reintroducir_sin_alcance
+1d73b5519c1429a55a325fbd127af16658b16195,1d73b551 2026-08-19 fix(auth): preserve validated tenant in users me response,1,1,historico_no_equivalente_requiere_revision_funcional
+26ba76f9d18a0b54c609b3aa524b77b2485af366,26ba76f9 2026-10-27 fix(guardian-ai): no reintentar fallos permanentes del proveedor,6,6,historico_no_equivalente_requiere_revision_funcional
+2f8c6146eea69c47b2d1111dde8891cb27891d17,"2f8c6146 2026-11-12 feat(web): agregar sitio publico, registro y bienvenida de FullPOS",128,25,historico_no_equivalente_requiere_revision_funcional
+358f442065e8e1dd7d90807b6c7a25af08d2587d,358f4420 2026-11-14 ci: build final TEST closure source and check runtime PDF proxy,1,0,documentacion_o_configuracion_historica_no_reaplicar_automaticamente
+37f6af95d71ebb7e17317ad9786b8bd2c1c4a854,37f6af95 2026-11-12 fix(seguridad): evita que las pruebas disparen el escaner de secretos,3,1,historico_no_equivalente_requiere_revision_funcional
+48406480110dd11913b23a3505cd1b502a625620,48406480 2026-11-05 fix(ecf): el fallback al asistente no depende del codigo de error,2,2,historico_no_equivalente_requiere_revision_funcional
+4fd178d3d2185a373fb57c030ed46ffc56ef3368,"4fd178d3 2026-11-12 feat(app): consolidar mejoras de POS, asistentes, PDF y experiencia Windows",284,255,historico_no_equivalente_requiere_revision_funcional
+578ac35cbf84ea4b44417bcfc346c65f9c6554a2,578ac35c 2026-10-08 docs: record stabilization rc status,1,0,documentacion_o_configuracion_historica_no_reaplicar_automaticamente
+5daf61049cc748abd0acf71d465c81b32480b122,5daf6104 2026-10-07 fix(debug): keep error banner overlay-safe,3,2,historico_no_equivalente_requiere_revision_funcional
+5f87d44c29f6cc50fcee1e9fec2a85c35b8b1e26,5f87d44c 2026-11-12 chore: guardar configuracion local y evidencias de validacion visual,125,0,documentacion_o_configuracion_historica_no_reaplicar_automaticamente
+600fdd3994aeca5bab582bcd580c14ca05c549ca,600fdd39 2026-10-26 feat(guardian): DeepSeek explicito y WhatsApp Cloud API endurecido,17,11,historico_no_equivalente_requiere_revision_funcional
+606985e6071019651c2f67438999b2aaad20e457,606985e6 2026-11-14 docs: record authorized image source preparation without deploy,2,0,documentacion_o_configuracion_historica_no_reaplicar_automaticamente
+643c4e31694966690249a3c60a71b238bc4cd1dd,643c4e31 2026-11-14 docs(release): record authorized image sources saved without deployment,2,0,documentacion_o_configuracion_historica_no_reaplicar_automaticamente
+6b5324af5f3c32c33314dbff088e4853a33715fe,6b5324af 2026-10-08 docs: record deploy gate host blocker,1,0,documentacion_o_configuracion_historica_no_reaplicar_automaticamente
+6bb97707ccffbbc32ab6d1bb202cf5fb8fffa240,6bb97707 2026-10-08 chore(audit): add large dataset query scanner,1,0,documentacion_o_configuracion_historica_no_reaplicar_automaticamente
+6d3013eea834af5e7630ec532ff7ab1921bda72a,6d3013ee 2026-11-06 feat(dosa): diagnostico estructural temporal del webhook (apagado por defecto),5,4,historico_no_equivalente_requiere_revision_funcional
+6e2ff3449cbdbf963010cafab14b8c97aaaba7e6,6e2ff344 2026-11-05 test(ecf): prueba la secuencia real de produccion del 503 hacia el portal DOSA,1,1,historico_no_equivalente_requiere_revision_funcional
+6f58fd04cb7e5a3f58e2500c69484c8c10bbd1dc,6f58fd04 2026-11-14 docs(ecf): record authorized production permissions awaiting owner deploy,2,0,documentacion_o_configuracion_historica_no_reaplicar_automaticamente
+702c055ec1f60d8405e36773260727667407a80a,702c055e 2026-11-13 docs(release): record published digests and guard image-based preparation,3,0,documentacion_o_configuracion_historica_no_reaplicar_automaticamente
+7b803f342fc48ff0fbbab76228d004cd970b4474,7b803f34 2026-08-19 fix(auth): preserve verified tenant identity across incomplete me responses,1,1,historico_no_equivalente_requiere_revision_funcional
+7bb950c35ef21e1b843689001f693ff3091d27c6,7bb950c3 2026-11-14 docs(ecf): record verified PR43 PWA image and source proposal,2,0,documentacion_o_configuracion_historica_no_reaplicar_automaticamente
+80acae05d6d7a96341b71c8407da65565ee24853,80acae05 2026-10-08 docs: record pgweb host recovery,1,0,documentacion_o_configuracion_historica_no_reaplicar_automaticamente
+842a8ae5aea1a48dc99ca800e41ad733a52b7271,842a8ae5 2026-10-29 docs(release): apuntar al runbook canonico de la linea de release,1,0,documentacion_o_configuracion_historica_no_reaplicar_automaticamente
+86144b5363e1c1e43687141a21c36b0db1494532,86144b53 2026-08-31 subida importante,50,31,historico_no_equivalente_requiere_revision_funcional
+8b46da1266405bdeaf676394a205f6b8f354fb01,8b46da12 2026-08-19 test(auth): protect tenant identity on incomplete me verification,1,1,historico_no_equivalente_requiere_revision_funcional
+8b80db72ab482069a916a11bb2b5bc2c7678d51e,8b80db72 2026-11-05 fix(ecf): el backend declara el modo de integracion DOSA y el cliente no deduce la ruta de un error,10,10,historico_no_equivalente_requiere_revision_funcional
+90144a2ed4ef071fb979d055a1eb1cb8a259e292,90144a2e 2026-11-14 docs(ecf): verify owner PWA deployment and accepted E34 PDF,2,0,documentacion_o_configuracion_historica_no_reaplicar_automaticamente
+9026faebf30e689d84ea9c57d4882506dbf41e93,9026faeb 2026-11-13 ci(release): prepare frozen FullPOS images in GHCR without deploying,1,0,documentacion_o_configuracion_historica_no_reaplicar_automaticamente
+951b9930ba60446ff03dadf211dcef00cba6a240,951b9930 2026-10-26 feat(guardian): estados de entrega con evidencia y estado de workers en el panel,12,8,historico_no_equivalente_requiere_revision_funcional
+a2f2b04a05f2557ba575399f97311cb37f42f524,a2f2b04a 2026-10-27 docs(guardian): documentar *_FILE como via recomendada de secretos,1,0,documentacion_o_configuracion_historica_no_reaplicar_automaticamente
+a64b9213fc27e3f49dc8591965d6aed3c1108201,a64b9213 2026-11-14 ci: align frozen checkout with final release source,1,0,documentacion_o_configuracion_historica_no_reaplicar_automaticamente
+b8812732901c720125c7d7ac8e6084b360efdb24,b8812732 2026-10-04 chore(release): bump to 1.0.7+131 for the RD ASO metadata release,2,0,documentacion_o_configuracion_historica_no_reaplicar_automaticamente
+b8f1f5f60e013a981f28408759b26fe4bec5f02d,"b8f1f5f6 2026-11-11 feat(api): integrar APPYRA IA, activacion y traspaso de sesiones",25,21,historico_no_equivalente_requiere_revision_funcional
+c2129dc12ccdff8050e72b1312d5966c2c4eb532,c2129dc1 2026-10-08 ci: add stabilization release image workflow,1,0,documentacion_o_configuracion_historica_no_reaplicar_automaticamente
+c3fc16aa2151107464dec1f993cc14361ef0543c,c3fc16aa 2026-11-14 docs(ecf): record verified FULLTECH production activation,2,0,documentacion_o_configuracion_historica_no_reaplicar_automaticamente
+c4c44844395aa2e00ac648a5ef52fc51de7e9970,"c4c44844 2026-11-14 docs: record final TEST closure images, validation and owner handoff",1,0,documentacion_o_configuracion_historica_no_reaplicar_automaticamente
+c64a9e0f7736d1d315aa980646205f121a5d75f0,c64a9e0f 2026-11-14 ci(ecf): prepare frozen PR43 PWA image without deployment,2,0,documentacion_o_configuracion_historica_no_reaplicar_automaticamente
+cb2a6f348a1d92e2580e6874ff80cd565e6e0b78,cb2a6f34 2026-08-19 fix(auth): preserve tenant restore state on deferred verification,1,1,historico_no_equivalente_requiere_revision_funcional
+cc9910542cb4dacaa539e6b78ddc39773eb84e4e,"cc991054 2026-08-31 ñ{lñ´kl´l´p,l´,lñp,lñ",23,3,historico_no_equivalente_requiere_revision_funcional
+d56f76aa487a460db2f365ba9747484ef1fb0496,d56f76aa 2026-10-07 fix(onboarding): stabilize guided lab,11,10,historico_no_equivalente_requiere_revision_funcional
+d95986348df6186a41ea86a3a0b271e0ebe5048f,d9598634 2026-11-14 ci(release): prepare immutable images for tested e-CF correction,1,0,documentacion_o_configuracion_historica_no_reaplicar_automaticamente
+db93ce1863704b439064ea0954aa770cfcda70ba,db93ce18 2026-11-22 feat(auth): conservar acceso local seguro con validacion movil pendiente,20,14,offline_pendiente_fuera_PR54
+e2f9231e57b18baf6b9e1165c842cbc2b523067d,e2f9231e 2026-11-12 fix(navegacion): retirar Mas modulos y sus opciones del drawer,3,3,retiro_modulos_excluido_no_reintroducir_sin_alcance
+eb2be59d6d850780ec4651f2b42ae34d5f1fb6ae,eb2be59d 2026-10-20 fix(installer): bundle y provisionar el Microsoft Visual C++ redistributable x64,6,0,documentacion_o_configuracion_historica_no_reaplicar_automaticamente
+eedf4cd4d0e9e3d08dcf08a4a9498bd12cda140e,eedf4cd4 2026-10-26 docs(guardian): registrar el commit de la entrega de integraciones,1,0,documentacion_o_configuracion_historica_no_reaplicar_automaticamente
+f178b6636b7e4215141bd903539951ef3c6ffc68,"f178b663 2026-11-05 test(dosa): E2E HTTP del webhook con firma HMAC, duplicados, concurrencia y aislamiento",1,1,historico_no_equivalente_requiere_revision_funcional
+f46c0ab17ea0ae0e4f215890f7210f42be41baec,f46c0ab1 2026-11-06 test(dosa): el evento no crea postulaciones ni altera el Intento 1,1,1,historico_no_equivalente_requiere_revision_funcional
+f56e11fd732a997bb84801cb04f30379446d768a,f56e11fd 2026-10-08 docs: record ci builder billing blocker,1,0,documentacion_o_configuracion_historica_no_reaplicar_automaticamente

@@ -19,6 +19,7 @@ import '../../core/routing/routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/app_feedback.dart';
 import '../../core/utils/string_utils.dart';
+import '../../core/utils/native_phone_layout.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
 import '../../core/widgets/user_avatar.dart';
@@ -219,12 +220,14 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
     UserModel? currentUser,
     AsyncValue<List<UserModel>> usersState,
   ) {
+    final phone = usesNativePhoneLayout(context);
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: CustomAppBar(
-        title: 'Usuarios y permisos',
+        title: phone ? 'Usuario' : 'Usuarios y permisos',
         showLogo: false,
-        trailing: currentUser == null
+        showDepartmentLabel: !phone,
+        trailing: phone || currentUser == null
             ? null
             : Padding(
                 padding: const EdgeInsets.only(right: 12),
@@ -242,7 +245,7 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
                   ),
                 ),
               ),
-        titleWidget: _searching
+        titleWidget: !phone && _searching
             ? TextField(
                 controller: _searchCtrl,
                 autofocus: true,
@@ -266,7 +269,16 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
               )
             : null,
         actions: [
-          Padding(
+          if (phone)
+            IconButton(
+              tooltip: 'PIN de administrador',
+              onPressed: () => _showAdminPinDialog(context, ref),
+              icon: const ColorFiltered(
+                colorFilter: ColorFilter.mode(Colors.white, BlendMode.srcIn),
+                child: _AdminPinIcon(),
+              ),
+            )
+          else Padding(
             padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
             child: OutlinedButton(
               onPressed: () => _showAdminPinDialog(context, ref),
@@ -277,7 +289,7 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
               ),
             ),
           ),
-          IconButton(
+          if (!phone) IconButton(
             tooltip: 'Buscar',
             onPressed: () => setState(() => _searching = true),
             icon: const MobileActionIcon(Icons.search),
@@ -386,6 +398,7 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
                     filteredUsers,
                     currentUser,
                   ),
+                  onPermissions: phone ? () => _openPermissionsPanel(user) : null,
                   onEdit: () => _showUserDialog(context, ref, user),
                   onDelete: () => _showDeleteDialog(context, ref, user),
                   onToggleBlock:
@@ -1098,6 +1111,7 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
     String? fotoLicenciaUrl = user?.fotoLicenciaUrl;
     String? fotoPersonalUrl = user?.fotoPersonalUrl;
     final formScrollController = ScrollController();
+    final phone = usesNativePhoneLayout(context);
 
     // ---- Piezas del formulario (identidad visual de «Datos de empresa») ----
     // Rótulo pequeño sobre cada control, campos densos, bordes finos y radios
@@ -1112,7 +1126,7 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
 
     InputDecoration formInputDecoration() {
       final border = OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(phone ? 0 : 8),
         borderSide: const BorderSide(color: AppColors.border),
       );
       return InputDecoration(
@@ -1126,7 +1140,7 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
         border: border,
         enabledBorder: border,
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(phone ? 0 : 8),
           borderSide: const BorderSide(color: AppColors.primary, width: 1.4),
         ),
         disabledBorder: border,
@@ -1399,7 +1413,9 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
             Expanded(
               child: OutlinedButton(
                 onPressed: () => Navigator.of(modalContext).pop(),
-                style: _usersOutlinedButtonStyle(),
+                style: phone ? _usersOutlinedButtonStyle().copyWith(
+                  shape: const WidgetStatePropertyAll(RoundedRectangleBorder()),
+                ) : _usersOutlinedButtonStyle(),
                 child: const Text('Cancelar'),
               ),
             ),
@@ -1407,6 +1423,7 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
             Expanded(
               child: FilledButton(
                 onPressed: () => submitUser(modalContext),
+                style: phone ? FilledButton.styleFrom(shape: const RoundedRectangleBorder()) : null,
                 child: Text(user == null ? 'Crear usuario' : 'Guardar cambios'),
               ),
             ),
@@ -1477,7 +1494,7 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
       if (!desktop) {
         return Material(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(phone ? 0 : 12),
           clipBehavior: Clip.antiAlias,
           child: SafeArea(child: content),
         );
@@ -1502,6 +1519,7 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
     }
 
     final isDesktop = _isDesktop(context);
+    TransitionRoute<dynamic>? editorRoute;
     final dialogFuture = isDesktop
         ? showGeneralDialog<void>(
             context: context,
@@ -1551,6 +1569,7 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
         : showDialog<void>(
             context: context,
             builder: (dialogContext) {
+              editorRoute = ModalRoute.of(dialogContext);
               final size = MediaQuery.sizeOf(dialogContext);
               return Dialog(
                 insetPadding: const EdgeInsets.symmetric(
@@ -1562,7 +1581,7 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
                 child: ConstrainedBox(
                   constraints: BoxConstraints(
                     maxWidth: 520,
-                    maxHeight: size.height * 0.94,
+                    maxHeight: phone ? (size.height * 0.72).clamp(0.0, 560.0) : size.height * 0.94,
                   ),
                   child: StatefulBuilder(
                     builder: (dialogContext, setModalState) => buildSheet(
@@ -1576,7 +1595,9 @@ class _UsersScreenState extends ConsumerState<_UsersScreenBody> {
             },
           );
 
-    dialogFuture.whenComplete(() {
+    dialogFuture.whenComplete(() async {
+      // The pop result completes before the exit animation removes the fields.
+      if (phone) await editorRoute?.completed;
       nameCtrl.dispose();
       emailCtrl.dispose();
       familiarPhoneCtrl.dispose();
@@ -3494,10 +3515,10 @@ class _UserRowCardState extends State<_UserRowCard> {
                       color: Colors.white,
                       elevation: 8,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(usesNativePhoneLayout(context) ? 0 : 10),
                         side: const BorderSide(color: AppColors.border),
                       ),
-                      icon: const Icon(
+                      icon: const MobileActionIcon(
                         Icons.more_vert,
                         size: 18,
                         color: AppColors.textMuted,
@@ -3783,6 +3804,7 @@ class _UserCard extends StatelessWidget {
     required this.onEdit,
     required this.onDelete,
     required this.onToggleBlock,
+    this.onPermissions,
   });
 
   final UserModel user;
@@ -3790,6 +3812,7 @@ class _UserCard extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onDelete;
   final VoidCallback? onToggleBlock;
+  final VoidCallback? onPermissions;
 
   @override
   Widget build(BuildContext context) {
@@ -3861,10 +3884,10 @@ class _UserCard extends StatelessWidget {
                   color: Colors.white,
                   elevation: 8,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(usesNativePhoneLayout(context) ? 0 : 10),
                     side: const BorderSide(color: AppColors.border),
                   ),
-                  icon: const Icon(
+                  icon: const MobileActionIcon(
                     Icons.more_vert,
                     size: 20,
                     color: AppColors.textMuted,
@@ -3872,6 +3895,8 @@ class _UserCard extends StatelessWidget {
                   onSelected: (action) {
                     switch (action) {
                       case _UserMenuAction.permisos:
+                        (onPermissions ?? onView)();
+                        break;
                       case _UserMenuAction.ver:
                         onView();
                         break;
