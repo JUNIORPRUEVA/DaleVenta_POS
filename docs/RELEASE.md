@@ -103,10 +103,41 @@ iOS:
 - `submit_to_testflight` is `false`: the IPA is uploaded and must be submitted from App Store Connect,
   or set the flag to `true` to let Codemagic submit it.
 - The IPA cannot be built on Windows; the first real iOS build happens on Codemagic (macOS/Xcode).
+- Mobile preparation (2026-11-22): both iOS workflows pin Flutter 3.41.6,
+  prepare the ignored app configuration and run the shared mobile UI regression
+  before building. After PR checks and an owner-performed merge, select
+  `production-main` and `ios-testflight` in the existing Codemagic application.
+  Verify the selected merge revision before starting. This workflow produces the
+  signed IPA; the no-codesign workflow is for compilation evidence only.
+- The current build-number calculation does not query Apple: compare the
+  computed value with App Store Connect before submitting. A configured minimum
+  cannot guarantee that a number has never been uploaded.
 
 Android:
 
-- Flutter platform folder exists. Package with the approved store or sideload workflow for the target release.
+- Android is built separately; Codemagic is reserved for iOS. Use a dedicated
+  clean checkout and run Flutter tests and release builds sequentially: both
+  generate plugin registration files, so a concurrent integration test can
+  contaminate the release registrant.
+- Reuse the existing upload keystore and ignored `android/key.properties`.
+  Never generate a replacement key for an existing Play Store application.
+  Confirm the upload certificate fingerprint and an unused, higher versionCode
+  in Play Console before uploading. Do not commit signing files or passwords.
+- From `apps/fulltech_app`, after preparing the ignored public app `.env` and
+  running `flutter pub get`, build:
+
+  ```powershell
+  flutter build appbundle --release --dart-define=APP_ENV=production --dart-define=FULLPOS_PRODUCTION_BUILD=true --dart-define=API_BASE_URL=https://daleventapos-backend.gcdndd.easypanel.host --dart-define=APP_BASE_URL=https://fullposcloud.fulltechrd.com --dart-define=API_TIMEOUT_MS=15000
+  ```
+
+- Validate `build/app/outputs/bundle/release/app-release.aab` using Google's
+  bundletool and JDK jarsigner; verify package, version, upload certificate,
+  native 16 KB alignment and artifact SHA256. A local build does not authorize
+  store publication. First use an approved internal testing track and verify
+  upgrade/login with existing app data before wider distribution.
+- The iOS workflows pin Flutter 3.41.6, create the ignored public app config on
+  clean checkout, enforce static analysis and run the focused mobile UI tests.
+  A native signed iOS build must still pass on Codemagic/macOS.
 
 Windows:
 
