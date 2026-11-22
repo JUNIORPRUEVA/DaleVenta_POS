@@ -362,7 +362,7 @@ void main() {
       expect(find.text('Escanear producto'), findsOneWidget);
       expect(find.byKey(const ValueKey('phone-sale-details')), findsOneWidget);
       final panel = tester.getRect(find.byKey(const ValueKey('phone-sale-details')));
-      expect(panel.width, closeTo(390 * 0.60 - 32, 1));
+      expect(panel.width, closeTo(390 * 0.75 - 32, 1));
       await _savePhonePreview(tester, 'half-actions');
       expect(find.text('Datos de la venta'), findsNothing);
       expect(find.text('Herramientas'), findsNothing);

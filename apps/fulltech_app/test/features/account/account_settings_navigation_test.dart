@@ -260,7 +260,7 @@ bool _companySettingSwitchValue(WidgetTester tester, String title) =>
 void main() {
   testWidgets('native settings uses neutral rows and preserves company app and plans destinations', (tester) async {
     final router = await _pumpSettingsRouter(tester, viewport: const Size(390, 844));
-    for (final label in ['Empresa', 'Impresora', 'App y actualizaciones', 'Apps de la empresa', 'Planes', 'Atajos de teclado', 'Eliminar cuenta']) {
+    for (final label in ['Empresa', 'Impresora', 'Apps de la empresa', 'Planes', 'Atajos de teclado', 'Eliminar cuenta']) {
       expect(find.byKey(ValueKey('phone-settings-row-$label')), findsOneWidget);
     }
     await tester.tap(find.text('Planes'));
@@ -268,11 +268,8 @@ void main() {
     expect(find.text('Destino de planes'), findsOneWidget);
     router.go(Routes.configuracion);
     await _settleSettingsFrame(tester);
-    await tester.tap(find.text('App y actualizaciones', findRichText: false));
-    await _settleSettingsFrame(tester);
-    expect(find.text('Destino de actualizaciones'), findsOneWidget);
-    router.go(Routes.configuracion);
-    await _settleSettingsFrame(tester);
+    expect(find.text('App y actualizaciones'), findsNothing);
+    expect(find.byIcon(Icons.system_update_alt_rounded), findsNothing);
     await tester.tap(find.text('Apps de la empresa'));
     await _settleSettingsFrame(tester);
     expect(find.text('Destino de apps'), findsOneWidget);

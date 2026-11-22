@@ -219,7 +219,7 @@ Future<void> _pump(
         context,
       );
     }
-    for (final name in ['back', 'search', 'filter', 'refresh']) {
+    for (final name in ['back', 'search', 'filter', 'refresh', 'more']) {
       await precacheImage(
         AssetImage('assets/image/mobile_navigation/$name.png'),
         context,

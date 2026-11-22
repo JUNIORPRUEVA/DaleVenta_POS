@@ -560,7 +560,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
                   ),
                   PopupMenuButton<_ClientesMobileAction>(
                     tooltip: 'Más opciones',
-                    icon: const Icon(Icons.more_vert_rounded),
+                    icon: const MobileActionIcon(Icons.more_vert_rounded),
                     onSelected: (action) {
                       switch (action) {
                         case _ClientesMobileAction.summary:

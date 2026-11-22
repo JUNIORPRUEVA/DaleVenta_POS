@@ -184,7 +184,7 @@ class HistoryActionBar extends StatelessWidget {
               dimension: 40,
               child: PopupMenuButton<int>(
                 tooltip: 'Más acciones',
-                icon: const Icon(Icons.more_horiz_rounded, size: 22),
+                icon: const MobileActionIcon(Icons.more_horiz_rounded, size: 22),
                 onSelected: (index) => actions[index].onPressed?.call(),
                 itemBuilder: (_) => [
                   for (var i = count; i < actions.length; i++)

@@ -9,6 +9,7 @@ import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:printing/printing.dart';
 
 import '../../../core/errors/user_safe_error_text.dart';
+import '../../../core/theme/app_colors.dart';
 import '../../../core/printing/cash_drawer/cash_drawer_command.dart';
 import '../../../core/printing/cash_drawer/cash_drawer_service.dart';
 import '../../../core/printing/mobile_print_service.dart';
@@ -878,7 +879,7 @@ class _MobilePrinterSettingsViewState
       decoration: BoxDecoration(
         color: Colors.white,
         border: Border.all(color: const Color(0xFFDDE7EF)),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.zero,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -962,18 +963,14 @@ class _MobilePrinterSettingsViewState
             title: 'Estado',
             children: [
               _infoRow(
-                'Impresión',
-                settings.printingEnabled ? 'Activada' : 'Desactivada',
-              ),
-              _infoRow(
                 'Impresora',
                 settings.printerName.trim().isEmpty
                     ? 'Sin seleccionar'
                     : settings.printerName.trim(),
               ),
-              _infoRow('Conexión', _connectionLabel(settings.connectionType)),
               _infoRow('Estado', _statusText(settings.lastStatus)),
-              _infoRow('Última conexión', lastConnected),
+              if ((settings.lastError ?? '').trim().isNotEmpty)
+                _infoRow('Última conexión', lastConnected),
               if ((settings.lastError ?? '').trim().isNotEmpty)
                 Text(
                   settings.lastError!,
@@ -1019,7 +1016,7 @@ class _MobilePrinterSettingsViewState
               ),
               const SizedBox(height: 8),
               const Text(
-                'Bluetooth directo funciona en Android con impresoras ESC/POS emparejadas como PT-210. En iOS usa AirPrint/sistema o PDF.',
+                'Bluetooth ESC/POS en Android. En iPhone usa AirPrint, red o PDF.',
                 style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
               ),
             ],
@@ -1035,7 +1032,7 @@ class _MobilePrinterSettingsViewState
                       : '${settings.printerName} ${settings.bluetoothAddress}',
                 ),
                 const Text(
-                  'Enciende la impresora y toca Conectar. Si Android pide PIN para PT-210 usa 0000. La app prioriza PT-210, impresoras térmicas, POS, 58 mm y ESC/POS.',
+                  'Enciende y empareja la impresora antes de conectar.',
                   style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
                 ),
                 const SizedBox(height: 8),
@@ -1141,9 +1138,6 @@ class _MobilePrinterSettingsViewState
                   ...visibleBluetoothPrinters.map((printer) {
                     final selected =
                         printer.macAdress == settings.bluetoothAddress;
-                    final score = MobilePrintService.bluetoothPrinterScore(
-                      printer,
-                    );
                     final name = printer.name.trim().isEmpty
                         ? 'Impresora Bluetooth'
                         : printer.name;
@@ -1172,7 +1166,7 @@ class _MobilePrinterSettingsViewState
                                     Text(name, overflow: TextOverflow.ellipsis),
                                     const SizedBox(height: 2),
                                     Text(
-                                      '${printer.macAdress} · compatibilidad $score',
+                                      printer.macAdress,
                                       style: const TextStyle(
                                         fontSize: 12,
                                         color: Color(0xFF64748B),
@@ -1355,6 +1349,12 @@ class _MobilePrinterSettingsViewState
                     _save(settings.copyWith(footerMessage: value)),
               ),
               const SizedBox(height: 8),
+              ExpansionTile(
+                title: const Text('Opciones avanzadas'),
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: EdgeInsets.zero,
+                children: [
+              _infoRow('Conexión', _connectionLabel(settings.connectionType)),
               Row(
                 children: [
                   Expanded(
@@ -1417,6 +1417,8 @@ class _MobilePrinterSettingsViewState
                   label: const Text('Probar apertura de caja'),
                 ),
               ),
+                ],
+              ),
             ],
           ),
           FilledButton.icon(
@@ -1475,7 +1477,25 @@ class _MobilePrinterSettingsViewState
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(mobilePrinterSettingsProvider);
-    final body = settings.when(
+    final theme = Theme.of(context);
+    const shape = RoundedRectangleBorder();
+    final buttonStyle = ButtonStyle(shape: const WidgetStatePropertyAll(shape),
+      minimumSize: const WidgetStatePropertyAll(Size(0, 44)));
+    final body = Theme(
+      data: theme.copyWith(
+        inputDecorationTheme: theme.inputDecorationTheme.copyWith(
+          border: const OutlineInputBorder(borderRadius: BorderRadius.zero),
+          enabledBorder: const OutlineInputBorder(borderRadius: BorderRadius.zero,
+            borderSide: BorderSide(color: AppColors.border)),
+          focusedBorder: const OutlineInputBorder(borderRadius: BorderRadius.zero,
+            borderSide: BorderSide(color: AppColors.primary, width: 1.4)),
+        ),
+        filledButtonTheme: FilledButtonThemeData(style: buttonStyle),
+        outlinedButtonTheme: OutlinedButtonThemeData(style: buttonStyle),
+        textButtonTheme: TextButtonThemeData(style: buttonStyle),
+        segmentedButtonTheme: SegmentedButtonThemeData(style: buttonStyle),
+      ),
+      child: settings.when(
       data: _content,
       loading: () => const Center(child: Text('Sincronizando impresora...')),
       error: (error, _) => Center(
@@ -1485,6 +1505,7 @@ class _MobilePrinterSettingsViewState
             fallback: 'No se pudo cargar la configuración de impresión.',
           ),
         ),
+      ),
       ),
     );
     if (widget.embedded) {

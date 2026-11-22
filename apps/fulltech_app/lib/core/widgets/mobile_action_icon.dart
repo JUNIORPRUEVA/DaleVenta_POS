@@ -3,6 +3,18 @@ import '../utils/native_phone_layout.dart';
 
 String? mobileActionAsset(IconData? icon) {
   if ({
+    Icons.more_vert,
+    Icons.more_vert_rounded,
+    Icons.more_vert_outlined,
+    Icons.more_vert_sharp,
+    Icons.more_horiz,
+    Icons.more_horiz_rounded,
+    Icons.more_horiz_outlined,
+    Icons.more_horiz_sharp,
+  }.contains(icon)) {
+    return 'assets/image/mobile_navigation/more.png';
+  }
+  if ({
     Icons.search,
     Icons.search_rounded,
     Icons.search_outlined,

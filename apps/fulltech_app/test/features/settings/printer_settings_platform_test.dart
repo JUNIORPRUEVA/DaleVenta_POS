@@ -103,6 +103,20 @@ Future<void> _pump(
 }
 
 void main() {
+  testWidgets('mobile advanced controls stay accessible without cluttering the initial view', (tester) async {
+    await _pump(tester, PrintingPlatform.android);
+    expect(find.text('Encoding'), findsNothing);
+    final advanced = find.text('Opciones avanzadas');
+    await tester.ensureVisible(advanced);
+    await tester.tap(advanced);
+    await tester.pumpAndSettle();
+    expect(find.text('Encoding'), findsOneWidget);
+    expect(find.text('Copias'), findsOneWidget);
+    final context = tester.element(find.text('Encoding'));
+    final shape = Theme.of(context).filledButtonTheme.style!.shape!.resolve({})! as RoundedRectangleBorder;
+    expect(shape.borderRadius, BorderRadius.zero);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('mobile device displays MobilePrinterSettingsView', (
     tester,
   ) async {
@@ -134,7 +148,7 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.textContaining('Bluetooth directo funciona en Android'),
+      find.textContaining('Bluetooth ESC/POS en Android'),
       findsOneWidget,
     );
   });

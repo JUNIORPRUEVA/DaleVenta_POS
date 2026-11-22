@@ -3379,7 +3379,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
           final phone = usesNativePhoneLayout(this.context);
           final panelWidth = phone
-              ? MediaQuery.sizeOf(context).width * 0.60
+              ? MediaQuery.sizeOf(context).width * 0.75
               : (MediaQuery.sizeOf(context).width * 0.72).clamp(
             268.0,
             330.0,
@@ -3413,11 +3413,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                   height: double.infinity,
                   child: DecoratedBox(
                     decoration: BoxDecoration(
-                      color: phone ? null : Colors.white,
-                      gradient: phone ? const LinearGradient(
-                        colors: [Color(0x00FFFFFF), Colors.white, Colors.white],
-                        stops: [0, 0.08, 1],
-                      ) : null,
+                      color: Colors.white,
                       borderRadius: phone ? BorderRadius.zero : const BorderRadius.only(
                         topLeft: Radius.circular(8),
                         bottomLeft: Radius.circular(8),
@@ -8869,7 +8865,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                     ),
                   ),
                 ],
-                icon: Icon(
+                icon: MobileActionIcon(
                   Icons.more_vert_rounded,
                   color: selected
                       ? const Color(0xFF1957E6)

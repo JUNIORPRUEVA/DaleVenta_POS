@@ -270,10 +270,10 @@ class AccountSettingsScreen extends ConsumerWidget {
             accent: const Color(0xFF0F6170),
             onTap: () => context.go(Routes.configuracionAlmacenes),
           ),
-        _SettingsActionCard(
+        if (!phone) _SettingsActionCard(
           icon: Icons.system_update_alt_rounded,
-          title: phone ? 'App y actualizaciones' : 'App',
-          description: phone ? 'Versión instalada y actualizaciones.' : 'Versión instalada y actualizaciones de Windows.',
+          title: 'App',
+          description: 'Versión instalada y actualizaciones de Windows.',
           accent: const Color(0xFF1957E6),
           onTap: () => context.go(Routes.actualizaciones),
         ),
