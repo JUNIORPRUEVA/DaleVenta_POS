@@ -112,6 +112,14 @@ iOS:
 - The current build-number calculation does not query Apple: compare the
   computed value with App Store Connect before submitting. A configured minimum
   cannot guarantee that a number has never been uploaded.
+- Xcode 26 upload compatibility: `ios-testflight` sets
+  `APP_STORE_CONNECT_ALTOOL_ADDITIONAL_ARGUMENTS=--use-old-altool`, the
+  [Codemagic-documented workaround](https://help.codemagic.io/articles/7154824641-why-am-i-getting-a-cannot-determine-the-apple-id-from-bundle-id-error-during-an-ios-build)
+  for altool error 19/31 after a successful signed build. This changes only the
+  upload tool path. Before retrying, check the existing App Store Connect app
+  record, API-key access and outstanding agreements; do not create another app
+  or replace the bundle identifier/signing material to bypass a lookup error.
+  A successful local YAML check does not prove Apple accepted the upload.
 
 Android:
 

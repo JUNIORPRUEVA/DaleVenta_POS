@@ -145,6 +145,9 @@ workflows:
         APP_DIR: apps/fulltech_app
         BUNDLE_ID: com.fulltechrd.fullposcloud
         APPLE_TEAM_ID: M4WNZDXN2U
+        # Codemagic's documented workaround for Xcode 26 altool error 19/31.
+        # Upload transport only; preserve app identity and signing integration.
+        APP_STORE_CONNECT_ALTOOL_ADDITIONAL_ARGUMENTS: "--use-old-altool"
         # App Store Connect floor. Version trains 1.0.3 and 1.0.5 are closed, so any
         # build below these values is rejected on import ("Invalid Pre-Release Train" /
         # "Invalid Version"). Raise these only together with the matching pubspec bump.
