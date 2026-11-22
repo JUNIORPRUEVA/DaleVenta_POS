@@ -195,7 +195,7 @@ Future<void> _pump(
   }
   await tester.runAsync(() async {
     final context = tester.element(find.byType(credit ? SalesCreditScreen : CotizacionesHistorialScreen));
-    for (final name in ['back', 'search', 'filter', 'refresh']) {
+    for (final name in ['back', 'search', 'filter', 'refresh', 'more']) {
       await precacheImage(AssetImage('assets/image/mobile_navigation/$name.png'), context);
     }
   });

@@ -96,7 +96,7 @@ Future<void> _pump(
     for (final name in ['search', 'edit', 'delete']) {
       await precacheImage(AssetImage('assets/image/action_$name.png'), context);
     }
-    for (final name in ['back', 'search', 'filter', 'refresh']) {
+    for (final name in ['back', 'search', 'filter', 'refresh', 'more']) {
       await precacheImage(AssetImage('assets/image/mobile_navigation/$name.png'), context);
     }
   });
