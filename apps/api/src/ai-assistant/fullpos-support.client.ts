@@ -1,4 +1,4 @@
-import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { HttpException, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHmac } from 'node:crypto';
 
@@ -27,11 +27,20 @@ export class FullposSupportClient {
     try {
       const response = await fetch(url, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(10000),
         headers: { 'content-type': 'application/json', 'x-fullpos-timestamp': timestamp, 'x-fullpos-signature': signature }, body });
+      // Un caso que no existe o es de otra empresa no es una caída del servicio:
+      // el CRM responde 404 sin decir a quién pertenece. Se traduce a un 404
+      // propio y genérico, sin propietario, referencia ni contenido.
+      if (response.status === 404) throw new NotFoundException('No encontramos ese caso de soporte.');
       if (!response.ok) throw unavailable();
       const result = await response.json() as { ok?: boolean; case?: SupportCase };
       if (!result.ok || !result.case?.id || !result.case.reference || !Array.isArray(result.case.messages)) throw unavailable();
       return result.case;
-    } catch { throw unavailable(); }
+    } catch (error) {
+      // El 404 intencional viaja tal cual; sólo los fallos reales se convierten
+      // en 503 para que nadie reintente un recurso que no le pertenece.
+      if (error instanceof HttpException) throw error;
+      throw unavailable();
+    }
   }
 }
 

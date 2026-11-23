@@ -1,4 +1,5 @@
 import { ConfigService } from '@nestjs/config';
+import { NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { createHmac } from 'node:crypto';
 import { FullposSupportClient, supportIntent } from './fullpos-support.client';
 
@@ -38,5 +39,38 @@ describe('FullPOS CRM support bridge', () => {
     fetchMock.mockResolvedValue({ ok: true, json: async () => ({ ok: true }) } as Response);
     await expect(client().request({})).rejects.toThrow('No pudimos confirmar');
     await expect(client('http://untrusted.invalid').request({})).rejects.toThrow('No pudimos confirmar');
+  });
+
+  it('un caso inexistente o ajeno responde 404 genérico y no se convierte en 503', async () => {
+    jest.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: false,
+      status: 404,
+      json: async () => ({ ok: false }),
+    } as Response);
+    const error = await client().request({ action: 'read', ticketId: 'case-de-otra-empresa' }).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(NotFoundException);
+    expect((error as NotFoundException).getStatus()).toBe(404);
+    const message = String((error as NotFoundException).message);
+    // Sin propietario, sin referencia y sin contenido del caso.
+    expect(message).not.toMatch(/company|empresa|TK-|[0-9a-f]{16}/i);
+    expect(message).toBe('No encontramos ese caso de soporte.');
+  });
+
+  it('un 5xx real sigue siendo 503 y tampoco anuncia un caso registrado', async () => {
+    jest.spyOn(globalThis, 'fetch').mockResolvedValue({ ok: false, status: 503, json: async () => ({ ok: false }) } as Response);
+    const error = await client().request({ action: 'open' }).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(ServiceUnavailableException);
+    expect((error as ServiceUnavailableException).getStatus()).toBe(503);
+    expect(String((error as Error).message)).toContain('No pudimos confirmar');
+  });
+
+  it('una respuesta 200 ilegible sigue siendo 503, nunca un caso inventado', async () => {
+    jest.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, case: { id: 'case-a' } }),
+    } as Response);
+    const error = await client().request({ action: 'read' }).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(ServiceUnavailableException);
   });
 });
