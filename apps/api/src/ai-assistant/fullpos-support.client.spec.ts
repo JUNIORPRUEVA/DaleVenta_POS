@@ -64,6 +64,17 @@ describe('FullPOS CRM support bridge', () => {
     expect(String((error as Error).message)).toContain('No pudimos confirmar');
   });
 
+  it.each(['open', undefined])('un 404 sin recurso consultado (%s) indica integración no disponible', async (action) => {
+    jest.spyOn(globalThis, 'fetch').mockResolvedValue({ ok: false, status: 404 } as Response);
+    await expect(client().request({ action })).rejects.toBeInstanceOf(ServiceUnavailableException);
+  });
+
+  it('responder a un caso inexistente conserva el 404 genérico', async () => {
+    jest.spyOn(globalThis, 'fetch').mockResolvedValue({ ok: false, status: 404 } as Response);
+    await expect(client().request({ action: 'reply', ticketId: 'missing-case' }))
+      .rejects.toBeInstanceOf(NotFoundException);
+  });
+
   it('una respuesta 200 ilegible sigue siendo 503, nunca un caso inventado', async () => {
     jest.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,

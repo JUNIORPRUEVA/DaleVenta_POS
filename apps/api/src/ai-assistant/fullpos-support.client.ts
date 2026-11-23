@@ -30,7 +30,9 @@ export class FullposSupportClient {
       // Un caso que no existe o es de otra empresa no es una caída del servicio:
       // el CRM responde 404 sin decir a quién pertenece. Se traduce a un 404
       // propio y genérico, sin propietario, referencia ni contenido.
-      if (response.status === 404) throw new NotFoundException('No encontramos ese caso de soporte.');
+      if (response.status === 404 && ['read', 'reply'].includes(String(input.action))) {
+        throw new NotFoundException('No encontramos ese caso de soporte.');
+      }
       if (!response.ok) throw unavailable();
       const result = await response.json() as { ok?: boolean; case?: SupportCase };
       if (!result.ok || !result.case?.id || !result.case.reference || !Array.isArray(result.case.messages)) throw unavailable();
