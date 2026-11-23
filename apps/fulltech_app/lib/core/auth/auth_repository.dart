@@ -23,6 +23,10 @@ import 'admin_authorization_session.dart';
 import 'auth_interceptor.dart';
 import 'auth_session_events.dart';
 import 'token_storage.dart';
+import 'offline_login.dart';
+import '../debug/trace_log.dart';
+import '../usage/client_telemetry_headers.dart';
+import '../offline/offline_emergency_policy.dart';
 import '../loading/app_loading_controller.dart';
 import '../loading/loading_interceptor.dart';
 
@@ -150,7 +154,8 @@ final dioProvider = Provider<Dio>((ref) {
       cachedResponseResolver: offlineCacheInterceptor.cachedResponseFor,
       onReachabilityChanged: (reachable) {
         ref.read(serverConnectionProvider.notifier).state = reachable
-            ? ServerConnection.reachable : ServerConnection.unreachable;
+            ? ServerConnection.reachable
+            : ServerConnection.unreachable;
       },
     ),
   );
@@ -163,19 +168,27 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
   return AuthRepository(
     dio: ref.watch(dioProvider),
     storage: ref.watch(tokenStorageProvider),
+    offlineLogin: OfflineLogin(server: ref.watch(dioProvider).options.baseUrl),
   );
 });
 
 class AuthRepository {
   final Dio _dio;
   final TokenStorage _storage;
+  final OfflineLogin? _offlineLogin;
+  bool _loginInProgress = false;
+  int _authGeneration = 0;
   static const Duration _loginTimeout = Duration(seconds: 25);
   static const Duration _bootstrapTimeout = Duration(seconds: 12);
   static const Duration _storageTimeout = Duration(seconds: 3);
 
-  AuthRepository({required Dio dio, required TokenStorage storage})
-    : _dio = dio,
-      _storage = storage;
+  AuthRepository({
+    required Dio dio,
+    required TokenStorage storage,
+    OfflineLogin? offlineLogin,
+  }) : _dio = dio,
+       _storage = storage,
+       _offlineLogin = offlineLogin;
 
   String _extractMessage(dynamic data, String fallback) {
     if (data is String && data.trim().isNotEmpty) return data;
@@ -649,8 +662,10 @@ class AuthRepository {
   }
 
   Future<UserModel> login(String email, String password) async {
+    if (_loginInProgress) throw StateError('Ya hay un acceso en curso');
+    _loginInProgress = true;
+    final generation = ++_authGeneration;
     try {
-      await _safeClearTokens();
       final normalizedEmail = email.trim();
       Response<dynamic> res;
 
@@ -682,15 +697,17 @@ class AuthRepository {
 
       final access = res.data['accessToken'] as String?;
       final refresh = res.data['refreshToken'] as String?;
-      if (access != null && access.isNotEmpty) {
-        await _storage.saveTokens(access, refresh);
-      }
       try {
         final me = await _dio
             .get(
               ApiRoutes.usersMe,
               options: Options(
-                extra: const {'disableOfflineCache': true, 'skipLoader': true},
+                headers: {'Authorization': 'Bearer $access'},
+                extra: const {
+                  'disableOfflineCache': true,
+                  'skipLoader': true,
+                  'loginCandidate': true,
+                },
               ),
             )
             .timeout(_loginTimeout);
@@ -698,19 +715,30 @@ class AuthRepository {
           _userFromMeResponse(me.data, access),
           accountCreated: false,
         );
-        await _storage.saveUserSnapshot(user);
-        unawaited(_refreshOfflineEmergencyAuthorizationSafe());
-        return user;
-      } on DioException {
+        return await _acceptLogin(
+          user,
+          access,
+          refresh,
+          email,
+          password,
+          generation,
+        );
+      } on DioException catch (error) {
+        if (!_localLoginTransportFailure(error)) rethrow;
         final fallbackUser = _userFromLoginResponse(res.data);
         if (fallbackUser != null) {
           final user = _requireReadySession(
             _ensureCompanyFromAccessToken(fallbackUser, access),
             accountCreated: false,
           );
-          await _storage.saveUserSnapshot(user);
-          unawaited(_refreshOfflineEmergencyAuthorizationSafe());
-          return user;
+          return await _acceptLogin(
+            user,
+            access,
+            refresh,
+            email,
+            password,
+            generation,
+          );
         }
         rethrow;
       } on TimeoutException {
@@ -720,13 +748,21 @@ class AuthRepository {
             _ensureCompanyFromAccessToken(fallbackUser, access),
             accountCreated: false,
           );
-          await _storage.saveUserSnapshot(user);
-          unawaited(_refreshOfflineEmergencyAuthorizationSafe());
-          return user;
+          return await _acceptLogin(
+            user,
+            access,
+            refresh,
+            email,
+            password,
+            generation,
+          );
         }
         rethrow;
       }
     } on TimeoutException {
+      if (_offlineLogin?.enabled == true) {
+        return await _unlockLocal(email, password, generation);
+      }
       throw const ApiException.detailed(
         message:
             'El servicio tardó demasiado en responder. Inténtalo de nuevo.',
@@ -735,12 +771,201 @@ class AuthRepository {
         retryable: true,
       );
     } on DioException catch (e) {
+      if (_localLoginTransportFailure(e) && _offlineLogin?.enabled == true) {
+        return await _unlockLocal(email, password, generation);
+      }
+      if (e.response?.statusCode == 401 || e.response?.statusCode == 403) {
+        await _forgetLocalSafely(email);
+      }
       throw _mapLoginError(_mapDioError(e, 'No se pudo iniciar sesión'));
     } on ApiException catch (e) {
       throw _mapLoginError(e);
     } catch (_) {
       rethrow;
+    } finally {
+      _loginInProgress = false;
     }
+  }
+
+  bool _localLoginTransportFailure(DioException error) =>
+      error.type == DioExceptionType.connectionError ||
+      error.type == DioExceptionType.connectionTimeout ||
+      error.type == DioExceptionType.sendTimeout ||
+      error.type == DioExceptionType.receiveTimeout ||
+      const [500, 502, 503, 504].contains(error.response?.statusCode);
+
+  Future<UserModel> _acceptLogin(
+    UserModel user,
+    String? access,
+    String? refresh,
+    String email,
+    String password,
+    int generation,
+  ) async {
+    final identity = _identityFromAccessToken(access);
+    _checkLoginGeneration(generation);
+    if (access == null ||
+        access.isEmpty ||
+        identity == null ||
+        !_snapshotMatchesToken(user, identity)) {
+      throw const ApiException.detailed(
+        message: 'No pudimos verificar tu acceso. Intenta nuevamente.',
+        type: ApiErrorType.parse,
+        displayCode: 'SESSION_INCOMPLETE',
+      );
+    }
+    // A previous verifier must not survive a confirmed password/permission change.
+    await _forgetLocalSafely(email);
+    _checkLoginGeneration(generation);
+    await _storage.clearTokens();
+    await _storage.saveTokens(access, refresh);
+    await _storage.saveUserSnapshot(user);
+    unawaited(
+      _prepareLocalLogin(user, access, refresh, email, password, generation),
+    );
+    if (generation != _authGeneration) {
+      await _storage.clearTokens();
+      _checkLoginGeneration(generation);
+    }
+    return user;
+  }
+
+  Future<void> _prepareLocalLogin(
+    UserModel user,
+    String access,
+    String? refresh,
+    String email,
+    String password,
+    int generation,
+  ) async {
+    if (_offlineLogin?.enabled != true || refresh == null || refresh.isEmpty) {
+      await _refreshOfflineEmergencyAuthorizationSafe();
+      return;
+    }
+    try {
+      final headers = await ClientTelemetryHeaders.instance.headers();
+      final response = await _dio
+          .post(
+            ApiRoutes.offlineEmergencyAuthorize,
+            options: Options(
+              headers: headers,
+              extra: const {
+                'silent': true,
+                'skipLoader': true,
+                'disableOfflineCache': true,
+              },
+            ),
+          )
+          .timeout(_bootstrapTimeout);
+      if (generation != _authGeneration || response.data is! Map) return;
+      final accepted = await OfflineEmergencyPolicy()
+          .recordAuthorizationResponse(
+            data: (response.data as Map).cast<String, dynamic>(),
+            companyId: user.companyId!,
+            userId: user.id,
+            deviceFingerprint: headers['x-client-device-id'] ?? '',
+          );
+      // A rejected/malformed new grant must never reuse an older cached grant
+      // to enroll the password from this login.
+      if (!accepted) return;
+      await _offlineLogin!.enroll(
+        email: email,
+        password: password,
+        session: OfflineLoginSession(user, access, refresh),
+        stillCurrent: () async {
+          final current = await _storage.getUserSnapshot();
+          return generation == _authGeneration &&
+              current?.id == user.id &&
+              current?.companyId == user.companyId;
+        },
+      );
+    } catch (_, stack) {
+      TraceLog.log(
+        'OfflineLogin',
+        'No se pudo preparar el acceso local seguro',
+        stackTrace: stack,
+      );
+    }
+  }
+
+  void _checkLoginGeneration(int generation) {
+    if (generation != _authGeneration) {
+      throw const ApiException.detailed(
+        message: 'La sesión cambió. Vuelve a iniciar sesión.',
+        type: ApiErrorType.cancelled,
+        displayCode: 'LOGIN_SESSION_CHANGED',
+      );
+    }
+  }
+
+  Future<UserModel> _unlockLocal(
+    String email,
+    String password,
+    int generation,
+  ) async {
+    final session = await _offlineLogin!.unlock(email, password);
+    _checkLoginGeneration(generation);
+    final identity = _identityFromAccessToken(session.accessToken);
+    if (identity == null || !_snapshotMatchesToken(session.user, identity)) {
+      throw OfflineLogin.unavailable;
+    }
+    await _storage.clearTokens();
+    await _storage.saveTokens(session.accessToken, session.refreshToken);
+    await _storage.saveUserSnapshot(session.user);
+    if (generation != _authGeneration) {
+      await _storage.clearTokens();
+      _checkLoginGeneration(generation);
+    }
+    return session.user;
+  }
+
+  Future<void> _forgetLocalSafely(String email) async {
+    try {
+      await _offlineLogin?.forget(email);
+    } catch (_, stack) {
+      TraceLog.log(
+        'OfflineLogin',
+        'No se pudo retirar el acceso local',
+        stackTrace: stack,
+      );
+    }
+  }
+
+  Future<void> forgetLocalAccess() async {
+    ++_authGeneration;
+    final user = await _storage.getUserSnapshot();
+    if (user != null) await _forgetLocalSafely(user.email);
+  }
+
+  Future<void> observeLocalSession(UserModel user) async {
+    if (_offlineLogin?.enabled != true) return;
+    try {
+      final previous = await _storage.getUserSnapshot();
+      if (previous?.id == user.id &&
+          previous!.email.trim().toLowerCase() !=
+              user.email.trim().toLowerCase()) {
+        await _forgetLocalSafely(previous.email);
+      }
+      final access = await _storage.getAccessToken();
+      final refresh = await _storage.getRefreshToken();
+      if (access == null || refresh == null) return;
+      await _offlineLogin!.observeSession(
+        OfflineLoginSession(user, access, refresh),
+      );
+    } catch (_, stack) {
+      await _forgetLocalSafely(user.email);
+      TraceLog.log(
+        'OfflineLogin',
+        'Se retiró el acceso local al no poder actualizarlo',
+        stackTrace: stack,
+      );
+    }
+  }
+
+  Future<void> prepareLocalLock() async {
+    ++_authGeneration;
+    final user = await _storage.getUserSnapshot();
+    if (user != null) await observeLocalSession(user);
   }
 
   Future<UserModel> registerBusiness(Map<String, dynamic> payload) async {
@@ -933,6 +1158,7 @@ class AuthRepository {
             )
             .timeout(_bootstrapTimeout);
         final user = _userFromMeResponse(res.data, token);
+        await observeLocalSession(user);
         await _storage.saveUserSnapshot(user);
         unawaited(_refreshOfflineEmergencyAuthorizationSafe());
         return user;
@@ -956,6 +1182,7 @@ class AuthRepository {
                   .timeout(_bootstrapTimeout);
               final refreshedAccess = await _storage.getAccessToken();
               final user = _userFromMeResponse(res.data, refreshedAccess);
+              await observeLocalSession(user);
               await _storage.saveUserSnapshot(user);
               unawaited(_refreshOfflineEmergencyAuthorizationSafe());
               return user;

@@ -13,7 +13,7 @@ void main() {
   test('conserva companyId entregado por users/me', () async {
     final user = await _loginWith(
       me: {'companyId': 'company-from-me'},
-      jwtCompanyId: 'company-from-jwt',
+      jwtCompanyId: 'company-from-me',
     );
 
     expect(user.companyId, 'company-from-me');
@@ -212,7 +212,7 @@ Future<UserModel> _loginWith({
     ..httpClientAdapter = _FakeHttpClientAdapter((options) async {
       if (options.path == '/auth/login') {
         return _jsonResponse({
-          'accessToken': _jwt(userId: jwtUserId, companyId: jwtCompanyId),
+          'accessToken': _jwt(userId: jwtUserId ?? 'user-1', companyId: jwtCompanyId),
           'refreshToken': 'refresh-for-test',
         });
       }

@@ -143,6 +143,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   _LoginNoticeData _buildErrorNotice(ApiException error) {
+    if (error.displayCode == 'LOCAL_LOGIN_THROTTLED') {
+      return const _LoginNoticeData.error(
+        title: 'Acceso en pausa',
+        message: 'Vuelve a intentar el acceso local en unos minutos.',
+        helpText: '',
+        feedbackKind: AppFeedbackKind.warning,
+      );
+    }
     if (error.displayCode == 'LICENSE_INACTIVE' ||
         (error.responseBody ?? '').toLowerCase().contains('license_')) {
       return _LoginNoticeData.error(
@@ -173,10 +181,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           helpText:
               'Si tu acceso deberia estar activo, comunicate con administracion.',
         );
-      case ApiErrorType.noInternet:
-        return _buildContinuityNotice();
-      case ApiErrorType.dns:
-        return _buildContinuityNotice();
       case ApiErrorType.tls:
         return _LoginNoticeData.error(
           title: 'Conexión segura rechazada',
@@ -184,10 +188,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           helpText:
               'Verifica la fecha y hora de la PC. Si usas antivirus o red empresarial, puede estar bloqueando la conexión.',
         );
+      case ApiErrorType.noInternet:
+      case ApiErrorType.dns:
       case ApiErrorType.network:
-        return _buildContinuityNotice();
       case ApiErrorType.timeout:
-        return _buildContinuityNotice();
+        return _LoginNoticeData.error(
+          title: 'No pudimos confirmar tu acceso',
+          message: error.displayCode == 'LOCAL_LOGIN_UNAVAILABLE'
+              ? 'Necesitas conexión para iniciar sesión en este equipo.'
+              : 'El servicio no está disponible. Vuelve a intentarlo.',
+          helpText: '',
+          feedbackKind: AppFeedbackKind.warning,
+        );
       case ApiErrorType.config:
         return _LoginNoticeData.error(
           title: 'App no configurada',
@@ -215,15 +227,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               'Corrige los datos ingresados o vuelve a intentarlo en unos segundos.',
         );
     }
-  }
-
-  _LoginNoticeData _buildContinuityNotice() {
-    return const _LoginNoticeData.error(
-      title: 'Modo local',
-      message: 'Puedes vender 48 h.',
-      helpText: 'Sincroniza al volver.',
-      feedbackKind: AppFeedbackKind.info,
-    );
   }
 
   Future<void> _submit() async {

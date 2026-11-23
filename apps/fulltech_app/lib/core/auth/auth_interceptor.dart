@@ -39,6 +39,11 @@ class AuthInterceptor extends Interceptor {
     );
 
     try {
+      if (_isLoginCandidate(options)) {
+        options.headers.addAll(await ClientTelemetryHeaders.instance.headers());
+        handler.next(options);
+        return;
+      }
       if (_isPublicAuthPath(options.path)) {
         TraceLog.log(
           'AuthInterceptor',
@@ -100,6 +105,13 @@ class AuthInterceptor extends Interceptor {
     // `path` puede venir como '/auth/refresh' o con baseUrl ya aplicada en algunos casos.
     return path == ApiRoutes.refresh || path.endsWith(ApiRoutes.refresh);
   }
+
+  bool _isLoginCandidate(RequestOptions options) =>
+      options.extra['loginCandidate'] == true &&
+      options.method == 'GET' &&
+      (options.path == ApiRoutes.usersMe ||
+          options.path.endsWith(ApiRoutes.usersMe)) &&
+      options.headers['Authorization'] is String;
 
   bool _isPublicAuthPath(String path) {
     return path == ApiRoutes.login ||
@@ -219,6 +231,12 @@ class AuthInterceptor extends Interceptor {
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
+    // Candidate credentials are not the current local session. A rejected new
+    // login must not refresh or revoke the previous user's session.
+    if (_isLoginCandidate(err.requestOptions)) {
+      handler.next(err);
+      return;
+    }
     final statusCode = err.response?.statusCode;
     final responseData = err.response?.data;
     final errorCode = responseData is Map
