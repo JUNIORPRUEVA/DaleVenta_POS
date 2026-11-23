@@ -16,7 +16,8 @@ export class CrmLicenseController {
   @Get('capabilities')
   async capabilities(@Headers('x-license-admin-secret') secret?: string) {
     await this.licenses.assertAdminSecret(secret);
-    return { licenseRead: true, licenseWrite: this.crm.enabled(), bankTransfers: false, payments: true, overrides: true };
+    return { licenseRead: true, licenseWrite: this.crm.enabled(), bankTransfers: false, payments: true, overrides: true,
+      contactWrite: this.crm.enabled(), assignPlan: this.crm.enabled(), extendPeriod: this.crm.enabled(), loginEmailWrite: this.crm.enabled() };
   }
   @Get('companies')
   async list(@Query() query: Record<string, unknown>, @Headers('x-license-admin-secret') secret?: string) {

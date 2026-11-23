@@ -1,5 +1,18 @@
 # Execution State
 
+## Control integral administrativo CRM — 2026-11-23
+
+Worktree exclusivo C:/t/fp-prod-20261123, rama
+agent/crm-control-integral-20261123, base remota production-main 7a3a3541.
+Conserva los fixes de soporte 20c880d3 y 2f1432b6. Comandos nuevos de contacto,
+plan sin modificar vigencia, días administrativos y correo de acceso; PostgreSQL
+aislado 24 PASS y HTTP e2e 6 PASS, API build PASS, licencias 162 PASS/53 omitidas.
+Columna aditiva de contacto requiere migración manual autorizada ANTES del
+backend nuevo. No se tocaron datos, permisos, configuración ni servicios reales.
+Preparación local de checkpoints y descripciones de PR; no hay publicación ni
+merge/deploy autorizado. Puente saneado mantiene push bloqueado.
+Procedimiento: docs/audits/CRM_CONTROL_PUBLICACION_20261123.md.
+
 ## PR 53 publicado como borrador — 2026-11-21
 
 El propietario autorizó publicación: rama agent/consolidacion-total-20261121 y

@@ -147,6 +147,111 @@ suite('CRM management with isolated PostgreSQL', () => {
     expect((await db.company.findUniqueOrThrow({ where: { id: company.id } })).licenseStatus).toBe('ACTIVE');
     expect(await db.companyLicenseAuditLog.count()).toBe(0);
   });
+  it('assigns a real catalog plan without changing expiry, status, key or fiscal switches', async () => {
+    await db.licensePlan.upsert({ where: { code: 'fixture-pro' }, update: {}, create: {
+      code: 'fixture-pro', name: 'Pro sintético', monthlyPrice: '1', maxUsers: 10, maxProducts: 500,
+      maxWarehouses: 3, active: true, ecf: true, taxes: true, uom: true,
+    } });
+    const command = cmd('assignPlan', { fields: { planCode: 'fixture-pro' } });
+    await service.command(company.id, command);
+    const saved = await db.company.findUniqueOrThrow({ where: { id: company.id } });
+    expect(saved.planCode).toBe('fixture-pro');
+    for (const key of ['licenseExpiresAt', 'licenseStatus', 'licenseKey', 'ncfEnabled', 'taxEnabled']) {
+      expect((saved as any)[key]).toEqual(company[key]);
+    }
+    expect((await service.command(company.id, command)).deduplicated).toBe(true);
+    expect(await db.companyLicenseAuditLog.count()).toBe(1);
+  });
+  it('rejects a plan that removes an active module or cannot contain current usage', async () => {
+    await db.licensePlan.upsert({ where: { code: 'fixture-low' }, update: {}, create: {
+      code: 'fixture-low', name: 'Sintético pequeño', monthlyPrice: '1', maxUsers: 1, maxProducts: 1,
+      maxWarehouses: 1, active: true, ecf: false, taxes: false,
+    } });
+    company = await db.company.update({ where: { id: company.id }, data: { ncfEnabled: true } });
+    await expect(service.command(company.id, cmd('assignPlan', { fields: { planCode: 'fixture-low' } })))
+      .rejects.toThrow('plan_removes_active_module');
+    expect((await db.company.findUniqueOrThrow({ where: { id: company.id } })).planCode).toBeNull();
+    expect(await db.companyLicenseAuditLog.count()).toBe(0);
+  });
+  it('extends an existing period once without fabricating a payment or changing plan', async () => {
+    const command = cmd('extend', { fields: { days: 7 } });
+    await service.command(company.id, command); await service.command(company.id, command);
+    const saved = await db.company.findUniqueOrThrow({ where: { id: company.id } });
+    expect(saved.licenseExpiresAt?.getTime()).toBe(future.getTime() + 7 * 86400000);
+    expect(saved.licenseKey).toBe(company.licenseKey); expect(saved.planCode).toBe(company.planCode);
+    expect(await db.licensePaymentOrder.count()).toBe(0);
+    expect(await db.companyLicenseAuditLog.count()).toBe(1);
+    expect(() => parseCrmCommand(cmd('extend', { fields: { days: -1 } }))).toThrow();
+  });
+  it('stores company contact separately from the login and fiscal contact', async () => {
+    await db.appConfig.create({ data: { companyId: company.id, companyName: company.name,
+      ecfContactEmail: 'fiscal@fixture.invalid' } });
+    await service.command(company.id, cmd('contact', { fields: {
+      contactEmail: 'contacto@fixture.invalid', phone: '+1 809 555 0000', address: 'Dirección ficticia',
+    } }));
+    const detail = await service.detail(company.id);
+    expect(detail.account.contactEmail).toBe('contacto@fixture.invalid');
+    expect(detail.account.businessPhone).toBe('+1 809 555 0000');
+    expect((await db.appConfig.findUniqueOrThrow({ where: { companyId: company.id } })).ecfContactEmail)
+      .toBe('fiscal@fixture.invalid');
+  });
+  async function owner() {
+    const user = await db.user.create({ data: { companyId: company.id, email: 'owner@fixture.invalid',
+      passwordHash: 'synthetic-unused-hash', nombreCompleto: 'Responsable ficticio', telefono: '', edad: 30, role: 'ADMIN' } });
+    await db.companyMember.create({ data: { userId: user.id, companyId: company.id, role: 'OWNER', status: 'ACTIVE' } });
+    return user;
+  }
+  it('changes only the verified owner login and revokes sessions, with stale email protection', async () => {
+    const user = await owner();
+    const session = await db.authSession.create({ data: { userId: user.id, companyId: company.id,
+      refreshTokenHash: 'synthetic-unused-hash', tokenFamily: randomUUID(), expiresAt: future } });
+    const ticket = await db.sessionHandoffTicket.create({ data: { userId: user.id, companyId: company.id,
+      sessionId: session.id, ticketHash: randomUUID(), expiresAt: future } });
+    const command = cmd('loginEmail', { fields: { userId: user.id, expectedLoginEmail: user.email, loginEmail: 'new@fixture.invalid' } });
+    await service.command(company.id, command);
+    expect((await db.user.findUniqueOrThrow({ where: { id: user.id } })).email).toBe('new@fixture.invalid');
+    expect((await db.authSession.findUniqueOrThrow({ where: { id: session.id } })).revokedAt).not.toBeNull();
+    expect((await db.sessionHandoffTicket.findUniqueOrThrow({ where: { id: ticket.id } })).usedAt).not.toBeNull();
+    expect((await service.command(company.id, command)).deduplicated).toBe(true);
+  });
+  it('does not mutate a shared account or an owner from a different company', async () => {
+    const user = await owner();
+    const other = await db.company.create({ data: { name: 'Otra empresa ficticia', slug: 'other-fixture' } });
+    await db.companyMember.create({ data: { userId: user.id, companyId: other.id, role: 'OWNER', status: 'ACTIVE' } });
+    await expect(service.command(company.id, cmd('loginEmail', { fields: {
+      userId: user.id, expectedLoginEmail: user.email, loginEmail: 'new@fixture.invalid',
+    } }))).rejects.toThrow('shared_account_requires_review');
+    expect((await db.user.findUniqueOrThrow({ where: { id: user.id } })).email).toBe(user.email);
+  });
+  it('rejects stale and duplicate login addresses without changing the owner or contact', async () => {
+    const user = await owner();
+    const fields = { userId: user.id, expectedLoginEmail: 'stale@fixture.invalid', loginEmail: 'new@fixture.invalid' };
+    await expect(service.command(company.id, cmd('loginEmail', { fields }))).rejects.toThrow('account_changed_reload');
+    await db.user.create({ data: { companyId: company.id, email: 'occupied@fixture.invalid', passwordHash: 'synthetic-unused',
+      nombreCompleto: 'Otro usuario ficticio', telefono: '', edad: 30, role: 'CAJERO' } });
+    await expect(service.command(company.id, cmd('loginEmail', { fields: {
+      ...fields, expectedLoginEmail: user.email, loginEmail: 'OCCUPIED@fixture.invalid',
+    } }))).rejects.toThrow('login_email_in_use');
+    expect((await db.user.findUniqueOrThrow({ where: { id: user.id } })).email).toBe(user.email);
+    expect(await db.companyLicenseAuditLog.count()).toBe(0);
+  });
+  it('keeps contact configuration independent when two companies have no AppConfig yet', async () => {
+    const other = await db.company.create({ data: { name: 'Segunda empresa de prueba', slug: 'fixture-contact-two' } });
+    await service.command(company.id, cmd('contact', { fields: { phone: '+1 809 555 0001' } }));
+    await service.command(other.id, { ...cmd('contact', { fields: { phone: '+1 809 555 0002' } }), expectedVersion: other.updatedAt.toISOString() });
+    expect((await db.appConfig.findUniqueOrThrow({ where: { companyId: company.id } })).phone).toBe('+1 809 555 0001');
+    expect((await db.appConfig.findUniqueOrThrow({ where: { companyId: other.id } })).phone).toBe('+1 809 555 0002');
+  });
+  it('adds days to blocked and trial periods without silently removing a suspension', async () => {
+    company = await db.company.update({ where: { id: company.id }, data: { licenseStatus: 'BLOCKED', status: 'SUSPENDED' } });
+    await service.command(company.id, cmd('extend', { fields: { days: 2 } }));
+    let saved = await db.company.findUniqueOrThrow({ where: { id: company.id } });
+    expect(saved.licenseStatus).toBe('BLOCKED'); expect(saved.status).toBe('SUSPENDED');
+    company = await db.company.update({ where: { id: company.id }, data: { licenseStatus: 'TRIAL', status: 'ACTIVE', trialEndsAt: future } });
+    await service.command(company.id, cmd('extend', { fields: { days: 3 } }));
+    saved = await db.company.findUniqueOrThrow({ where: { id: company.id } });
+    expect(saved.trialEndsAt?.getTime()).toBe(future.getTime() + 3 * 86400000); expect(saved.licenseStatus).toBe('TRIAL');
+  });
   it('default feature gate rejects writes and unknown payment/key fields are rejected', async () => {
     const disabled = new CrmLicenseService(db as any, licenses, { get: () => undefined } as any);
     await expect(disabled.command(company.id, cmd('suspend'))).rejects.toThrow('crm_management_disabled');

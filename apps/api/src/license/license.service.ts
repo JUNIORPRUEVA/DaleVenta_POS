@@ -507,6 +507,7 @@ export class LicenseService {
         id: true,
         name: true,
         slug: true,
+        contactEmail: true,
         status: true,
         plan: true,
         licenseStatus: true,
@@ -634,6 +635,7 @@ export class LicenseService {
       },
       account: {
         businessName: company.name,
+        contactEmail: company.contactEmail ?? null,
         taxId: appConfig?.rnc || null,
         businessPhone: appConfig?.phone || null,
         businessAddress: appConfig?.address || null,
