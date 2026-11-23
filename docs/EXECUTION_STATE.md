@@ -1,5 +1,14 @@
 # Execution State
 
+## Publicación autorizada como PR borrador — 2026-11-23
+
+El propietario pide incluir el trabajo FullPOS pendiente y separar CRM en su PR.
+Se incorporan offline db93ce18 y los 17 archivos fiscales/RNC pendientes sin
+alterar los worktrees fuentes; se conservan las validaciones pendientes Android
+e iPhone, NO-GO general y la migración de contacto previa al backend nuevo.
+Inventario: docs/audits/ENTREGA_COMPLETA_FULLPOS_PR_20261123.md.
+CRM tiene PR borrador #1. Sin merge, deploy ni cambios productivos.
+
 ## Control integral administrativo CRM — 2026-11-23
 
 Worktree exclusivo C:/t/fp-prod-20261123, rama

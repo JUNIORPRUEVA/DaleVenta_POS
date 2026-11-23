@@ -134,7 +134,7 @@ void main() {
 
     expect(find.text('Autorización para facturar'), findsOneWidget);
     expect(
-      find.textContaining('DOSA aún no ha confirmado'),
+      find.textContaining('Tu certificación todavía no está confirmada'),
       findsOneWidget,
     );
     expect(
@@ -217,7 +217,7 @@ void main() {
       ),
     );
 
-    expect(find.textContaining('DOSA aún no ha confirmado'), findsOneWidget);
+    expect(find.textContaining('Tu certificación todavía no está confirmada'), findsOneWidget);
     expect(find.textContaining('2 pasos por completar'), findsOneWidget);
     expect(find.text('Actualizar estado'), findsOneWidget);
     // El aviso vive dentro de una tarjeta con su propio título: fuera de ella
