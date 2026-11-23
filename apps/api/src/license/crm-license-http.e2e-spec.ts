@@ -74,6 +74,10 @@ describe('CRM license HTTP boundary after fiscal consolidation', () => {
       bankTransfers: false,
       payments: true,
       overrides: true,
+      contactWrite: false,
+      assignPlan: false,
+      extendPeriod: false,
+      loginEmailWrite: false,
     });
     expect(crm.command).not.toHaveBeenCalled();
   });

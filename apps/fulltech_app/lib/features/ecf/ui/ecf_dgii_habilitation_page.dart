@@ -79,6 +79,7 @@ class _EcfDgiiHabilitationPageState
   EcfDebugScreen? _debugScreen;
   bool _applicationOpen = false;
   bool _fiscalOpen = false;
+  bool _reviewFiscalData = false;
   bool _certificateOpen = false;
   bool _activationOpen = false;
   bool _submissionGuideOpen = false;
@@ -776,8 +777,11 @@ class _EcfDgiiHabilitationPageState
                         body = Padding(
                           padding: const EdgeInsets.all(16),
                           child: EcfFiscalDataContent(
-                            compact: true,
-                            onSaved: () => setState(() => _fiscalOpen = false),
+                            compact: !_reviewFiscalData,
+                            onSaved: () {
+                              ref.invalidate(dosaIntentStateProvider);
+                              setState(() => _fiscalOpen = false);
+                            },
                             onClose: fiscalReady
                                 ? () => setState(() => _fiscalOpen = false)
                                 : null,
@@ -840,8 +844,10 @@ class _EcfDgiiHabilitationPageState
                             canManage: canManage,
                             busy: _busy,
                             onStart: _startIntelligentCertification,
-                            onEditFiscalData: () =>
-                                setState(() => _fiscalOpen = true),
+                            onEditFiscalData: () => setState(() {
+                              _reviewFiscalData = fiscalReady && contactEmailReady;
+                              _fiscalOpen = true;
+                            }),
                             onGoCompany: () =>
                                 setState(() => _fiscalOpen = true),
                             onGoCertificate: () =>
@@ -863,7 +869,7 @@ class _EcfDgiiHabilitationPageState
                                       ? 'Postulación registrada'
                                       : _clientStateLabel(view),
                                   statusMessage: postulationStarted
-                                      ? 'Tu postulación está registrada con DOSA. '
+                                      ? 'Tu postulación está registrada. '
                                             'Abajo tienes lo que falta para poder '
                                             'facturar electrónicamente.'
                                       : _clientStatusMessage(view),

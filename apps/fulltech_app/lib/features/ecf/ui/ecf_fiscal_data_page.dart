@@ -414,26 +414,24 @@ class _FiscalFormState extends ConsumerState<_FiscalForm> {
             ),
           ),
           const SizedBox(height: 14),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              FilledButton.icon(
-                onPressed: _saving ? null : _save,
-                icon: _saving
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.save_outlined, size: 18),
-                label: Text(_saving ? 'Guardando…' : 'Guardar datos'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF1957E6),
-                  minimumSize: const Size(0, 38),
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton.icon(
+              onPressed: _saving ? null : _save,
+              icon: _saving
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.save_outlined, size: 18),
+              label: Text(_saving ? 'Guardando…' : 'Guardar datos'),
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF1957E6),
+                minimumSize: const Size(0, 38),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
               ),
-            ],
+            ),
           ),
         ],
       ),
@@ -464,8 +462,8 @@ class _ReadinessBanner extends StatelessWidget {
         : const Color(0xFFB45309);
     final icon = ready ? Icons.verified_outlined : Icons.error_outline_rounded;
     final text = ready
-        ? 'Los datos obligatorios están completos: la emisión no se bloquea '
-              'por datos del emisor.'
+        ? 'Datos mínimos completos. Comprueba que correspondan al registro '
+              'fiscal de tu empresa.'
         : '${blockingMissing.length == 1 ? 'Falta 1 dato obligatorio' : 'Faltan ${blockingMissing.length} datos obligatorios'}: '
               '${blockingMissing.map((item) => item.label.toLowerCase()).join(', ')}. '
               'Sin ellos la emisión se rechaza.';

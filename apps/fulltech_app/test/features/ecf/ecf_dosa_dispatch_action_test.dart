@@ -181,6 +181,7 @@ void main() {
       repository.result = EcfDosaDispatchOutcome.fromJson(<String, dynamic>{
         'ok': true,
         'result': 'FISCAL_RESULT_RECORDED',
+        'correlated': true,
         'encf': 'E310000000042',
         'observation': <String, dynamic>{
           'providerOutcome': 'ACCEPTED',
@@ -194,8 +195,8 @@ void main() {
       expect(
         find.textContaining(
           conditional
-              ? 'aceptación condicional'
-              : 'DOSA confirmó la aceptación',
+              ? 'La DGII aceptó el comprobante con condiciones'
+              : 'La DGII aceptó el comprobante',
         ),
         findsOneWidget,
       );

@@ -1,3 +1,5 @@
+import 'ecf_customer_message.dart';
+
 /// Resultado de un DESPACHO AUTORIZADO al proveedor DOSA.
 ///
 /// Reglas que este modelo hace explícitas y que la interfaz no debe romper:
@@ -42,19 +44,26 @@ class EcfDosaDispatchOutcome {
 
   /// Mensaje para la persona que opera el POS.
   ///
-  /// Traduce los códigos del backend a algo comprensible sin ocultar el motivo
-  /// técnico: si el operador tiene que llamar a soporte, necesita el código.
-  String get message {
+  /// Explica el motivo fiscal. Los códigos originales se conservan en el modelo
+  /// y en el servidor para soporte; la presentación omite el nombre del proveedor.
+  String get message => ecfCustomerMessage(_message);
+
+  String get _message {
     if (ok) {
-      if (result == 'FISCAL_RESULT_RECORDED') {
+      if (result == 'FISCAL_RESULT_RECORDED' &&
+          correlated &&
+          providerOutcome == 'ACCEPTED') {
         if (safeCode == 'ECF_DOSA_OBSERVED_CONDITIONALLY_ACCEPTED') {
-          return 'DOSA confirmó una aceptación condicional. '
+          return 'La DGII aceptó el comprobante con condiciones. '
               'Revisa las observaciones del comprobante; su evidencia quedó registrada.';
         }
-        return 'DOSA confirmó la aceptación del comprobante. '
-            'El resultado fiscal y su evidencia quedaron registrados.';
+        if (safeCode == 'ECF_DOSA_OBSERVED_ACCEPTED') {
+          return 'La DGII aceptó el comprobante. '
+              'El resultado fiscal y su evidencia quedaron registrados.';
+        }
       }
-      if (result == 'STOPPED_REVIEW_REQUIRED') {
+      if (result == 'STOPPED_REVIEW_REQUIRED' ||
+          result == 'FISCAL_RESULT_RECORDED') {
         return 'Enviado. El comprobante queda en revisión: la respuesta del '
             'proveedor no se toma como aceptación de la DGII.';
       }
@@ -72,7 +81,7 @@ class EcfDosaDispatchOutcome {
       case 'ECF_DOSA_DISPATCH_CERTIFICATION_NOT_AUTHORIZED':
         return 'La certificación de la empresa no autoriza la emisión.';
       case 'ECF_DOSA_DISPATCH_PROVIDER_NOT_DOSA':
-        return 'La empresa no tiene DOSA como proveedor fiscal.';
+        return 'El servicio de emisión fiscal no está configurado para esta empresa.';
       case 'ECF_DOSA_DISPATCH_NOT_PREPARED':
         return 'El comprobante todavía no está preparado.';
       case 'ECF_DOSA_DISPATCH_MAPPING_BLOCKED':
@@ -85,7 +94,7 @@ class EcfDosaDispatchOutcome {
 
   String _gateMessage(List<String> reasons) {
     if (reasons.any((r) => r.contains('CREDENTIALS_MISSING'))) {
-      return 'La empresa no tiene credenciales DOSA.';
+      return 'La empresa no tiene credenciales de emisión fiscal.';
     }
     if (reasons.any((r) => r.contains('CREDENTIALS_NOT_ACTIVE'))) {
       return 'Las credenciales están pendientes de confirmación o revocadas.';

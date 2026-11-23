@@ -7,6 +7,7 @@ import { describeOrders } from './orders/license-order-insights';
 import { LicenseProvisionalService } from './orders/license-provisional.service';
 import { LicenseService } from './license.service';
 import { LicenseActivationService } from './orders/license-activation.service';
+import { applyAdministration, crmAdministrationActions, parseAdministrationFields } from './crm-license-administration';
 
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const invalid = () => { throw new BadRequestException('invalid_crm_command'); };
@@ -16,7 +17,7 @@ export function parseCrmCommand(value: unknown) {
   if (Object.keys(v).some(k => !['operationId', 'expectedVersion', 'action', 'reason', 'fields', 'confirmationName', 'actorId', 'serviceId', 'paymentOrderId', 'paymentStatus'].includes(k))) return invalid();
   if (typeof v.operationId !== 'string' || !UUID.test(v.operationId) || typeof v.serviceId !== 'string' || !UUID.test(v.serviceId) || typeof v.actorId !== 'string' || !/^usr_[a-f0-9]{24}$/.test(v.actorId)) return invalid();
   if (typeof v.expectedVersion !== 'string' || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(v.expectedVersion) || !Number.isFinite(Date.parse(v.expectedVersion))) return invalid();
-  if (!['update', 'suspend', 'reactivate', 'revoke'].includes(String(v.action)) || typeof v.reason !== 'string' || v.reason.trim().length < 5 || v.reason.length > 500) return invalid();
+  if (!['update', 'suspend', 'reactivate', 'revoke', ...crmAdministrationActions].includes(String(v.action)) || typeof v.reason !== 'string' || v.reason.trim().length < 5 || v.reason.length > 500) return invalid();
   const fields: Record<string, string | number | boolean> = {};
   if (v.action === 'update') {
     if (!v.fields || typeof v.fields !== 'object' || Array.isArray(v.fields)) return invalid();
@@ -27,6 +28,8 @@ export function parseCrmCommand(value: unknown) {
       else if (['allowEcf', 'allowTaxes', 'allowWholesale', 'allowUom', 'allowMultiWarehouse'].includes(k) && typeof x === 'boolean') fields[k] = x;
       else return invalid();
     }
+  } else if (crmAdministrationActions.includes(String(v.action))) {
+    Object.assign(fields, parseAdministrationFields(String(v.action), v.fields));
   } else if (v.fields !== undefined) return invalid();
   const payment = parsePaymentMark(v, String(v.action));
   if (v.action === 'update' && !Object.keys(fields).length && !payment) return invalid();
@@ -169,8 +172,10 @@ export class CrmLicenseService {
               update: { ...additions, grantedBy: command.actorId, grantedAt: new Date() },
             });
           }
+        } else if (crmAdministrationActions.includes(command.action)) {
+          Object.assign(data, await applyAdministration(tx, company, command.action, command.fields, before.usage));
         } else if (command.action === 'reactivate') {
-          if (company.licenseStatus !== 'BLOCKED' || !company.licenseKey || !company.licenseExpiresAt || company.licenseExpiresAt <= new Date()) throw new ConflictException('paid_period_required');
+          if (!['BLOCKED', 'EXPIRED'].includes(company.licenseStatus) || !company.licenseKey || !company.licenseExpiresAt || company.licenseExpiresAt <= new Date()) throw new ConflictException('paid_period_required');
           Object.assign(data, { status: 'ACTIVE', licenseStatus: 'ACTIVE', licenseBlockedAt: null });
         } else {
           if (command.action === 'suspend' && !['ACTIVE', 'TRIAL'].includes(before.status)) throw new ConflictException('license_not_active');
@@ -216,7 +221,7 @@ export class CrmLicenseService {
           }
         }
         const after = await this.projection(companyId, tx, true);
-        const snapshot = (v: typeof after) => ({ name: v.companyName, status: v.status, rawStatus: v.rawStatus, expiresAt: v.licenseExpiresAt?.toISOString() ?? null, maxUsers: v.limits.maxUsers, maxProducts: v.limits.maxProducts, maxWarehouses: v.limits.maxWarehouses, notes: v.notes, version: v.updatedAt.toISOString(), commercial: JSON.parse(JSON.stringify(v.commercial ?? null)) });
+        const snapshot = (v: typeof after) => ({ name: v.companyName, planCode: v.planCode, account: v.account, status: v.status, rawStatus: v.rawStatus, trialEndsAt: v.trialEndsAt?.toISOString() ?? null, expiresAt: v.licenseExpiresAt?.toISOString() ?? null, maxUsers: v.limits.maxUsers, maxProducts: v.limits.maxProducts, maxWarehouses: v.limits.maxWarehouses, notes: v.notes, version: v.updatedAt.toISOString(), commercial: JSON.parse(JSON.stringify(v.commercial ?? null)) });
         // Mandatory receipt and audit in the SAME transaction. No raw keys or payment data.
         await tx.companyLicenseAuditLog.create({ data: {
           id: command.operationId, companyId, actorEmail: `crm:${command.actorId}`,
@@ -228,7 +233,8 @@ export class CrmLicenseService {
       if (!result.deduplicated) this.licenses.publishCrmLicenseChange(companyId, command.action, result.license);
       return result;
     } catch (error) {
-      if ((error as any)?.code === 'P2002') throw new ConflictException('operation_id_reused');
+      if ((error as any)?.code === 'P2002') throw new ConflictException(
+        JSON.stringify((error as any).meta?.target ?? '').includes('email') ? 'login_email_in_use' : 'operation_id_reused');
       throw error;
     }
   }

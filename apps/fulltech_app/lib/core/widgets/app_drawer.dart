@@ -1,7 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../features/auth/presentation/session_exit_dialog.dart';
 
 import '../../modules/cash/cash_dialogs.dart';
 import '../../modules/cash/cash_providers.dart';
@@ -729,6 +731,24 @@ class _AppDrawerState extends ConsumerState<AppDrawer> {
 
   Future<void> _handleLogout(BuildContext context) async {
     final auth = ref.read(authStateProvider.notifier);
+    final native =
+        !kIsWeb &&
+        {
+          TargetPlatform.windows,
+          TargetPlatform.android,
+          TargetPlatform.iOS,
+        }.contains(defaultTargetPlatform);
+    if (native) {
+      final action = await showSessionExitDialog(context);
+      if (action == null || !context.mounted) return;
+      Navigator.pop(context);
+      if (action == SessionExitAction.lock) {
+        await auth.lock();
+      } else {
+        await auth.logout();
+      }
+      return;
+    }
     Navigator.pop(context);
     await auth.logout();
   }

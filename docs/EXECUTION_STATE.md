@@ -1,5 +1,62 @@
 # Execution State
 
+## Publicación autorizada como PR borrador — 2026-11-23
+
+El propietario pide incluir el trabajo FullPOS pendiente y separar CRM en su PR.
+Se incorporan offline db93ce18 y los 17 archivos fiscales/RNC pendientes sin
+alterar los worktrees fuentes; se conservan las validaciones pendientes Android
+e iPhone, NO-GO general y la migración de contacto previa al backend nuevo.
+Inventario: docs/audits/ENTREGA_COMPLETA_FULLPOS_PR_20261123.md.
+CRM tiene PR borrador #1. Sin merge, deploy ni cambios productivos.
+
+## Control integral administrativo CRM — 2026-11-23
+
+Worktree exclusivo C:/t/fp-prod-20261123, rama
+agent/crm-control-integral-20261123, base remota production-main 7a3a3541.
+Conserva los fixes de soporte 20c880d3 y 2f1432b6. Comandos nuevos de contacto,
+plan sin modificar vigencia, días administrativos y correo de acceso; PostgreSQL
+aislado 24 PASS y HTTP e2e 6 PASS, API build PASS, licencias 162 PASS/53 omitidas.
+Columna aditiva de contacto requiere migración manual autorizada ANTES del
+backend nuevo. No se tocaron datos, permisos, configuración ni servicios reales.
+Preparación local de checkpoints y descripciones de PR; no hay publicación ni
+merge/deploy autorizado. Puente saneado mantiene push bloqueado.
+Procedimiento: docs/audits/CRM_CONTROL_PUBLICACION_20261123.md.
+
+## Acceso local seguro — 2026-11-22 (local, sin publicar)
+
+Última instrucción: comprobar SOLO Windows. Tres procesos nativos independientes
+prepare/verify/revoked PASS; análisis PASS, diff limpio. Persistencia cifrada,
+contraseña incorrecta, empresa correcta, API loopback inaccesible y revocación
+persistente comprobados. No se reinició Windows. GO local Windows, sin publicar.
+Android pausado: la prueba adicional tras reiniciar el AVD y reinstalar el target
+no recuperó el perfil; causa pendiente, no es PASS. Este resultado limita el GO
+Android anterior. Detalles y evidencia en el informe de acceso local.
+
+Revisión adicional Android/Windows: se reprodujo y corrigió la preparación de
+un perfil desde un permiso anterior cuando la nueva respuesta era rechazada.
+Registro de autorización devuelve aceptación explícita; nueve regresiones nuevas.
+Validación final: análisis PASS, 349 pruebas auth/offline PASS (3 omisiones),
+16 pruebas de reproducción/rutas PASS y drivers nativos Windows/Android PASS.
+Catálogo UAT: dos pruebas condicionadas no ejecutadas; el caso visual W13 sin
+configuración externa no constituye evidencia externa. GO local Windows/Android,
+sin garantía absoluta ni publicación. Informe detallado y límites abajo.
+
+Worktree exclusivo `C:/t/fp-offline-login-20261122`, rama
+`agent/acceso-local-seguro-20261122`, base `61d5d5aa`. Alcance autorizado:
+Windows/Android/iOS instalados; PWA diferida expresamente. Sin cambios productivos,
+migraciones, backend, fiscal o licencias. No hay commits ni push.
+
+Verificador cifrado nativo, separación usuario/empresa/equipo/servidor, plazo
+offline existente, revocación y distinción bloqueo/cierre implementados. Regresión
+completa durante la implementación: 2858 PASS y 10 omisiones explícitas.
+Validación final: análisis sin incidencias, 151 pruebas focalizadas PASS y drivers
+oficiales Windows/Android PASS con HTTP loopback y cifrado nativo real. El ejecutor
+`flutter test -d` anterior fallaba por DDS/protocolo; se resolvió usando el driver
+existente, sin quitar aserciones. Artefactos generados restaurados y diff revisado.
+Detalle y límites: `docs/OFFLINE_LOGIN_SEGURO_20261122.md`.
+Pendiente Keychain/iPhone nativo y autorización de publicación: NO-GO para
+publicación general. Código local preparado para revisión; producción intacta.
+
 ## PR 53 publicado como borrador — 2026-11-21
 
 El propietario autorizó publicación: rama agent/consolidacion-total-20261121 y

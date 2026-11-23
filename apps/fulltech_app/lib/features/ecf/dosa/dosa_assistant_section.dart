@@ -5,6 +5,7 @@ import '../../../core/auth/app_permissions.dart';
 import '../../../core/auth/auth_provider.dart';
 import '../../../core/company/company_settings_repository.dart';
 import '../data/ecf_repository.dart';
+import '../ecf_customer_message.dart';
 import 'dosa_assistant_config.dart';
 import 'dosa_assistant_events.dart';
 import 'dosa_assistant_launcher.dart';
@@ -546,7 +547,7 @@ class _DosaIntentGate extends StatelessWidget {
                   if (detail != null) ...[
                     const SizedBox(height: 4),
                     Text(
-                      detail!,
+                      ecfCustomerMessage(detail!),
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
@@ -806,7 +807,7 @@ class _DosaPortalCard extends StatelessWidget {
               portalOnly
                   ? 'Continúa con el asistente de certificación electrónica de '
                         'FullPOS. Te guiaremos paso a paso durante el proceso'
-                  : 'Se abre el asistente oficial de DOSA. Puedes empezar aquí y '
+                  : 'Se abre el asistente de postulación. Puedes empezar aquí y '
                         'seguir desde otro dispositivo: el proceso pertenece a '
                         'la empresa, no al equipo.',
               style: theme.textTheme.bodyMedium,

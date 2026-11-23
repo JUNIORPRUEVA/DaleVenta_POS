@@ -316,18 +316,18 @@ void main() {
       ]);
     await pump(tester, repo);
     expect(find.text('Emitir E31'), findsNothing);
-    await tester.tap(find.text('Verificar con DOSA'));
+    await tester.tap(find.text('Verificar estado fiscal'));
     await tester.pumpAndSettle();
     expect(repo.recoveries, 1);
     expect(repo.sends, 0);
-    expect(tester.widget<TextButton>(find.widgetWithText(TextButton, 'Verificar con DOSA')).onPressed, isNull);
+    expect(tester.widget<TextButton>(find.widgetWithText(TextButton, 'Verificar estado fiscal')).onPressed, isNull);
     await tester.pump(const Duration(seconds: 5));
     repo.value = const EcfSaleFiscal(saleId: 'sale', intent: 'E31', documents: [
       EcfSaleFiscalDocument(documentId: 'document', documentType: 'E31', status: 'DGII_ACCEPTED', encf: 'E310000000001'),
     ]);
     await tester.tap(find.byTooltip('Actualizar estado fiscal'));
     await tester.pumpAndSettle();
-    expect(find.text('Verificar con DOSA'), findsNothing);
+    expect(find.text('Verificar estado fiscal'), findsNothing);
     expect(repo.recoveries, 1);
     expect(repo.sends, 0);
     expect(tester.takeException(), isNull);

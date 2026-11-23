@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:daleventa_pos/core/auth/auth_provider.dart';
 import 'package:dio/dio.dart';
@@ -22,6 +24,9 @@ import 'package:daleventa_pos/features/ecf/ui/flow/ecf_preparation_step.dart';
 import 'package:daleventa_pos/features/ecf/ui/flow/ecf_sequence_range_section.dart';
 import 'package:daleventa_pos/core/widgets/responsive_shell.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
+import 'package:daleventa_pos/core/theme/app_theme.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -283,6 +288,7 @@ Widget _harness({
   bool canActivateProduction = false,
   String environment = 'SANDBOX',
   bool productionEnabled = false,
+  ThemeData? theme,
 }) {
   return ProviderScope(
     // `pumpWidget` ACTUALIZA el árbol existente en vez de recrearlo, y el
@@ -385,7 +391,13 @@ Widget _harness({
         ),
       ),
     ],
-    child: const MaterialApp(home: _TestHome()),
+    child: RepaintBoundary(
+      key: _capture,
+      child: ColoredBox(
+        color: (theme ?? AppTheme.light).scaffoldBackgroundColor,
+        child: MaterialApp(theme: theme, home: const _TestHome()),
+      ),
+    ),
   );
 }
 
@@ -393,6 +405,7 @@ Widget _harness({
 /// segun `_mountAdminView`. Se resuelve en `build`, después de que `_pumpPage`
 /// fije la bandera.
 bool _mountAdminView = false;
+final _capture = GlobalKey();
 
 class _TestHome extends StatelessWidget {
   const _TestHome();
@@ -472,6 +485,16 @@ Future<void> _pumpAdmin(
 }
 
 void main() {
+  setUpAll(() async {
+    final font = FontLoader('Manrope');
+    for (final weight in ['Regular', 'Medium', 'SemiBold', 'Bold']) {
+      font.addFont(rootBundle.load('assets/fonts/manrope/Manrope-$weight.ttf'));
+    }
+    await font.load();
+    await (FontLoader('MaterialIcons')
+      ..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'))).load();
+  });
+
   test('recarga el expediente al cambiar de empresa o iniciar otra sesión', () async {
     late ProviderContainer container;
     final repository = _SessionEcfRepository(
@@ -575,6 +598,47 @@ void main() {
     expect(find.text('Completa lo que falta'), findsNothing);
     expect(find.text('Postulación inteligente'), findsNothing);
   });
+
+  for (final width in <double>[320, 1280]) {
+    testWidgets('corrige RNC completo antes de postular a $width px', (tester) async {
+      await _pumpPage(
+        tester,
+        _harness(view: _view(state: 'NOT_STARTED'), posReady: false, theme: AppTheme.light),
+        size: Size(width, 844),
+        step: 'Preparación',
+        technical: false,
+      );
+      final review = find.byKey(const ValueKey('ecf_preparation_review_data'));
+      expect(tester.takeException(), isNull, reason: 'Preparación sin desbordamientos');
+      await tester.ensureVisible(review);
+      await tester.tap(review);
+      await tester.pumpAndSettle();
+      expect(find.byType(EcfFiscalDataContent), findsOneWidget);
+      expect(tester.takeException(), isNull, reason: 'Formulario sin desbordamientos');
+      // Un RNC de longitud válida no debe desaparecer del formulario de revisión.
+      final rnc = find.widgetWithText(TextField, '131000001');
+      expect(rnc, findsOneWidget);
+      final controller = tester.widget<TextField>(rnc).controller!;
+      await tester.ensureVisible(rnc);
+      await tester.enterText(rnc, '131000002');
+      expect(controller.text, '131000002');
+      expect(tester.takeException(), isNull);
+      final output = Platform.environment['FULLPOS_ECF_RNC_QA'];
+      if (output != null) {
+        FocusManager.instance.primaryFocus?.unfocus();
+        await tester.ensureVisible(find.text('Datos fiscales de la empresa'));
+        await tester.pumpAndSettle();
+        final boundary = _capture.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+        await tester.runAsync(() async {
+          final picture = await boundary.toImage();
+          final bytes = await picture.toByteData(format: ui.ImageByteFormat.png);
+          await Directory(output).create(recursive: true);
+          await File('$output/rnc-review-${width.toInt()}.png').writeAsBytes(bytes!.buffer.asUint8List());
+          picture.dispose();
+        });
+      }
+    });
+  }
 
   testWidgets('un solo dato obligatorio pendiente muestra un solo campo', (
     tester,

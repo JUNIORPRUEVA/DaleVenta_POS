@@ -1,3 +1,5 @@
+import 'ecf_customer_message.dart';
+
 /// Resultado de un intento de ACTIVACIÓN y AUTORIZACIÓN de emisión.
 ///
 /// Lo devuelve `POST /ecf/dosa/activation/attempt`, que el propio cliente puede
@@ -130,13 +132,12 @@ class EcfDosaActivationEnvironment {
 String describeActivationReason(String code) {
   switch (code) {
     case 'ECF_DOSA_ACTIVATION_RNC_NOT_LINKED':
-      return 'Falta vincular el RNC de tu empresa: abre el asistente de DOSA y '
+      return 'Falta vincular el RNC de tu empresa: abre el asistente y '
           'completa la postulación.';
     case 'ECF_DOSA_ACTIVATION_POSTULATION_NOT_BOUND':
-      return 'DOSA todavía no te asignó un número de postulación. Espera su '
-          'respuesta.';
+      return 'Tu número de postulación está pendiente de confirmación.';
     case 'ECF_DOSA_ACTIVATION_PROVIDER_NOT_CONFIRMED':
-      return 'DOSA aún no ha confirmado que terminó tu certificación. Revisa tu '
+      return 'Tu certificación todavía no está confirmada. Revisa tu '
           'correo por si te pidieron algo más.';
     case 'ECF_DOSA_ACTIVATION_DGII_NOT_APPROVED':
       return 'La DGII aún no ha aprobado tu facturación electrónica.';
@@ -163,6 +164,6 @@ String describeActivationReason(String code) {
     case 'COMPANY_REQUIRED':
       return 'No se pudo identificar tu empresa. Vuelve a iniciar sesión.';
     default:
-      return 'Pendiente: $code';
+      return 'Pendiente: ${ecfCustomerMessage(code)}';
   }
 }

@@ -219,7 +219,7 @@ class _EcfSaleHistoryPanelState extends ConsumerState<EcfSaleHistoryPanel> {
                 if(mounted) _notice('Resultado fiscal',outcome.message);
               }),
               icon: const Icon(Icons.sync, size: 18),
-              label: const Text('Verificar con DOSA'),
+                      label: const Text('Verificar estado fiscal'),
             ),
           if (canView && doc.documentType == 'E34')
             EcfDocumentPrintAction(documentId: doc.documentId),

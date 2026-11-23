@@ -10,6 +10,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/routing/routes.dart';
 import '../../../core/theme/app_colors.dart';
 import '../data/ecf_repository.dart';
+import '../ecf_customer_message.dart';
 import '../ecf_models.dart';
 import '../ecf_status_presentation.dart';
 import 'ecf_simulated_dispatch_action.dart';
@@ -649,7 +650,9 @@ class _DocumentTile extends StatelessWidget {
       if (document.originalEncf != null) 'sobre ${document.originalEncf}',
       if (document.sourceType != null) 'origen ${document.sourceType}'.trim(),
     ];
-    final error = document.safeErrorMessage?.trim();
+    final error = document.safeErrorMessage == null
+        ? null
+        : ecfCustomerMessage(document.safeErrorMessage!.trim());
 
     return Card(
       margin: const EdgeInsets.only(bottom: 6),
@@ -996,9 +999,9 @@ class _DetailBody extends StatelessWidget {
         if (summary.safeErrorCode != null)
           _DetailRow(
             label: 'Código seguro',
-            value:
+            value: ecfCustomerMessage(
                 '${summary.safeErrorCode}'
-                '${summary.safeErrorMessage == null ? '' : ' · ${summary.safeErrorMessage}'}',
+                '${summary.safeErrorMessage == null ? '' : ' · ${summary.safeErrorMessage}'}'),
           ),
         const Divider(height: 32),
         EcfDocumentPrintAction(documentId: summary.id),
@@ -1028,7 +1031,7 @@ class _DetailBody extends StatelessWidget {
             ),
             subtitle: Text(
               [
-                if (log.reasonCode != null) log.reasonCode!,
+                if (log.reasonCode != null) ecfCustomerMessage(log.reasonCode!),
                 if (log.createdAt != null) _formatDate(log.createdAt!),
               ].join(' · '),
               style: theme.textTheme.bodySmall,

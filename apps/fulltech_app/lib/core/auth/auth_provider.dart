@@ -90,6 +90,7 @@ class AuthController extends StateNotifier<AuthState> {
   Future<void> _logoutForUnauthorized() async {
     _sessionEvents.markLogoutHandled();
     final storage = ref.read(tokenStorageProvider);
+    await ref.read(authRepositoryProvider).forgetLocalAccess();
     await storage.clearTokens();
     if (!mounted) return;
     // Evitar churn de estado: si ya estamos desautenticados y asentados, volver
@@ -290,7 +291,6 @@ class AuthController extends StateNotifier<AuthState> {
       );
       return user;
     } catch (_) {
-      await ref.read(tokenStorageProvider).clearTokens();
       state = AuthState(
         initialized: true,
         isAuthenticated: false,
@@ -345,10 +345,25 @@ class AuthController extends StateNotifier<AuthState> {
   Future<void> logout() async {
     _markSessionHealthy();
     final storage = ref.read(tokenStorageProvider);
+    await ref.read(authRepositoryProvider).forgetLocalAccess();
     // Revoca la sesión SOLO en el servidor para este dispositivo (best effort,
     // silencioso y con timeout corto). Si falla, se limpia igual en local.
     await ref.read(authRepositoryProvider).revokeCurrentSession();
     await storage.clearTokens();
+    state = AuthState(
+      initialized: true,
+      isAuthenticated: false,
+      user: null,
+      loading: false,
+      restoringSession: false,
+      hasSessionHint: false,
+    );
+  }
+
+  Future<void> lock() async {
+    _markSessionHealthy();
+    await ref.read(authRepositoryProvider).prepareLocalLock();
+    await ref.read(tokenStorageProvider).clearTokens();
     state = AuthState(
       initialized: true,
       isAuthenticated: false,
@@ -385,6 +400,7 @@ class AuthController extends StateNotifier<AuthState> {
             password: password,
             confirmationPhrase: confirmationPhrase,
           );
+      await ref.read(authRepositoryProvider).forgetLocalAccess();
       await ref.read(offlineStoreProvider).clearAll();
       await FulltechImageCacheManager.clear();
       await ref.read(tokenStorageProvider).clearTokens();

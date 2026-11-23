@@ -205,6 +205,16 @@ class EcfPreparationStep extends StatelessWidget {
                   ),
                 ),
               const SizedBox(height: 12),
+              if (_dataReady && !postulationStarted && canManage)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    key: const ValueKey('ecf_preparation_review_data'),
+                    onPressed: busy ? null : onEditFiscalData,
+                    icon: const Icon(Icons.edit_outlined),
+                    label: const Text('Revisar o corregir datos'),
+                  ),
+                ),
               if (!_dataReady)
                 EcfPrimaryAction(
                   label: 'Completar datos',

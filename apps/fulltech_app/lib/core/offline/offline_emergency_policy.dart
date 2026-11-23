@@ -115,22 +115,22 @@ class OfflineEmergencyPolicy {
     );
   }
 
-  Future<void> recordAuthorizationResponse({
+  Future<bool> recordAuthorizationResponse({
     required Map<String, dynamic> data,
     required String companyId,
     required String userId,
     required String deviceFingerprint,
     DateTime? observedAtUtc,
   }) async {
-    if (data['authorized'] != true) return;
-    if ((data['policyVersion'] ?? '').toString() != policyVersion) return;
+    if (data['authorized'] != true) return false;
+    if ((data['policyVersion'] ?? '').toString() != policyVersion) return false;
     if ((data['companyId'] ?? '').toString().trim() != companyId.trim()) {
-      return;
+      return false;
     }
-    if ((data['userId'] ?? '').toString().trim() != userId.trim()) return;
+    if ((data['userId'] ?? '').toString().trim() != userId.trim()) return false;
     if ((data['deviceFingerprint'] ?? '').toString().trim() !=
         deviceFingerprint.trim()) {
-      return;
+      return false;
     }
 
     final serverUtc = DateTime.tryParse(
@@ -139,9 +139,9 @@ class OfflineEmergencyPolicy {
     final validUntilUtc = DateTime.tryParse(
       (data['validUntilUtc'] ?? '').toString(),
     )?.toUtc();
-    if (serverUtc == null || validUntilUtc == null) return;
-    if (validUntilUtc.isBefore(serverUtc)) return;
-    if (validUntilUtc.difference(serverUtc) > maxOfflineDuration) return;
+    if (serverUtc == null || validUntilUtc == null) return false;
+    if (validUntilUtc.isBefore(serverUtc)) return false;
+    if (validUntilUtc.difference(serverUtc) > maxOfflineDuration) return false;
 
     await recordServerValidation(
       companyId: companyId,
@@ -158,6 +158,7 @@ class OfflineEmergencyPolicy {
           (data['allowedOperations'] as List?)?.whereType<String>().toList() ??
           const ['sales.create'],
     );
+    return true;
   }
 
   Future<void> recordServerValidation({

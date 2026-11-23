@@ -72,7 +72,7 @@ class EcfDebugPreview extends StatelessWidget {
         dosaEntry: const _DebugActionCard(
           title: 'Postulación electrónica',
           message:
-              'Abriremos el asistente oficial de DOSA con los datos de tu empresa.',
+          'Abriremos el asistente de postulación con los datos de tu empresa.',
           label: 'Iniciar postulación',
         ),
       ),
@@ -81,7 +81,7 @@ class EcfDebugPreview extends StatelessWidget {
         statusLabel: 'En pruebas',
         statusMessage:
             'Tu solicitud fue recibida. Puedes consultar el estado real y '
-            'continuar en DOSA cuando lo necesites.',
+          'continuar en el asistente cuando lo necesites.',
         official: false,
         portal: _DebugActionCard(
           title: 'Asistente de certificación electrónica',

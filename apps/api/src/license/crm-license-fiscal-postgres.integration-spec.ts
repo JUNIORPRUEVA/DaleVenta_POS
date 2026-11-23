@@ -65,12 +65,19 @@ local('CRM license changes preserve each company fiscal numbering', () => {
     const fiscalBefore = await fiscalState();
     const otherCompany = await db.company.findUniqueOrThrow({ where: { id: ids[1] } });
     const otherConfig = await db.appConfig.findUnique({ where: { companyId: ids[1] } });
-    for (const action of ['update', 'suspend', 'reactivate', 'revoke']) {
+    await db.licensePlan.upsert({ where: { code: 'crm-fiscal-plan' }, update: {}, create: {
+      code: 'crm-fiscal-plan', name: 'Plan sintético de preservación fiscal', monthlyPrice: '1',
+      maxUsers: 5, maxProducts: 500, maxWarehouses: 3, active: true, ecf: true, taxes: true,
+    } });
+    for (const action of ['contact', 'assignPlan', 'extend', 'update', 'suspend', 'reactivate', 'revoke']) {
       const company = await db.company.findUniqueOrThrow({ where: { id: ids[0] } });
       await service.command(ids[0], {
         operationId: randomUUID(), serviceId: randomUUID(), actorId: 'usr_' + 'b'.repeat(24),
         expectedVersion: company.updatedAt.toISOString(), action, reason: 'Synthetic fiscal preservation',
         ...(action === 'update' ? { fields: { name: 'Synthetic corrected issuer' } } : {}),
+        ...(action === 'contact' ? { fields: { contactEmail: 'contact@fixture.invalid', phone: '+1 809 555 0000' } } : {}),
+        ...(action === 'assignPlan' ? { fields: { planCode: 'crm-fiscal-plan' } } : {}),
+        ...(action === 'extend' ? { fields: { days: 2 } } : {}),
         ...(action === 'revoke' ? { confirmationName: company.name } : {}),
       });
       expect(await fiscalState()).toEqual(fiscalBefore);
@@ -81,6 +88,6 @@ local('CRM license changes preserve each company fiscal numbering', () => {
     expect(issuer.companyName).toBe('Synthetic corrected issuer');
     expect(issuer.rnc).toBe('101000001');
     expect((await db.ecfCompanyConfiguration.findUniqueOrThrow({ where: { companyId: ids[0] } })).enabled).toBe(true);
-    expect(await db.companyLicenseAuditLog.count({ where: { companyId: ids[0] } })).toBe(4);
+    expect(await db.companyLicenseAuditLog.count({ where: { companyId: ids[0] } })).toBe(7);
   });
 });
