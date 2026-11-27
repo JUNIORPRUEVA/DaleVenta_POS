@@ -387,6 +387,15 @@ frontier, including the original range counter; an unclassified TEST history
 requires review before further TEST numbering. No production authorization is
 copied to TEST and no historic counter is reset.
 
+### Guardian company monitoring defaults (2026-11-27)
+
+Monitoring is enabled for new companies and for legacy companies still using the
+initial disabled value. Administrative disable decisions remain respected.
+Platform administrators can search companies, inspect scoped incidents and toggle
+monitoring with confirmation. The CRM distinguishes disabled monitoring, equipment
+awaiting connection and reported incidents. Diagnosis, alert delivery and enrollment
+are independent server capabilities and must not be implied by a company flag.
+
 ### Admission and ordinary printing
 
 E31/E32 checkout must be authorized and locally preparable before confirming

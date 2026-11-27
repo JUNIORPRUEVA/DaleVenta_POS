@@ -540,3 +540,12 @@ Client queues bind new events to company identity and preserve uncertain/rejecte
 evidence; old unscoped events are not assigned to a new account. New release builds
 include Guardian, while server company policy still controls enrollment and ingestion.
 Manual opt-out is marked so auto-enrollment cannot silently reactivate it.
+
+Guardian company defaults (2026-11-27): new companies have `guardianEnabled=true`.
+Migration `20261127190000_guardian_default_enabled` only enables non-archived
+legacy rows with a false flag and NULL decision source; explicit decisions remain
+unchanged. Global switches, tenant credentials, license eligibility and quotas
+remain authoritative. When auto-enrollment is enabled, an absent company scope
+means all eligible companies; explicit empty/allowlisted scopes remain restrictive.
+The platform company projection exposes valid credential counts and last use,
+not keys. An enabled flag or zero incidents is not proof of a healthy installation.

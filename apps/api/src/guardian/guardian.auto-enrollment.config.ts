@@ -9,9 +9,9 @@
  * Reglas de seguridad (fail-closed):
  * - `GUARDIAN_AUTO_ENROLL_ENABLED` es `false` por defecto: sin este interruptor el
  *   endpoint de concesión no existe funcionalmente.
- * - Aunque el interruptor esté activo, **la lista de empresas manda**: vacía =
- *   ninguna empresa puede auto-enrolarse; `*` = todas las elegibles. Así el
- *   despliegue es siempre incremental y auditable.
+ * - Al habilitar el interruptor, el alcance predeterminado incluye todas las
+ *   empresas elegibles. Una lista explícita restringe ese alcance; una lista
+ *   explícitamente vacía lo bloquea. La desactivación manual siempre manda.
  * - La autorización es un código de un solo uso de vida corta (por defecto 5
  *   minutos). Nunca hay un secreto compartido ni un token administrativo
  *   embebido en el instalador.
@@ -59,7 +59,9 @@ export function resolveGuardianAutoEnrollmentConfig(
 ): GuardianAutoEnrollmentConfig {
   return {
     enabled: readBool(env.GUARDIAN_AUTO_ENROLL_ENABLED, false),
-    allowedCompanyIds: readList(env.GUARDIAN_AUTO_ENROLL_COMPANIES),
+    allowedCompanyIds: env.GUARDIAN_AUTO_ENROLL_COMPANIES === undefined
+      ? [ALL]
+      : readList(env.GUARDIAN_AUTO_ENROLL_COMPANIES),
     activateOnGrant: readBool(env.GUARDIAN_AUTO_ENROLL_ACTIVATE, true),
     grantTtlSeconds: readInt(env.GUARDIAN_AUTO_ENROLL_GRANT_TTL_SECONDS, 300, 60, 1_800),
     // Capacidad por empresa: el valor anterior (10) bloqueaba negocios con más
@@ -79,7 +81,7 @@ export function resolveGuardianAutoEnrollmentConfig(
 /**
  * `true` si la empresa está autorizada por la lista de despliegue.
  *
- * Fail-closed: sin lista, ninguna empresa entra; un id vacío nunca coincide.
+ * Una lista explícita sigue siendo autoritativa; un id vacío nunca coincide.
  */
 export function isCompanyAllowedForAutoEnrollment(
   config: GuardianAutoEnrollmentConfig,

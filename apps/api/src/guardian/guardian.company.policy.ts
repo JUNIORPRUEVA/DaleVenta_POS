@@ -2,9 +2,9 @@
  * FASE 7 — Política de activación de APPYRA Guardian por empresa.
  *
  * Regla única y explícita: una empresa solo está instrumentada si
- * `companies.guardian_enabled = true`. El valor por defecto es `false`, así que
- * ni las empresas existentes ni las nuevas envían telemetría, consumen IA ni
- * generan alertas hasta que un administrador de plataforma lo active.
+ * `companies.guardian_enabled = true`. Las empresas nuevas nacen habilitadas;
+ * una desactivación administrativa permanece autoritativa. Los interruptores
+ * globales, las credenciales y las cuotas siguen controlando cada operación.
  *
  * Se aplica en TODOS los caminos de entrada para que una credencial válida no
  * pueda saltarse la desactivación de la empresa:
