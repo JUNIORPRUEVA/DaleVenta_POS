@@ -909,7 +909,8 @@ describe("SalesService optional inventory tracking", () => {
         paymentTransferAmount: new Prisma.Decimal(0),
         creditAmount: new Prisma.Decimal(800),
         creditPaidAmount: new Prisma.Decimal(200),
-        creditBalance: new Prisma.Decimal(600),
+        // Real create() snapshot: 1000 total - 200 initial = 800 pending.
+        creditBalance: new Prisma.Decimal(800),
         creditPayments: [],
       },
       new Prisma.Decimal(-1000),

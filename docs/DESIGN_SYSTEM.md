@@ -17,6 +17,19 @@ This document records the current UI system. Do not redesign FullPOS as part of 
 
 Primary font family is Manrope. The app defines display, headline, title, body, and label styles through `AppTypography.textTheme()`. Use existing text theme and `AppTextStyles` before adding custom text styles.
 
+The 80mm thermal PDF uses its own print typography: embedded Roboto Condensed
+Regular at 9pt for headings, labels and data; Medium at the same size only for
+emphasized totals. Preserve the compact right-aligned totals and complete
+single-line product text (scale down only when the available width requires
+it). This exception does not change the app theme or the 58mm receipt.
+For a simple 80mm cash sale, show only TOTAL and DEVUELTA (including zero).
+Show SUBTOTAL when discounts, fiscal breakdown or a differing subtotal explain
+the total. Credit adds ABONADO and PENDIENTE; mixed payments preserve each
+allocation once. Do not repeat cash tender. Below the totals, retain a thin
+separator and NOTA with the payment method once, followed by the thank-you
+footer. Deduplicate automatic payment lines while preserving customer notes
+and all applicable fiscal fields, including the authentic e-CF stamp.
+
 Observed sizes include:
 
 - Display: 34
@@ -52,6 +65,18 @@ Role-specific branding can change primary/secondary/tertiary colors. Check `role
 
 ## Buttons and Inputs
 
+POS modal refinement requested2026-11-27: ticket rename/delete, item/general
+discounts, checkout and cash movement forms use square cards, inputs, toggles
+and actions. Interactive fields/actions are44px tall, with standard density
+inside this scope. Ticket rename inputs span the content width. Delete uses
+the existing outlined trash image. Invoice type is selected only in the sale
+detail; checkout retains that selection and its fiscal validation. Other
+dialogs retain the existing global appearance.
+
+Owner refinement: these POS forms use a shared1px corner radius, keeping the
+nearly square appearance with a slight softening; heights and behavior stay
+unchanged.
+
 Action notices (owner clarification, 2026-11-21): AppFeedback transient notices
 use a compact paragraph with a bold short title, icon and close action, at 12 px
 from the top and right safe edges. Product lifecycle notices use the same upper
@@ -81,6 +106,26 @@ search remains36px tall and is limited to560px on desktop. Filter controls use
 actions. Other modules keep their existing toolbar defaults. Public marketing
 includes a compact e-CF announcement within its navigation header; auth on mobile uses
 document scrolling so browser chrome can respond naturally to user gestures.
+
+Credit history owner refinement (2026-11-26): its filter is square and36px tall,
+matching search. Move the selected-credit title/count into the toolbar at the
+right and omit the duplicated appbar metric and list refresh header. The detail
+starts with the document, uses orange for pending status, and presents only
+Registrar abono, Saldar and administrator-only Eliminar crédito as square
+actions on one line, with short captions in compact widths. Printing and PDF belong to each list row. No create-credit
+action is offered in this history or its empty state; credit sales originate
+in Facturación through its existing payment method. The amount paid is shown
+once in the detail totals; retain channel amounts and custom notes, omitting
+the redundant automatic note «Pago: Crédito». Mobile details share this content
+and the same three resolution actions. These overrides are scoped to credit
+history and retain backend authorization and financial validation.
+
+The subsequent compact-detail refinement uses two columns for client/contact
+and cashier/status, side-by-side payment channels and three columns for the
+totals. Product sections use reduced padding. Below1360px, the history has12px
+side margins and prioritizes a wider detail column; compact actions read Abonar,
+Saldar and Eliminar with full tooltips. Preserve every monetary digit in narrow
+credit list rows. The appbar orders the cash-turn control before Refresh.
 
 Public website refinement (2026-11-20): at widths up to900px the marketing header
 scrolls with the document. Desktop keeps its sticky navigation. The mobile menu

@@ -26,6 +26,7 @@ import { GuardianRetentionService } from './guardian.retention.service';
 import { guardianSecretValue } from './guardian.secret';
 import { GUARDIAN_AI_PROVIDER } from './ai/guardian-ai.provider';
 import { MockGuardianAiProvider } from './ai/mock-guardian-ai.provider';
+import { CrmGuardianAiProvider } from './ai/crm-guardian-ai.provider';
 import { OpenAiGuardianAiProvider } from './ai/openai-guardian-ai.provider';
 import { describeGuardianAiRuntime, resolveGuardianAiRuntime } from './ai/guardian.ai.runtime';
 
@@ -42,6 +43,7 @@ import { describeGuardianAiRuntime, resolveGuardianAiRuntime } from './ai/guardi
  * explícita, porque mezclaría facturación y cuotas de dos negocios.
  */
 export function createGuardianAiProvider() {
+  if (process.env.GUARDIAN_AI_PROVIDER?.trim().toLowerCase() === 'crm') return new CrmGuardianAiProvider();
   const runtime = resolveGuardianAiRuntime();
   const logger = new Logger('GuardianAi');
   // Se registra el adaptador efectivo (nunca la credencial) para que ninguna
@@ -50,6 +52,7 @@ export function createGuardianAiProvider() {
   for (const warning of runtime.warnings) logger.warn(warning);
 
   if (runtime.adapter === 'mock') return new MockGuardianAiProvider();
+  if (runtime.adapter === 'crm') return new CrmGuardianAiProvider();
 
   return new OpenAiGuardianAiProvider({
     apiKey: guardianSecretValue(process.env, 'GUARDIAN_AI_API_KEY'),

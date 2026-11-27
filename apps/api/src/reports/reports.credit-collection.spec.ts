@@ -325,6 +325,8 @@ describe("ReportsService · cobro de crédito por fecha real (hardening)", () =>
       to: "2026-09-01",
     });
     expect(report.kpis.netSales).toBe(0);
+    expect(report.kpis.netCost).toBe(0);
+    expect(report.kpis.grossProfit).toBe(0);
     expect(report.kpis.returnedSales).toBeCloseTo(1000, 2);
     expect(report.kpis.totalReturns).toBe(1);
     expect(report.kpis.totalSales).toBe(1);

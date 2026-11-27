@@ -34,7 +34,11 @@ abstract class GuardianStore {
   Future<void> upsert(GuardianEvent event);
 
   /// Eventos listos para enviar (respetando `nextAttemptAtMs` y prioridad).
-  Future<List<GuardianEvent>> dueEvents({required int limit, DateTime? now});
+  Future<List<GuardianEvent>> dueEvents({
+    required int limit,
+    DateTime? now,
+    String? companyId,
+  });
 
   /// Marca un intento fallido con su próximo momento de reintento.
   Future<void> markFailure(
@@ -87,6 +91,7 @@ class InMemoryGuardianStore implements GuardianStore {
   Future<List<GuardianEvent>> dueEvents({
     required int limit,
     DateTime? now,
+    String? companyId,
   }) async {
     final at = now ?? DateTime.now();
     final sorted = _events.values.toList()
@@ -96,7 +101,12 @@ class InMemoryGuardianStore implements GuardianStore {
         return a.occurredAt.compareTo(b.occurredAt);
       });
     return sorted
-        .where((event) => event.nextAttemptAtMs <= at.millisecondsSinceEpoch)
+        .where(
+          (event) =>
+              event.nextAttemptAtMs <= at.millisecondsSinceEpoch &&
+              (companyId == null ||
+                  event.context?['_guardianCompanyId'] == companyId),
+        )
         .take(limit)
         .toList();
   }

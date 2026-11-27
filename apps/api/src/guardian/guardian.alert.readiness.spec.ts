@@ -30,8 +30,14 @@ describe('readiness de alertas según diagnóstico', () => {
     expect(readiness.deadlineAt).toBeNull();
   });
 
-  it('SEV2/SEV3 esperan mientras el diagnóstico está pendiente o corriendo', () => {
-    for (const severity of ['SEV2', 'SEV3']) {
+  it('SEV2 no espera la IA aunque falle o esté pendiente', () => {
+    for (const status of ['FAILED','RUNNING','PENDING',null] as const) {
+      expect(resolveAlertReadiness({severity:'SEV2',receivedAt,diagnosisStatus:status,now:at(0),waitSeconds:90})).toEqual({ready:true,reason:'SEV2_IMMEDIATE',deadlineAt:null});
+    }
+  });
+
+  it('SEV3 espera mientras el diagnóstico está pendiente o corriendo', () => {
+    for (const severity of ['SEV3']) {
       for (const status of ['PENDING', 'RUNNING', null] as const) {
         const readiness = resolveAlertReadiness({
           severity,
@@ -49,7 +55,7 @@ describe('readiness de alertas según diagnóstico', () => {
 
   it('se envía en cuanto el diagnóstico está DONE (antes del plazo)', () => {
     const readiness = resolveAlertReadiness({
-      severity: 'SEV2',
+      severity: 'SEV3',
       receivedAt,
       diagnosisStatus: 'DONE',
       now: at(5),
@@ -62,7 +68,7 @@ describe('readiness de alertas según diagnóstico', () => {
   it('al vencer el plazo se envía aunque el diagnóstico haya fallado', () => {
     for (const status of ['FAILED', 'RUNNING', 'PENDING', null] as const) {
       const readiness = resolveAlertReadiness({
-        severity: 'SEV2',
+        severity: 'SEV3',
         receivedAt,
         diagnosisStatus: status,
         now: at(90),
@@ -75,7 +81,7 @@ describe('readiness de alertas según diagnóstico', () => {
 
   it('con espera 0 se mantiene el comportamiento anterior (envío inmediato)', () => {
     const readiness = resolveAlertReadiness({
-      severity: 'SEV2',
+      severity: 'SEV3',
       receivedAt,
       diagnosisStatus: null,
       now: at(0),

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/design_system/icons/app_icon.dart';
 import '../../../../core/design_system/icons/app_icons.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/square_pos_dialog.dart';
 
 /// Presentación del footer. Los borradores y sus acciones pertenecen al editor.
 class SalesTicketBar extends StatelessWidget {
@@ -264,6 +265,7 @@ class SalesTicketTab extends StatelessWidget {
                       tooltip: 'Opciones de $label',
                       padding: EdgeInsets.zero,
                       position: PopupMenuPosition.over,
+                      shape: const RoundedRectangleBorder(borderRadius: SquarePosDialog.corners),
                       icon: AppIcon(
                         AppIcons.moreVertical,
                         size: 17,

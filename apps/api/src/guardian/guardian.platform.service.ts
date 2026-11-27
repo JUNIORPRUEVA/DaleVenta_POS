@@ -9,6 +9,9 @@ import { GuardianIncidentsService } from './guardian.incidents.service';
 import { classifyWorkerHeartbeat } from './guardian.watchdog.checks';
 import { resolveGuardianWhatsAppProfile } from './guardian.whatsapp.config';
 import { resolveGuardianAiRuntime } from './ai/guardian.ai.runtime';
+import { resolveGuardianConfig } from './guardian.config';
+import { GuardianDurableOutbox } from './guardian.durable-outbox';
+import { CrmGuardianAiProvider } from './ai/crm-guardian-ai.provider';
 
 export type PlatformIncidentFilters = {
   companyId?: string;
@@ -59,7 +62,7 @@ export class GuardianPlatformService {
       data: {
         guardianEnabled: enabled,
         guardianEnabledAt: enabled ? new Date() : null,
-        guardianEnabledBy: enabled ? 'platform-token' : null,
+        guardianEnabledBy: enabled ? 'platform-token' : 'DISABLED_BY_PLATFORM',
       },
       select: { id: true, name: true, guardianEnabled: true, guardianEnabledAt: true },
     });
@@ -137,7 +140,7 @@ export class GuardianPlatformService {
   async companies() {
     const companies = await this.prisma.company.findMany({
       where: { status: { not: 'ARCHIVED' } },
-      select: { id: true, name: true, status: true, licenseStatus: true },
+      select: { id: true, name: true, status: true, licenseStatus: true, guardianEnabled: true },
       orderBy: { name: 'asc' },
       take: 1_000,
     });
@@ -167,7 +170,7 @@ export class GuardianPlatformService {
         licenseStatus: String(company.licenseStatus),
         openIncidents: counters?.open ?? 0,
         criticalIncidents: counters?.critical ?? 0,
-        monitored: Boolean(counters),
+        monitored: company.guardianEnabled === true,
       };
     });
   }
@@ -392,8 +395,15 @@ export class GuardianPlatformService {
     // está mal configurado se dice explícitamente, en vez de anunciar un
     // proveedor real que el código no está usando.
     const aiRuntime = resolveGuardianAiRuntime();
+    const guardianConfig = resolveGuardianConfig();
     return {
-      guardianEnabled: String(process.env.GUARDIAN_ENABLED ?? '').toLowerCase() === 'true',
+      alertsEnabled:guardianConfig.alertsEnabled,
+      diagnosisEnabled:guardianConfig.diagnosisEnabled,
+      ingestEnabled:guardianConfig.ingestEnabled,
+      backendCaptureEnabled:guardianConfig.backendCaptureEnabled,
+      recipientConfigured:Boolean(guardianConfig.alertsRecipient || process.env.GUARDIAN_ALERT_RECIPIENTS?.trim()),
+      localOutbox:{backend:await GuardianDurableOutbox.status('backend'),telemetry:await GuardianDurableOutbox.status('telemetry')},
+      guardianEnabled: guardianConfig.enabled,
       // Solo identidad propia de APPYRA: nunca se reporta configurado por
       // heredar credenciales Meta de otro producto.
       whatsappCloudConfigured: whatsapp.provider === 'meta_cloud',
@@ -402,6 +412,7 @@ export class GuardianPlatformService {
         (process.env.GUARDIAN_ALERT_FALLBACK_WEBHOOK_URL ?? '').trim(),
       ),
       aiProvider: aiRuntime.adapter,
+      aiSharedStatus:aiRuntime.adapter === 'crm' ? await new CrmGuardianAiProvider().status() : null,
       aiModel: aiRuntime.adapter === 'mock' ? null : aiRuntime.model,
       aiConfigurationIssues: aiRuntime.errors,
       pendingAlerts,

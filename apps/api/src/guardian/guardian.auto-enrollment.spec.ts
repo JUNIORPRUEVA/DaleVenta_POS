@@ -213,6 +213,14 @@ describe('concesion de auto-enrolamiento', () => {
     process.env = { ...BASE_ENV };
   });
 
+  it('never overrides a platform administrator opt-out even when automatic activation is enabled',async()=>{
+    setEnv({GUARDIAN_AUTO_ENROLL_ENABLED:'true',GUARDIAN_AUTO_ENROLL_COMPANIES:'*',GUARDIAN_AUTO_ENROLL_ACTIVATE:'true'});
+    const {store}=createFakeStore({companies:{[COMPANY_A]:{...ACTIVE_COMPANY,guardianEnabled:false,guardianEnabledBy:'DISABLED_BY_PLATFORM'} as any}});
+    const service=new GuardianAutoEnrollmentService(store as any);
+    const outcome=await service.requestGrant({companyId:COMPANY_A,actorUserId:'owner',actorRole:'ADMIN',installId:'install-guarded'});
+    expect(outcome).toMatchObject({ok:false,code:'COMPANY_GUARDIAN_DISABLED'});
+  });
+
   it('rechaza todo si el interruptor esta apagado', async () => {
     setEnv({ GUARDIAN_AUTO_ENROLL_ENABLED: 'false', GUARDIAN_AUTO_ENROLL_COMPANIES: '*' });
     const { store } = createFakeStore({ companies: { [COMPANY_A]: { ...ACTIVE_COMPANY } } });

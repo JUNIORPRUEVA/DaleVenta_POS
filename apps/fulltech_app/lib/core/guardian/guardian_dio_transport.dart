@@ -2,6 +2,9 @@ import 'package:dio/dio.dart';
 
 import 'guardian_event.dart';
 import 'guardian_transport.dart';
+import 'guardian_machine_transport.dart';
+import 'guardian_identity.dart';
+import '../api/retry_after.dart';
 
 /// Transporte HTTP hacia `POST /guardian/incidents`.
 ///
@@ -40,6 +43,17 @@ class DioGuardianTransport implements GuardianTransport {
     if (token == null || token.isEmpty) {
       return const GuardianSendResult(retryable: true, reason: 'SIN_TOKEN');
     }
+    if (events.any(
+      (event) =>
+          event.context?['_guardianCompanyId'] != null &&
+          event.context?['_guardianCompanyId'] !=
+              guardianCompanyFromToken(token),
+    )) {
+      return const GuardianSendResult(
+        retryable: true,
+        reason: 'COMPANY_SCOPE_CHANGED',
+      );
+    }
 
     Response<dynamic> response;
     try {
@@ -63,7 +77,7 @@ class DioGuardianTransport implements GuardianTransport {
 
     final status = response.statusCode ?? 0;
     if (status >= 200 && status < 300) {
-      return _parseSuccess(response.data, events);
+      return parseGuardianIngestResponse(response.data, events);
     }
 
     if (status == 400 || status == 413 || status == 422) {
@@ -74,51 +88,12 @@ class DioGuardianTransport implements GuardianTransport {
       );
     }
 
-    return GuardianSendResult(retryable: true, reason: 'HTTP_$status');
-  }
-
-  GuardianSendResult _parseSuccess(dynamic data, List<GuardianEvent> events) {
-    final result = data is Map ? (data['results'] as List?) : null;
-    if (result == null) {
-      // Servidor 2xx sin detalle: asumimos aceptados (contrato mínimo).
-      return GuardianSendResult(
-        acked: events.map((event) => event.eventId).toList(),
-      );
-    }
-
-    final acked = <String>[];
-    final duplicates = <String>[];
-    final rejected = <String>[];
-    String? reason;
-
-    for (final item in result) {
-      if (item is! Map) continue;
-      final eventId = item['eventId']?.toString();
-      final status = item['status']?.toString();
-      if (eventId == null || eventId.isEmpty) continue;
-
-      switch (status) {
-        case 'accepted':
-          acked.add(eventId);
-          break;
-        case 'duplicate':
-          duplicates.add(eventId);
-          break;
-        case 'rejected':
-          rejected.add(eventId);
-          reason = item['reason']?.toString() ?? reason;
-          break;
-        default:
-          break;
-      }
-    }
-
     return GuardianSendResult(
-      acked: acked,
-      duplicates: duplicates,
-      rejected: rejected,
-      retryable: false,
-      reason: reason,
+      retryable: true,
+      reason: 'HTTP_$status',
+      retryAfterMs: parseRetryAfter(
+        response.headers.value('retry-after'),
+      )?.inMilliseconds,
     );
   }
 }

@@ -1,21 +1,12 @@
 import 'package:daleventa_pos/core/widgets/mobile_action_icon.dart';
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 
 import '../../core/auth/app_role.dart';
-import '../../core/auth/admin_authorization.dart';
-import '../../core/routing/app_navigator.dart';
-import '../../core/routing/route_access.dart';
-import '../../core/routing/routes.dart';
 import '../../core/auth/auth_provider.dart';
-import '../../core/company/company_settings_model.dart';
 import '../../core/company/company_settings_repository.dart';
 import '../../core/errors/user_safe_error_text.dart';
 import '../../core/theme/app_colors.dart';
@@ -33,11 +24,14 @@ import '../../core/widgets/history_presentation.dart';
 import '../../core/widgets/pdf_action_menu.dart';
 import '../../core/widgets/pdf_preview_panel.dart';
 import '../../core/widgets/sync_status_banner.dart';
+import '../../core/printing/unified_ticket_printer.dart';
+import '../../core/printing/models/ticket_data.dart';
 import '../cash/cash_dialogs.dart';
 import '../cash/cash_turn_menu_button.dart';
 import 'data/ventas_repository.dart';
 import 'sales_models.dart';
 import 'credit_history_filters.dart';
+import 'utils/sales_pdf_service.dart' show invoicePdfCode;
 
 final salesCreditsProvider = FutureProvider<List<SaleModel>>((ref) {
   return ref.watch(ventasRepositoryProvider).listCredits(includePaid: true);
@@ -48,7 +42,14 @@ bool _shouldUseCreditDesktopLayout(double width) {
 }
 
 double _creditInfoColumnWidth(double width) {
-  return (width * 0.34).clamp(330.0, 640.0);
+  return (width * 0.30 + 150).clamp(420.0, 640.0);
+}
+
+String _creditDisplayNote(SaleModel sale) {
+  final note = (sale.note ?? '').trim();
+  return RegExp(r'^Pago:\s*cr[eé]dito\.?$', caseSensitive: false).hasMatch(note)
+      ? ''
+      : note;
 }
 
 class SalesCreditScreen extends ConsumerStatefulWidget {
@@ -67,6 +68,7 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
   CreditHistoryFilters _filters = const CreditHistoryFilters();
   String? _error;
   List<SaleModel> _credits = const [];
+  bool _savingPayment = false;
 
   @override
   void initState() {
@@ -135,8 +137,13 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
     final currentUser = ref.watch(authStateProvider).user;
     final width = MediaQuery.sizeOf(context).width;
     final isDesktop = _shouldUseCreditDesktopLayout(width);
+    final compactDesktop = width < 1360;
+    final gutter = compactDesktop ? 12.0 : 24.0;
+    final columnGap = compactDesktop ? 10.0 : 16.0;
     final isAdmin = currentUser?.appRole.isAdmin ?? false;
-    final selected = _selectedCredit(_credits.where(_filters.matches).toList());
+    final visible = _visibleCredits(_credits);
+    final selected =
+        _selectedCredit(visible) ?? (visible.isEmpty ? null : visible.first);
 
     return Scaffold(
       backgroundColor: isDesktop ? desktopSalesSurface : AppColors.background,
@@ -155,11 +162,7 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
           ? FullTechPageHeader(
               title: 'Historial de créditos',
               actions: [
-                HistoryMetric(
-                  icon: Icons.credit_score_outlined,
-                  label: 'Créditos',
-                  value: '${_credits.length}',
-                ),
+                const CashTurnMenuButton(refined: true),
                 const SizedBox(width: 8),
                 IconButton.filledTonal(
                   tooltip: _loading ? 'Actualizando...' : 'Actualizar',
@@ -168,8 +171,6 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
                       : () => unawaited(_refreshCredits()),
                   icon: const MobileActionIcon(Icons.refresh_rounded),
                 ),
-                const SizedBox(width: 8),
-                const CashTurnMenuButton(refined: true),
                 const SizedBox(width: 12),
               ],
             )
@@ -210,35 +211,81 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
         child: isDesktop
             ? Column(
                 children: [
-                  HistoryToolbar(
-                    maxSearchWidth: 560,
-                    actions: [
-                      FilledButton.icon(
-                        onPressed: _openCreditFilters,
-                        style: FilledButton.styleFrom(
-                          minimumSize: const Size(0, 36),
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          shape: const RoundedRectangleBorder(
-                            borderRadius: BorderRadius.all(Radius.circular(6)),
+                  Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: gutter,
+                      vertical: compactDesktop ? 5 : 8,
+                    ),
+                    decoration: const BoxDecoration(
+                      color: AppColors.surfaceSubtle,
+                      border: Border(
+                        bottom: BorderSide(color: AppColors.border),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Flexible(
+                                child: ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 560,
+                                  ),
+                                  child: SizedBox(
+                                    height: 36,
+                                    child: _CreditTopPanel(
+                                      searchController: _searchController,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              SizedBox(
+                                height: 36,
+                                child: FilledButton.icon(
+                                  onPressed: _openCreditFilters,
+                                  style: FilledButton.styleFrom(
+                                    minimumSize: const Size(0, 36),
+                                    tapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                    visualDensity: VisualDensity.standard,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                    ),
+                                    shape: const RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.zero,
+                                    ),
+                                  ),
+                                  icon: const MobileActionIcon(
+                                    Icons.filter_alt_outlined,
+                                    size: 18,
+                                  ),
+                                  label: const Text('Filtro'),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        icon: const MobileActionIcon(Icons.filter_alt_outlined, size: 18),
-                        label: const Text('Filtro'),
-                      ),
-                      if (_credits.isNotEmpty)
-                        FilledButton.icon(
-                          onPressed: _startCredit,
-                          icon: const Icon(Icons.add, size: 18),
-                          label: const Text('Crear nuevo crédito'),
+                        SizedBox(width: columnGap),
+                        SizedBox(
+                          width: _creditInfoColumnWidth(width),
+                          child: _CreditSelectionSummary(
+                            count: visible.length,
+                            refreshing: _loading,
+                          ),
                         ),
-                    ],
-                    search: _CreditTopPanel(
-                      searchController: _searchController,
+                      ],
                     ),
                   ),
                   Expanded(
                     child: DesktopSalesFrame(
-                      padding: const EdgeInsets.fromLTRB(24, 10, 24, 16),
+                      padding: EdgeInsets.fromLTRB(
+                        gutter,
+                        compactDesktop ? 6 : 10,
+                        gutter,
+                        compactDesktop ? 8 : 16,
+                      ),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
@@ -246,20 +293,17 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
                             child: HistoryPanel(
                               child: _buildCreditMainColumn(
                                 rows: _credits,
-                                isAdmin: isAdmin,
                                 desktop: true,
                               ),
                             ),
                           ),
-                          const SizedBox(width: 16),
+                          SizedBox(width: columnGap),
                           SizedBox(
                             width: _creditInfoColumnWidth(width),
                             child: HistoryPanel(
                               child: HistoryDetailStyle(
                                 child: _CreditFixedInfoColumn(
                                   sale: selected,
-                                  totalCredits: _credits.length,
-                                  refreshing: _loading,
                                   onPayment: selected == null
                                       ? null
                                       : () => _openPaymentDialog(selected),
@@ -271,15 +315,6 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
                                           selected,
                                           settle: true,
                                         ),
-                                  onPdf: selected == null
-                                      ? null
-                                      : () => _openCreditPdfPreview(selected),
-                                  onPrint: selected == null
-                                      ? null
-                                      : () => _printCreditPdf(selected),
-                                  onWhatsApp: selected == null
-                                      ? null
-                                      : () => _sendCreditWhatsApp(selected),
                                   onDelete: selected == null
                                       ? null
                                       : isAdmin
@@ -295,11 +330,7 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
                   ),
                 ],
               )
-            : _buildCreditMainColumn(
-                rows: _credits,
-                isAdmin: isAdmin,
-                desktop: false,
-              ),
+            : _buildCreditMainColumn(rows: _credits, desktop: false),
       ),
     );
   }
@@ -329,29 +360,8 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
     }
   }
 
-  Future<void> _startCredit() async {
-    final allowed = await ensureAdminAuthorization(
-      context,
-      ref,
-      permission: RouteAccess.permissionForLocation(Routes.cotizaciones),
-      routeLocation: Routes.cotizaciones,
-      reason: 'Entrar a Facturar',
-    );
-    if (allowed && mounted) AppNavigator.go(context, Routes.cotizaciones);
-  }
-
   void _showMobileSummary() {
-    final query = _searchController.text.trim().toLowerCase();
-    final filtered = _credits
-        .where((sale) {
-          if (!_filters.matches(sale)) return false;
-          if (query.isEmpty) return true;
-          return (sale.customerName ?? '').toLowerCase().contains(query) ||
-              sale.id.toLowerCase().contains(query) ||
-              (sale.customerPhone ?? '').toLowerCase().contains(query) ||
-              (sale.userName ?? sale.userId).toLowerCase().contains(query);
-        })
-        .toList(growable: false);
+    final filtered = _visibleCredits(_credits);
     final open = filtered.where((sale) => sale.creditBalance > 0.009).length;
     final pending = filtered.fold<double>(
       0,
@@ -433,31 +443,35 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
     );
   }
 
+  List<SaleModel> _visibleCredits(List<SaleModel> rows) {
+    final query = _searchController.text.trim().toLowerCase();
+    return rows
+        .where((sale) {
+          if (!_filters.matches(sale)) return false;
+          return query.isEmpty ||
+              (sale.customerName ?? '').toLowerCase().contains(query) ||
+              TicketData.fromSale(
+                sale,
+              ).ticketNumber.toLowerCase().contains(query) ||
+              sale.id.toLowerCase().contains(query) ||
+              (sale.customerPhone ?? '').toLowerCase().contains(query) ||
+              (sale.userName ?? '').toLowerCase().contains(query);
+        })
+        .toList(growable: false);
+  }
+
   Widget _buildCreditMainColumn({
     required List<SaleModel> rows,
-    required bool isAdmin,
     required bool desktop,
   }) {
     final theme = Theme.of(context);
-    final query = _searchController.text.trim().toLowerCase();
-    final filtered = rows
-        .where((sale) {
-          if (!_filters.matches(sale)) return false;
-          if (query.isEmpty) return true;
-          return (sale.customerName ?? '').toLowerCase().contains(query) ||
-              sale.id.toLowerCase().contains(query) ||
-              (sale.customerPhone ?? '').toLowerCase().contains(query) ||
-              (sale.userName ?? sale.userId).toLowerCase().contains(query);
-        })
-        .toList(growable: false);
+    final filtered = _visibleCredits(rows);
+    final selectedId =
+        _selectedCredit(filtered)?.id ??
+        (filtered.isEmpty ? null : filtered.first.id);
 
     return Column(
       children: [
-        if (desktop)
-          HistoryListHeader(
-            label: 'Mostrando créditos',
-            onRefresh: _loading ? null : () => unawaited(_refreshCredits()),
-          ),
         SyncStatusBanner(
           visible: _loading && _credits.isEmpty,
           label: 'Sincronizando créditos...',
@@ -505,11 +519,9 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
                               child: HistoryEmptyState(
                                 title: 'No hay créditos con estos filtros',
                                 message:
-                                    'Ajusta la búsqueda o comienza una nueva venta a crédito.',
-                                buttonLabel: 'Crear nuevo crédito',
-                                onPressed: !_loading && _error == null
-                                    ? _startCredit
-                                    : null,
+                                    'Ajusta los filtros. Los créditos se crean desde Facturación.',
+                                buttonLabel: '',
+                                onPressed: null,
                               ),
                             ),
                           ],
@@ -530,18 +542,14 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
                             return _CreditCard(
                               sale: sale,
                               compact: desktop,
-                              selected: desktop && sale.id == _selectedCreditId,
+                              selected: desktop && sale.id == selectedId,
                               onTap: desktop
                                   ? () => setState(() {
                                       _selectedCreditId = sale.id;
                                     })
                                   : () => _openMobileCreditDetail(sale),
-                              onPayment: () => _openPaymentDialog(sale),
                               onPdf: () => _openCreditPdfPreview(sale),
                               onPrint: () => _printCreditPdf(sale),
-                              onDelete: isAdmin
-                                  ? () => _confirmDeleteCredit(sale)
-                                  : null,
                             );
                           },
                         ),
@@ -590,9 +598,6 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
                 onSettle: sale.creditBalance <= 0.009
                     ? null
                     : () => _openPaymentDialog(sale, settle: true),
-                onPrint: () => _printCreditPdf(sale),
-                onSharePdf: () => _openCreditPdfPreview(sale),
-                onWhatsApp: () => _sendCreditWhatsApp(sale),
                 onDelete: isAdmin
                     ? () => _confirmDeleteCredit(
                         sale,
@@ -626,36 +631,59 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
   }
 
   Future<void> _openPaymentDialog(SaleModel sale, {bool settle = false}) async {
-    final draft = await showDialog<_CreditPaymentDraft>(
-      context: context,
-      barrierDismissible: true,
-      barrierColor: const Color(0x990B1720),
-      builder: (_) => _CreditPaymentDialog(sale: sale, settle: settle),
-    );
-    if (draft == null || !mounted) return;
-
+    if (_savingPayment) return;
+    _savingPayment = true;
     try {
-      await ref
-          .read(ventasRepositoryProvider)
-          .addCreditPayment(
-            saleId: sale.id,
-            cashAmount: draft.cashAmount,
-            transferAmount: draft.transferAmount,
-            note: draft.note,
-          );
-      unawaited(_refreshCredits());
-      if (!mounted) return;
-      showCashToast(context, settle ? 'Crédito saldado' : 'Abono registrado');
-    } catch (error) {
-      if (!mounted) return;
-      showCashToast(
-        context,
-        userSafeErrorMessage(
-          error,
-          fallback: 'No se pudo registrar el abono. Inténtalo nuevamente.',
-        ),
-        isError: true,
+      final draft = await showDialog<_CreditPaymentDraft>(
+        context: context,
+        barrierDismissible: true,
+        barrierColor: const Color(0x990B1720),
+        builder: (_) => _CreditPaymentDialog(sale: sale, settle: settle),
       );
+      if (draft == null || !mounted) return;
+
+      try {
+        final updated = await ref
+            .read(ventasRepositoryProvider)
+            .addCreditPayment(
+              saleId: sale.id,
+              cashAmount: draft.cashAmount,
+              transferAmount: draft.transferAmount,
+              note: draft.note,
+            );
+        if (!mounted) return;
+        if (updated.status == 'PENDING_SYNC') {
+          showCashToast(
+            context,
+            'Abono guardado en este equipo. Pendiente de confirmar; no lo repitas.',
+          );
+          return;
+        }
+        setState(
+          () => _credits = [
+            for (final row in _credits) row.id == updated.id ? updated : row,
+          ],
+        );
+        showCashToast(
+          context,
+          updated.creditBalance <= 0.009
+              ? 'Crédito saldado'
+              : 'Abono registrado',
+        );
+        await _openCreditPdfPreview(updated);
+      } catch (error) {
+        if (!mounted) return;
+        showCashToast(
+          context,
+          userSafeErrorMessage(
+            error,
+            fallback: 'No se pudo registrar el abono. Inténtalo nuevamente.',
+          ),
+          isError: true,
+        );
+      }
+    } finally {
+      _savingPayment = false;
     }
   }
 
@@ -712,420 +740,38 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
   }
 
   Future<Uint8List> _buildCreditPdf(SaleModel sale) async {
-    final company =
-        await ref.read(companySettingsRepositoryProvider).getCachedSettings() ??
-        CompanySettings.empty();
-    final logoImage = await _resolveCreditLogo(company);
-    final doc = pw.Document();
-    final date = sale.saleDate == null
-        ? 'Sin fecha'
-        : DateFormat(
-            'dd/MM/yyyy h:mm a',
-            'es_DO',
-          ).format(toBusinessTime(sale.saleDate!));
-    final shortId = _shortId(sale);
-    final companyName = _fallback(company.companyName, 'FULLTECH, SRL');
-    final customerName = _fallback(sale.customerName, 'Cliente');
-    final customerPhone = _fallback(sale.customerPhone, 'No registrado');
-    final cashierName = _fallback(sale.userName ?? sale.userId, 'Usuario');
-    final status = sale.creditBalance <= 0.009 ? 'Saldado' : 'Pendiente';
-
-    doc.addPage(
-      pw.MultiPage(
-        pageTheme: pw.PageTheme(
-          pageFormat: PdfPageFormat.a4,
-          margin: const pw.EdgeInsets.fromLTRB(26, 24, 26, 22),
-          buildBackground: (_) => pw.FullPage(
-            ignoreMargins: true,
-            child: pw.Container(color: const PdfColor.fromInt(0xFFF8FAFC)),
-          ),
-        ),
-        build: (context) => [
-          pw.Row(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Expanded(
-                child: pw.Row(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    _creditLogoBox(companyName, logoImage),
-                    pw.SizedBox(width: 12),
-                    pw.Expanded(
-                      child: pw.Column(
-                        crossAxisAlignment: pw.CrossAxisAlignment.start,
-                        children: [
-                          pw.Text(
-                            companyName,
-                            style: pw.TextStyle(
-                              fontSize: 17,
-                              fontWeight: pw.FontWeight.bold,
-                              color: const PdfColor.fromInt(0xFF111827),
-                            ),
-                          ),
-                          if (company.rnc.trim().isNotEmpty)
-                            _mutedText('RNC: ${company.rnc.trim()}'),
-                          if (company.phone.trim().isNotEmpty)
-                            _mutedText('Tel: ${company.phone.trim()}'),
-                          if (company.address.trim().isNotEmpty)
-                            _mutedText(company.address.trim()),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              pw.SizedBox(width: 16),
-              pw.Container(
-                width: 220,
-                padding: const pw.EdgeInsets.all(12),
-                decoration: _creditPanelDecoration(),
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text(
-                      'ESTADO DE CREDITO',
-                      style: pw.TextStyle(
-                        fontSize: 8.5,
-                        fontWeight: pw.FontWeight.bold,
-                        color: const PdfColor.fromInt(0xFF2563EB),
-                      ),
-                    ),
-                    pw.SizedBox(height: 5),
-                    pw.Text(
-                      'CRE-$shortId',
-                      style: pw.TextStyle(
-                        fontSize: 14,
-                        fontWeight: pw.FontWeight.bold,
-                        color: const PdfColor.fromInt(0xFF111827),
-                      ),
-                    ),
-                    pw.SizedBox(height: 9),
-                    _factLine('Emision', date),
-                    _factLine('Estado', status),
-                    _factLine('Cajero', cashierName),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          pw.SizedBox(height: 18),
-          pw.Container(height: 1, color: const PdfColor.fromInt(0xFFD8E1EA)),
-          pw.SizedBox(height: 12),
-          pw.Container(
-            width: 340,
-            padding: const pw.EdgeInsets.fromLTRB(14, 12, 14, 12),
-            decoration: _creditPanelDecoration(),
-            child: pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                _factLine('Nombre', customerName, strong: true),
-                pw.SizedBox(height: 7),
-                _factLine('Telefono', customerPhone),
-              ],
-            ),
-          ),
-          pw.SizedBox(height: 16),
-          pw.Text(
-            'Detalle del credito',
-            style: pw.TextStyle(
-              fontSize: 10.5,
-              fontWeight: pw.FontWeight.bold,
-              color: const PdfColor.fromInt(0xFF111827),
-            ),
-          ),
-          pw.SizedBox(height: 8),
-          _creditItemsTable(sale),
-          pw.SizedBox(height: 22),
-          pw.Row(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Expanded(
-                child: pw.Container(
-                  padding: const pw.EdgeInsets.all(14),
-                  decoration: _creditPanelDecoration(),
-                  child: pw.Text(
-                    'Gracias por preferirnos. Este documento resume el saldo pendiente del cliente y los abonos aplicados a la factura indicada.',
-                    style: pw.TextStyle(
-                      fontSize: 9,
-                      color: const PdfColor.fromInt(0xFF64748B),
-                      fontStyle: pw.FontStyle.italic,
-                    ),
-                  ),
-                ),
-              ),
-              pw.SizedBox(width: 14),
-              pw.Container(
-                width: 230,
-                padding: const pw.EdgeInsets.all(14),
-                decoration: _creditPanelDecoration(),
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text(
-                      'Totales',
-                      style: pw.TextStyle(
-                        fontSize: 11,
-                        fontWeight: pw.FontWeight.bold,
-                        color: const PdfColor.fromInt(0xFF111827),
-                      ),
-                    ),
-                    pw.SizedBox(height: 10),
-                    _pdfAmountRow('Total factura', sale.totalSold),
-                    _pdfAmountRow('Pagado', sale.creditPaidAmount),
-                    _pdfAmountRow(
-                      'Pendiente',
-                      sale.creditBalance,
-                      strong: true,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          pw.SizedBox(height: 22),
-          pw.Text(
-            'Carta de compromiso',
-            style: pw.TextStyle(
-              fontSize: 10.5,
-              fontWeight: pw.FontWeight.bold,
-              color: const PdfColor.fromInt(0xFF111827),
-            ),
-          ),
-          pw.SizedBox(height: 8),
-          pw.Text(
-            'Por medio de la presente se deja constancia de que el cliente '
-            '$customerName mantiene un saldo pendiente de '
-            '${formatRdCurrencyAccounting(sale.creditBalance)} correspondiente '
-            'a la factura indicada. Los abonos realizados seran aplicados al '
-            'saldo hasta completar la deuda.',
-            style: const pw.TextStyle(
-              fontSize: 9.5,
-              lineSpacing: 2,
-              color: PdfColor.fromInt(0xFF334155),
-            ),
-          ),
-        ],
-      ),
-    );
-    return doc.save();
-  }
-
-  pw.Widget _creditItemsTable(SaleModel sale) {
-    final rows = <pw.TableRow>[
-      pw.TableRow(
-        decoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFF111827)),
-        children: [
-          _tableCell('Descripcion', header: true, align: pw.TextAlign.left),
-          _tableCell('Cant.', header: true),
-          _tableCell('Unitario', header: true, align: pw.TextAlign.right),
-          _tableCell('Importe', header: true, align: pw.TextAlign.right),
-        ],
-      ),
-      for (final item in sale.items)
-        pw.TableRow(
-          children: [
-            _tableCell(
-              item.productNameSnapshot.trim().isEmpty
-                  ? 'Producto sin descripcion'
-                  : item.productNameSnapshot.trim(),
-              align: pw.TextAlign.left,
-              strong: true,
-            ),
-            _tableCell(
-              formatQuantityForFeature(
-                item.qty,
-                unit: item.unitSnapshot,
-                showMeasurementUnit:
-                    ref
-                        .read(companySettingsProvider)
-                        .valueOrNull
-                        ?.measurementUnitsEnabled ==
-                    true,
-                includeUnitForUnit: true,
-              ),
-            ),
-            _tableCell(
-              formatRdCurrencyAccounting(item.priceSoldUnit),
-              align: pw.TextAlign.right,
-            ),
-            _tableCell(
-              formatRdCurrencyAccounting(item.subtotalSold),
-              align: pw.TextAlign.right,
-            ),
-          ],
-        ),
-    ];
-    return pw.Container(
-      decoration: pw.BoxDecoration(
-        border: pw.Border.all(
-          color: const PdfColor.fromInt(0xFFD8E1EA),
-          width: 0.45,
-        ),
-        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
-      ),
-      child: pw.Table(
-        border: const pw.TableBorder(
-          horizontalInside: pw.BorderSide(
-            color: PdfColor.fromInt(0xFFE5EAF0),
-            width: 0.55,
-          ),
-        ),
-        columnWidths: const {
-          0: pw.FlexColumnWidth(5.4),
-          1: pw.FlexColumnWidth(0.75),
-          2: pw.FlexColumnWidth(1.65),
-          3: pw.FlexColumnWidth(1.7),
-        },
-        children: rows,
-      ),
-    );
-  }
-
-  pw.Widget _tableCell(
-    String value, {
-    bool header = false,
-    bool strong = false,
-    pw.TextAlign align = pw.TextAlign.center,
-  }) {
-    return pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-      child: pw.Text(
-        value,
-        textAlign: align,
-        style: pw.TextStyle(
-          fontSize: header ? 8 : 8.4,
-          fontWeight: header || strong ? pw.FontWeight.bold : null,
-          color: header ? PdfColors.white : const PdfColor.fromInt(0xFF334155),
-        ),
-      ),
-    );
-  }
-
-  pw.Widget _pdfAmountRow(String label, double amount, {bool strong = false}) {
-    return pw.Padding(
-      padding: const pw.EdgeInsets.only(bottom: 7),
-      child: pw.Row(
-        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-        children: [
-          pw.Text(label, style: const pw.TextStyle(fontSize: 9)),
-          pw.Text(
-            formatRdCurrencyAccounting(amount),
-            style: pw.TextStyle(
-              fontSize: strong ? 11 : 9,
-              fontWeight: strong ? pw.FontWeight.bold : null,
-              color: strong
-                  ? const PdfColor.fromInt(0xFF2563EB)
-                  : const PdfColor.fromInt(0xFF111827),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  pw.Widget _factLine(String label, String value, {bool strong = false}) {
-    return pw.Row(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: [
-        pw.SizedBox(
-          width: 64,
-          child: pw.Text(
-            label,
-            style: const pw.TextStyle(
-              fontSize: 8.4,
-              color: PdfColor.fromInt(0xFF64748B),
-            ),
-          ),
-        ),
-        pw.Expanded(
-          child: pw.Text(
-            value,
-            style: pw.TextStyle(
-              fontSize: 8.7,
-              fontWeight: strong ? pw.FontWeight.bold : null,
-              color: const PdfColor.fromInt(0xFF334155),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  pw.Widget _mutedText(String value) => pw.Padding(
-    padding: const pw.EdgeInsets.only(top: 2),
-    child: pw.Text(
-      value,
-      style: const pw.TextStyle(
-        fontSize: 8.5,
-        color: PdfColor.fromInt(0xFF64748B),
-      ),
-    ),
-  );
-
-  pw.BoxDecoration _creditPanelDecoration() {
-    return pw.BoxDecoration(
-      color: const PdfColor.fromInt(0xFFF8FAFC),
-      border: pw.Border.all(
-        color: const PdfColor.fromInt(0xFFD8E1EA),
-        width: 0.6,
-      ),
-      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
-    );
-  }
-
-  pw.Widget _creditLogoBox(String companyName, pw.MemoryImage? logoImage) {
-    return pw.Container(
-      width: 58,
-      height: 58,
-      padding: const pw.EdgeInsets.all(6),
-      decoration: _creditPanelDecoration(),
-      child: logoImage != null
-          ? pw.Image(logoImage, fit: pw.BoxFit.contain)
-          : pw.Center(
-              child: pw.Text(
-                companyName.isEmpty ? 'FT' : companyName.characters.first,
-                style: pw.TextStyle(
-                  fontSize: 18,
-                  fontWeight: pw.FontWeight.bold,
-                  color: const PdfColor.fromInt(0xFF2563EB),
-                ),
-              ),
-            ),
-    );
-  }
-
-  Future<pw.MemoryImage?> _resolveCreditLogo(CompanySettings company) async {
-    final raw = (company.logoBase64 ?? '').trim();
-    if (raw.isNotEmpty) {
-      try {
-        final base64Value = raw.startsWith('data:')
-            ? raw.substring(raw.indexOf(',') + 1)
-            : raw;
-        return pw.MemoryImage(base64Decode(base64Value));
-      } catch (_) {}
-    }
-    try {
-      final asset = await rootBundle.load('assets/image/logo.png');
-      return pw.MemoryImage(asset.buffer.asUint8List());
-    } catch (_) {
-      return null;
-    }
-  }
-
-  String _fallback(String? value, String fallback) {
-    final cleaned = (value ?? '').trim();
-    return cleaned.isEmpty ? fallback : cleaned;
+    final current = await ref.read(ventasRepositoryProvider).getById(sale.id);
+    return ref
+        .read(unifiedTicketPrinterProvider)
+        .buildSaleInvoicePdf(sale: current);
   }
 
   Future<void> _printCreditPdf(SaleModel sale) async {
-    final bytes = await _buildCreditPdf(sale);
-    await Printing.layoutPdf(onLayout: (_) async => bytes);
+    try {
+      final current = await ref.read(ventasRepositoryProvider).getById(sale.id);
+      final result = await ref
+          .read(unifiedTicketPrinterProvider)
+          .reprintSale(sale: current);
+      if (!mounted) return;
+      showCashToast(context, result.message, isError: !result.success);
+    } catch (error) {
+      if (mounted) {
+        showCashToast(
+          context,
+          userSafeErrorMessage(
+            error,
+            fallback: 'No se pudo preparar el ticket. El pago no se repite.',
+          ),
+          isError: true,
+        );
+      }
+    }
   }
 
   Future<void> _openCreditPdfPreview(SaleModel sale) async {
-    final filename = 'credito_${_shortId(sale)}.pdf';
+    final filename = 'factura_${invoicePdfCode(sale.id)}.pdf';
     final downloadFileName = buildPdfDocumentFileName(
-      documentKind: 'Crédito',
+      documentKind: 'Factura',
       customerName: sale.customerName,
       fallbackCode: _shortId(sale),
     );
@@ -1140,7 +786,7 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
         return Column(
           children: [
             PdfPreviewPanelHeader(
-              title: 'PDF crédito · ${sale.customerName ?? 'Cliente'}',
+              title: 'PDF factura · ${sale.customerName ?? 'Cliente'}',
               onClose: () => Navigator.of(dialogContext).pop(),
             ),
             Expanded(
@@ -1175,7 +821,7 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
                       if (bytes != null)
                         PdfPanelActionButton(
                           iconAsset: PdfPanelIcons.download,
-                          label: 'Descargar el crédito',
+                          label: 'Guardar factura',
                           onPressed: () async {
                             final saved = await savePdfBytes(
                               bytes: bytes,
@@ -1199,17 +845,6 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
           ],
         );
       },
-    );
-  }
-
-  Future<void> _sendCreditWhatsApp(SaleModel sale) async {
-    final bytes = await _buildCreditPdf(sale);
-    if (!mounted) return;
-    await _shareCreditPdfWithClient(
-      launchContext: context,
-      sale: sale,
-      bytes: bytes,
-      filename: 'credito_${_shortId(sale)}.pdf',
     );
   }
 
@@ -1259,16 +894,12 @@ class _SalesCreditScreenState extends ConsumerState<SalesCreditScreen> {
     final customerName = (sale.customerName ?? '').trim().isEmpty
         ? 'cliente'
         : sale.customerName!.trim();
-    return 'Hola $customerName, te compartimos tu estado de crédito en PDF.\n'
-        'Este documento corresponde al saldo pendiente de tu compra en FULLTECH.\n'
-        'Puedes abrir el enlace para ver o descargar tu PDF.\n'
-        'Crédito: CRE-${_shortId(sale)}\n'
-        'Pendiente: ${formatRdCurrencyAccounting(sale.creditBalance)}\n'
+    return 'Hola $customerName, te compartimos tu factura en PDF.\n'
+        'Consulta los abonos y el saldo actualizado en el documento.\n'
         'PDF: $pdfUrl';
   }
 
-  String _shortId(SaleModel sale) =>
-      sale.id.length <= 8 ? sale.id : sale.id.substring(0, 8);
+  String _shortId(SaleModel sale) => TicketData.fromSale(sale).ticketNumber;
 }
 
 class _CreditPaymentDraft {
@@ -1638,20 +1269,16 @@ class _CreditCard extends StatelessWidget {
     required this.compact,
     required this.selected,
     required this.onTap,
-    required this.onPayment,
     required this.onPdf,
     required this.onPrint,
-    this.onDelete,
   });
 
   final SaleModel sale;
   final bool compact;
   final bool selected;
   final VoidCallback onTap;
-  final VoidCallback onPayment;
   final VoidCallback onPdf;
   final VoidCallback onPrint;
-  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -1661,12 +1288,13 @@ class _CreditCard extends StatelessWidget {
         ? 'Sin fecha'
         : DateFormat('dd/MM/yyyy').format(toBusinessTime(sale.saleDate!));
     final paid = sale.creditBalance <= 0.009;
-    final shortId = sale.id.length <= 8 ? sale.id : sale.id.substring(0, 8);
-    final cashier = (sale.userName ?? sale.userId).trim();
+    final shortId = TicketData.fromSale(sale).ticketNumber;
+    final cashier = (sale.userName ?? '').trim();
     final phone = (sale.customerPhone ?? '').trim();
 
     if (compact) {
       return HistoryDocumentRow(
+        preserveCompactAmount: true,
         document: 'Factura $shortId',
         client: sale.customerName ?? 'Cliente sin nombre',
         date: date,
@@ -1682,9 +1310,9 @@ class _CreditCard extends StatelessWidget {
             visualDensity: VisualDensity.compact,
           ),
           IconButton(
-            tooltip: 'Registrar abono',
-            onPressed: paid ? null : onPayment,
-            icon: const Icon(Icons.payments_outlined, size: 19),
+            tooltip: 'PDF',
+            onPressed: onPdf,
+            icon: const Icon(Icons.picture_as_pdf_outlined, size: 19),
             visualDensity: VisualDensity.compact,
           ),
         ],
@@ -1784,21 +1412,12 @@ class _CreditCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: FilledButton.icon(
-                      onPressed: paid ? null : onPayment,
-                      icon: const Icon(Icons.payments_outlined, size: 18),
-                      label: const Text('Abonar'),
+                    child: OutlinedButton.icon(
+                      onPressed: onPrint,
+                      icon: const Icon(Icons.print_outlined, size: 18),
+                      label: const Text('Imprimir'),
                     ),
                   ),
-                  if (onDelete != null) ...[
-                    const SizedBox(width: 8),
-                    IconButton.filledTonal(
-                      tooltip: 'Eliminar',
-                      onPressed: onDelete,
-                      color: colorScheme.error,
-                      icon: const Icon(Icons.delete_outline_rounded),
-                    ),
-                  ],
                 ],
               ),
             ],
@@ -1815,288 +1434,45 @@ class _CreditDetailPanel extends StatelessWidget {
     required this.onClose,
     required this.onPayment,
     required this.onSettle,
-    required this.onPrint,
-    required this.onSharePdf,
-    required this.onWhatsApp,
     this.onDelete,
   });
-
   final SaleModel sale;
-  final VoidCallback onClose;
-  final VoidCallback onPayment;
-  final VoidCallback? onSettle;
-  final VoidCallback onPrint;
-  final VoidCallback onSharePdf;
-  final VoidCallback onWhatsApp;
-  final VoidCallback? onDelete;
-
+  final VoidCallback onClose, onPayment;
+  final VoidCallback? onSettle, onDelete;
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final date = sale.saleDate == null
-        ? 'Sin fecha'
-        : DateFormat('dd/MM/yyyy HH:mm').format(toBusinessTime(sale.saleDate!));
-    final paid = sale.creditBalance <= 0.009;
-    final cashier = (sale.userName ?? sale.userId).trim();
-    final hasRegisteredPayments =
-        sale.paymentCashAmount > 0.009 ||
-        sale.paymentTransferAmount > 0.009 ||
-        sale.creditPaidAmount > 0.009;
-    final mobile = MediaQuery.sizeOf(context).width < 620;
-    return Container(
-      width: mobile ? double.infinity : 460,
-      height: double.infinity,
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        border: mobile
-            ? null
-            : const Border(left: BorderSide(color: Color(0xFFD3E0E7))),
-        borderRadius: mobile
-            ? const BorderRadius.vertical(top: Radius.circular(16))
-            : BorderRadius.zero,
-      ),
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 18, 16, 14),
-            child: Row(
-              children: [
-                Container(
-                  width: 46,
-                  height: 46,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [colorScheme.primary, colorScheme.tertiary],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: colorScheme.primary.withValues(alpha: 0.24),
-                        blurRadius: 16,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
-                  ),
-                  child: const Icon(
-                    Icons.credit_score_rounded,
-                    color: Colors.white,
-                    size: 24,
-                  ),
+  Widget build(BuildContext context) => Material(
+    color: AppColors.surface,
+    child: Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 8, 0),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Detalle del crédito',
+                  style: Theme.of(context).textTheme.titleSmall,
                 ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Detalle del crédito',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: -0.25,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Factura ${sale.id.length <= 8 ? sale.id : sale.id.substring(0, 8)}',
-                        style: theme.textTheme.labelMedium?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Cerrar',
-                  onPressed: onClose,
-                  icon: const Icon(Icons.close_rounded),
-                ),
-              ],
-            ),
+              ),
+              IconButton(
+                tooltip: 'Cerrar',
+                onPressed: onClose,
+                icon: const Icon(Icons.close_rounded),
+              ),
+            ],
           ),
-          const Divider(height: 1),
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.all(20),
-              children: [
-                _PanelSection(
-                  title: 'Cliente',
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _DetailLine(
-                        label: 'Nombre',
-                        value: sale.customerName ?? 'Sin cliente',
-                      ),
-                      _DetailLine(
-                        label: 'Teléfono',
-                        value: (sale.customerPhone ?? '').trim().isEmpty
-                            ? 'No registrado'
-                            : sale.customerPhone!,
-                      ),
-                      _DetailLine(label: 'Fecha', value: date),
-                      if (cashier.isNotEmpty)
-                        _DetailLine(label: 'Cajero', value: cashier),
-                      _StatusPill(paid: paid),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _PanelAmount(
-                        label: 'Total',
-                        value: sale.totalSold,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _PanelAmount(
-                        label: 'Pagado',
-                        value: sale.creditPaidAmount,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                _PanelAmount(
-                  label: paid ? 'Saldo saldado' : 'Saldo pendiente',
-                  value: sale.creditBalance,
-                  danger: !paid,
-                ),
-                const SizedBox(height: 14),
-                if (hasRegisteredPayments) ...[
-                  _PanelSection(
-                    title: 'Pagos registrados',
-                    child: Column(
-                      children: [
-                        if (sale.paymentCashAmount > 0.009)
-                          _DetailLine(
-                            label: 'Efectivo',
-                            value: formatRdCurrencyAccounting(
-                              sale.paymentCashAmount,
-                            ),
-                          ),
-                        if (sale.paymentTransferAmount > 0.009)
-                          _DetailLine(
-                            label: 'Transferencia',
-                            value: formatRdCurrencyAccounting(
-                              sale.paymentTransferAmount,
-                            ),
-                          ),
-                        if (sale.creditPaidAmount > 0.009)
-                          _DetailLine(
-                            label: 'Total abonado',
-                            value: formatRdCurrencyAccounting(
-                              sale.creditPaidAmount,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                ],
-                _PanelSection(
-                  title: 'Productos',
-                  child: Column(
-                    children: sale.items
-                        .map((item) => _ItemLine(item: item))
-                        .toList(growable: false),
-                  ),
-                ),
-                if ((sale.note ?? '').trim().isNotEmpty) ...[
-                  const SizedBox(height: 14),
-                  _PanelSection(
-                    title: 'Nota',
-                    child: Text(
-                      sale.note!,
-                      style: const TextStyle(color: Color(0xFF334155)),
-                    ),
-                  ),
-                ],
-              ],
-            ),
+        ),
+        Expanded(
+          child: _CreditDetailBody(
+            sale: sale,
+            onPayment: onPayment,
+            onSettle: onSettle,
+            onDelete: onDelete,
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(18, 12, 18, 18),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: FilledButton.icon(
-                        onPressed: paid ? null : onPayment,
-                        icon: const Icon(Icons.payments_outlined),
-                        label: const Text('Abonar'),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: onSettle,
-                        icon: const Icon(Icons.done_all_rounded),
-                        label: const Text('Saldar'),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: onSharePdf,
-                        icon: const Icon(Icons.picture_as_pdf_outlined),
-                        label: const Text('PDF'),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: onPrint,
-                        icon: const Icon(Icons.print_outlined),
-                        label: const Text('Imprimir'),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: onWhatsApp,
-                    icon: const Icon(Icons.chat_outlined),
-                    label: const Text('Enviar pendiente por WhatsApp'),
-                  ),
-                ),
-                if (onDelete != null) ...[
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Theme.of(context).colorScheme.error,
-                        side: BorderSide(
-                          color: Theme.of(context).colorScheme.error,
-                        ),
-                      ),
-                      onPressed: onDelete,
-                      icon: const Icon(Icons.delete_outline_rounded),
-                      label: const Text('Eliminar crédito'),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+        ),
+      ],
+    ),
+  );
 }
 
 class _PanelSection extends StatelessWidget {
@@ -2110,7 +1486,7 @@ class _PanelSection extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
         borderRadius: BorderRadius.circular(8),
@@ -2128,99 +1504,8 @@ class _PanelSection extends StatelessWidget {
               letterSpacing: 0,
             ),
           ),
-          const SizedBox(height: 8),
-          child,
-        ],
-      ),
-    );
-  }
-}
-
-class _DetailLine extends StatelessWidget {
-  const _DetailLine({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 104,
-            child: Text(
-              label,
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              textAlign: TextAlign.right,
-              style: theme.textTheme.bodySmall?.copyWith(
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PanelAmount extends StatelessWidget {
-  const _PanelAmount({
-    required this.label,
-    required this.value,
-    this.danger = false,
-  });
-
-  final String label;
-  final double value;
-  final bool danger;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: danger
-            ? colorScheme.errorContainer.withValues(alpha: 0.45)
-            : colorScheme.primary.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: danger
-              ? colorScheme.error.withValues(alpha: 0.25)
-              : colorScheme.primary.withValues(alpha: 0.12),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: theme.textTheme.labelMedium?.copyWith(
-              color: colorScheme.onSurfaceVariant,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
           const SizedBox(height: 4),
-          Text(
-            formatRdCurrencyAccounting(value),
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w900,
-              color: danger ? colorScheme.error : colorScheme.onSurface,
-            ),
-          ),
+          child,
         ],
       ),
     );
@@ -2249,7 +1534,7 @@ class _ItemLine extends ConsumerWidget {
       includeUnitForUnit: true,
     );
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         children: [
           Expanded(
@@ -2324,152 +1609,143 @@ class _AmountChip extends StatelessWidget {
   }
 }
 
-class _StatusPill extends StatelessWidget {
-  const _StatusPill({required this.paid});
-
-  final bool paid;
-
+class _CreditSelectionSummary extends StatelessWidget {
+  const _CreditSelectionSummary({
+    required this.count,
+    required this.refreshing,
+  });
+  final int count;
+  final bool refreshing;
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final color = paid ? const Color(0xFF047857) : colorScheme.error;
-    final background = paid
-        ? const Color(0xFFE8F8EF)
-        : colorScheme.errorContainer.withValues(alpha: 0.55);
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: background,
-          borderRadius: BorderRadius.circular(999),
-        ),
-        child: Row(
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.end,
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Text(
+        'Crédito seleccionado',
+        style: Theme.of(
+          context,
+        ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+      ),
+      Text(
+        refreshing
+            ? 'Actualizando…'
+            : '$count ${count == 1 ? 'crédito visible' : 'créditos visibles'}',
+        style: Theme.of(
+          context,
+        ).textTheme.labelSmall?.copyWith(color: AppColors.textSecondary),
+      ),
+    ],
+  );
+}
+
+class _CreditResolutionActions extends StatelessWidget {
+  const _CreditResolutionActions({
+    required this.onPayment,
+    required this.onSettle,
+    this.onDelete,
+  });
+  final VoidCallback? onPayment, onSettle, onDelete;
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final compact = constraints.maxWidth < 500;
+      final icons =
+          constraints.maxWidth >= 420 &&
+          MediaQuery.textScalerOf(context).scale(1) <= 1.25;
+      const shape = RoundedRectangleBorder(borderRadius: BorderRadius.zero);
+      Widget label(String text) =>
+          FittedBox(fit: BoxFit.scaleDown, child: Text(text, maxLines: 1));
+      Widget action(
+        String caption,
+        String fullLabel,
+        IconData icon,
+        VoidCallback? callback, {
+        bool primary = false,
+        bool danger = false,
+      }) {
+        final content = Row(
           mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Container(
-              width: 7,
-              height: 7,
-              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-            ),
+            if (icons) ...[Icon(icon, size: 16), const SizedBox(width: 6)],
+            Flexible(child: label(caption)),
+          ],
+        );
+        final padding = EdgeInsets.symmetric(horizontal: compact ? 6 : 10);
+        return Expanded(
+          child: Tooltip(
+            message: fullLabel,
+            child: primary
+                ? FilledButton(
+                    onPressed: callback,
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(0, 40),
+                      padding: padding,
+                      shape: shape,
+                    ),
+                    child: content,
+                  )
+                : OutlinedButton(
+                    onPressed: callback,
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(0, 40),
+                      padding: padding,
+                      shape: shape,
+                      foregroundColor: danger ? AppColors.error : null,
+                    ),
+                    child: content,
+                  ),
+          ),
+        );
+      }
+
+      return Row(
+        key: const ValueKey('credit-resolution-actions'),
+        children: [
+          action(
+            compact ? 'Abonar' : 'Registrar abono',
+            'Registrar abono',
+            Icons.payments_outlined,
+            onPayment,
+            primary: true,
+          ),
+          const SizedBox(width: 6),
+          action('Saldar', 'Saldar crédito', Icons.done_all_rounded, onSettle),
+          if (onDelete != null) ...[
             const SizedBox(width: 6),
-            Text(
-              paid ? 'Saldado' : 'Pendiente',
-              style: TextStyle(color: color, fontWeight: FontWeight.w900),
+            action(
+              compact ? 'Eliminar' : 'Eliminar crédito',
+              'Eliminar crédito',
+              Icons.delete_outline_rounded,
+              onDelete,
+              danger: true,
             ),
           ],
-        ),
-      ),
-    );
-  }
+        ],
+      );
+    },
+  );
 }
 
 class _CreditFixedInfoColumn extends StatelessWidget {
   const _CreditFixedInfoColumn({
     required this.sale,
-    required this.totalCredits,
-    required this.refreshing,
     required this.onPayment,
     required this.onSettle,
-    required this.onPdf,
-    required this.onPrint,
-    required this.onWhatsApp,
     this.onDelete,
   });
-
   final SaleModel? sale;
-  final int totalCredits;
-  final bool refreshing;
-  final VoidCallback? onPayment;
-  final VoidCallback? onSettle;
-  final VoidCallback? onPdf;
-  final VoidCallback? onPrint;
-  final VoidCallback? onWhatsApp;
-  final VoidCallback? onDelete;
-
+  final VoidCallback? onPayment, onSettle, onDelete;
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final selected = sale;
-
-    return DecoratedBox(
-      decoration: const BoxDecoration(color: AppColors.surface),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-            child: Row(
-              children: [
-                Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: colorScheme.primary.withValues(alpha: 0.09),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: colorScheme.primary.withValues(alpha: 0.18),
-                    ),
-                  ),
-                  child: Icon(
-                    Icons.credit_score_rounded,
-                    color: colorScheme.primary,
-                    size: 22,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Crédito seleccionado',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        refreshing
-                            ? 'Sincronizando · $totalCredits créditos'
-                            : '$totalCredits créditos visibles',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Divider(
-            height: 1,
-            color: colorScheme.outlineVariant.withValues(alpha: 0.44),
-          ),
-          Expanded(
-            child: selected == null
-                ? const _CreditInfoEmptyState()
-                : _CreditDetailBody(
-                    sale: selected,
-                    onPayment: onPayment,
-                    onSettle: onSettle,
-                    onPdf: onPdf,
-                    onPrint: onPrint,
-                    onWhatsApp: onWhatsApp,
-                    onDelete: onDelete,
-                  ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => sale == null
+      ? const _CreditInfoEmptyState()
+      : _CreditDetailBody(
+          sale: sale!,
+          onPayment: onPayment,
+          onSettle: onSettle,
+          onDelete: onDelete,
+        );
 }
 
 class _CreditDocHeader extends StatelessWidget {
@@ -2484,8 +1760,8 @@ class _CreditDocHeader extends StatelessWidget {
     final colorScheme = theme.colorScheme;
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
@@ -2501,8 +1777,8 @@ class _CreditDocHeader extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            width: 34,
-            height: 34,
+            width: 28,
+            height: 28,
             decoration: BoxDecoration(
               color: colorScheme.primary,
               borderRadius: BorderRadius.circular(8),
@@ -2519,7 +1795,7 @@ class _CreditDocHeader extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'NOTA DE CRÉDITO',
+                  'FACTURA A CRÉDITO',
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: colorScheme.primary,
                     fontWeight: FontWeight.w700,
@@ -2566,179 +1842,187 @@ class _CreditDetailBody extends StatelessWidget {
     required this.sale,
     required this.onPayment,
     required this.onSettle,
-    required this.onPdf,
-    required this.onPrint,
-    required this.onWhatsApp,
     this.onDelete,
   });
-
   final SaleModel sale;
-  final VoidCallback? onPayment;
-  final VoidCallback? onSettle;
-  final VoidCallback? onPdf;
-  final VoidCallback? onPrint;
-  final VoidCallback? onWhatsApp;
-  final VoidCallback? onDelete;
-
+  final VoidCallback? onPayment, onSettle, onDelete;
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final paid = sale.creditBalance <= 0.009;
-    final date = sale.saleDate == null
-        ? 'Sin fecha'
-        : DateFormat('dd/MM/yyyy').format(toBusinessTime(sale.saleDate!));
-    final cashier = (sale.userName ?? sale.userId).trim();
-    final shortId = sale.id.length <= 8 ? sale.id : sale.id.substring(0, 8);
-    final phone = (sale.customerPhone ?? '').trim();
-    final hasRegisteredPayments =
-        sale.paymentCashAmount > 0.009 ||
-        sale.paymentTransferAmount > 0.009 ||
-        sale.creditPaidAmount > 0.009;
-
-    return Column(
-      children: [
-        Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _CreditDocHeader(number: 'CRE-$shortId', date: date),
-                Text(
-                  sale.customerName ?? 'Cliente sin nombre',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0,
-                    height: 1.05,
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final compact = constraints.maxWidth < 500 || constraints.maxHeight < 650;
+      final inset = compact ? 8.0 : 12.0;
+      final paid = sale.creditBalance <= 0.009;
+      final date = sale.saleDate == null
+          ? 'Sin fecha'
+          : DateFormat('dd/MM/yyyy').format(toBusinessTime(sale.saleDate!));
+      final phone = (sale.customerPhone ?? '').trim();
+      final cashier = (sale.userName ?? '').trim();
+      return Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.all(inset),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _CreditDocHeader(
+                    number: TicketData.fromSale(sale).ticketNumber,
+                    date: date,
                   ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    _CreditStatusDot(paid: paid),
-                    if (phone.isNotEmpty) ...[
-                      const SizedBox(width: 12),
-                      Text(
-                        phone,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                          fontWeight: FontWeight.w700,
-                        ),
+                  LayoutBuilder(
+                    builder: (context, space) {
+                      final cellWidth = (space.maxWidth - 12) / 2;
+                      return Wrap(
+                        key: const ValueKey('credit-client-facts'),
+                        spacing: 12,
+                        runSpacing: 8,
+                        children: [
+                          SizedBox(
+                            width: cellWidth,
+                            child: _CreditFactField(
+                              label: 'Cliente',
+                              value: sale.customerName ?? 'Cliente sin nombre',
+                            ),
+                          ),
+                          SizedBox(
+                            width: cellWidth,
+                            child: _CreditFactField(
+                              label: 'Teléfono',
+                              value: phone.isEmpty ? 'No registrado' : phone,
+                            ),
+                          ),
+                          SizedBox(
+                            width: cellWidth,
+                            child: _CreditFactField(
+                              label: 'Cajero',
+                              value: cashier.isEmpty
+                                  ? 'No registrado'
+                                  : cashier,
+                            ),
+                          ),
+                          SizedBox(
+                            width: cellWidth,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Estado',
+                                  style: Theme.of(context).textTheme.labelSmall
+                                      ?.copyWith(
+                                        color: AppColors.textSecondary,
+                                      ),
+                                ),
+                                const SizedBox(height: 2),
+                                _CreditStatusDot(paid: paid),
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                  if (sale.paymentCashAmount > .009 ||
+                      sale.paymentTransferAmount > .009) ...[
+                    const SizedBox(height: 8),
+                    _PanelSection(
+                      title: 'Pagos registrados',
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (sale.paymentCashAmount > .009)
+                            Expanded(
+                              child: _CreditFactField(
+                                label: 'Efectivo',
+                                value: formatRdCurrencyAccounting(
+                                  sale.paymentCashAmount,
+                                ),
+                              ),
+                            ),
+                          if (sale.paymentCashAmount > .009 &&
+                              sale.paymentTransferAmount > .009)
+                            const SizedBox(width: 12),
+                          if (sale.paymentTransferAmount > .009)
+                            Expanded(
+                              child: _CreditFactField(
+                                label: 'Transferencia',
+                                value: formatRdCurrencyAccounting(
+                                  sale.paymentTransferAmount,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
-                    ],
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  _PanelSection(
+                    title: 'Productos',
+                    child: Column(
+                      children: sale.items
+                          .map((item) => _ItemLine(item: item))
+                          .toList(growable: false),
+                    ),
+                  ),
+                  if (_creditDisplayNote(sale).isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    _PanelSection(
+                      title: 'Nota',
+                      child: Text(
+                        _creditDisplayNote(sale),
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          Container(
+            padding: EdgeInsets.fromLTRB(inset, 6, inset, compact ? 6 : 10),
+            decoration: const BoxDecoration(
+              border: Border(top: BorderSide(color: AppColors.border)),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  key: const ValueKey('credit-totals'),
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: _CreditMoneySummary(
+                        label: 'Total factura',
+                        value: sale.totalSold,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _CreditMoneySummary(
+                        label: 'Total abonado',
+                        value: sale.creditPaidAmount,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _CreditMoneySummary(
+                        label: paid ? 'Saldo saldado' : 'Saldo pendiente',
+                        value: sale.creditBalance,
+                      ),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 16),
-                if (cashier.isNotEmpty) ...[
-                  _CreditInfoLine(
-                    icon: Icons.person_outline_rounded,
-                    label: 'Cajero',
-                    value: cashier,
-                  ),
-                ],
-                const SizedBox(height: 14),
-                if (hasRegisteredPayments) ...[
-                  _PanelSection(
-                    title: 'Pagos registrados',
-                    child: Column(
-                      children: [
-                        if (sale.paymentCashAmount > 0.009)
-                          _DetailLine(
-                            label: 'Efectivo',
-                            value: formatRdCurrencyAccounting(
-                              sale.paymentCashAmount,
-                            ),
-                          ),
-                        if (sale.paymentTransferAmount > 0.009)
-                          _DetailLine(
-                            label: 'Transferencia',
-                            value: formatRdCurrencyAccounting(
-                              sale.paymentTransferAmount,
-                            ),
-                          ),
-                        if (sale.creditPaidAmount > 0.009)
-                          _DetailLine(
-                            label: 'Total abonado',
-                            value: formatRdCurrencyAccounting(
-                              sale.creditPaidAmount,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-                _PanelSection(
-                  title: 'Productos',
-                  child: Column(
-                    children: sale.items
-                        .map((item) => _ItemLine(item: item))
-                        .toList(growable: false),
-                  ),
+                const SizedBox(height: 8),
+                _CreditResolutionActions(
+                  onPayment: paid ? null : onPayment,
+                  onSettle: paid ? null : onSettle,
+                  onDelete: onDelete,
                 ),
-                if ((sale.note ?? '').trim().isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  _PanelSection(
-                    title: 'Nota',
-                    child: Text(
-                      sale.note!,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                ],
               ],
             ),
           ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(14, 6, 14, 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _DetailLine(
-                label: 'Total factura',
-                value: formatRdCurrencyAccounting(sale.totalSold),
-              ),
-              _DetailLine(
-                label: 'Pagado',
-                value: formatRdCurrencyAccounting(sale.creditPaidAmount),
-              ),
-              _DetailLine(
-                label: paid ? 'Saldo saldado' : 'Saldo pendiente',
-                value: formatRdCurrencyAccounting(sale.creditBalance),
-              ),
-              const SizedBox(height: 6),
-              HistoryActionBar(
-                actions: [
-                  HistoryAction(
-                    'Registrar abono',
-                    Icons.payments_outlined,
-                    paid ? null : onPayment,
-                  ),
-                  HistoryAction('Imprimir', Icons.print_outlined, onPrint),
-                  HistoryAction('PDF', Icons.picture_as_pdf_outlined, onPdf),
-                  HistoryAction('Saldar', Icons.done_all_rounded, onSettle),
-                  HistoryAction('WhatsApp', Icons.chat_outlined, onWhatsApp),
-                  if (onDelete != null)
-                    HistoryAction(
-                      'Eliminar crédito',
-                      Icons.delete_outline_rounded,
-                      onDelete,
-                      danger: true,
-                    ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
+        ],
+      );
+    },
+  );
 }
 
 class _CreditInfoEmptyState extends StatelessWidget {
@@ -2756,69 +2040,59 @@ class _CreditInfoEmptyState extends StatelessWidget {
   );
 }
 
-class _CreditInfoLine extends StatelessWidget {
-  const _CreditInfoLine({
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
-
-  final IconData icon;
-  final String label;
-  final String value;
-
+class _CreditFactField extends StatelessWidget {
+  const _CreditFactField({required this.label, required this.value});
+  final String label, value;
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              color: colorScheme.primary.withValues(alpha: 0.09),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: colorScheme.primary.withValues(alpha: 0.13),
-              ),
-            ),
-            child: Icon(icon, size: 16, color: colorScheme.primary),
-          ),
-          const SizedBox(width: 11),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w400,
-                    height: 1.14,
-                    letterSpacing: 0,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        label,
+        style: Theme.of(
+          context,
+        ).textTheme.labelSmall?.copyWith(color: AppColors.textSecondary),
       ),
-    );
-  }
+      const SizedBox(height: 2),
+      Text(
+        value,
+        style: Theme.of(
+          context,
+        ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600),
+      ),
+    ],
+  );
+}
+
+class _CreditMoneySummary extends StatelessWidget {
+  const _CreditMoneySummary({required this.label, required this.value});
+  final String label;
+  final double value;
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: Theme.of(
+          context,
+        ).textTheme.labelSmall?.copyWith(color: AppColors.textSecondary),
+      ),
+      const SizedBox(height: 2),
+      FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerLeft,
+        child: Text(
+          formatRdCurrencyAccounting(value),
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w800),
+        ),
+      ),
+    ],
+  );
 }
 
 class _CreditStatusDot extends StatelessWidget {
@@ -2828,9 +2102,7 @@ class _CreditStatusDot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = paid
-        ? const Color(0xFF059669)
-        : Theme.of(context).colorScheme.error;
+    final color = paid ? AppColors.success : const Color(0xFFB45309);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [

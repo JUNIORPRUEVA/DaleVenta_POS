@@ -1,4 +1,5 @@
 import 'dart:convert';
+import '../../../core/app_update/update_critical_operation_gate.dart';
 
 import 'package:dio/dio.dart';
 import '../../../features/ecf/data/ecf_connection_guard.dart';
@@ -77,6 +78,7 @@ class VentasRepository {
   static const String _creditPaymentSyncType = 'credit.payment';
   static const String _creditsCacheKey = 'sales.credits.v1';
   bool _handlersRegistered = false;
+  final Set<String> _creditPaymentsInFlight = {};
 
   VentasRepository(
     this._dio,
@@ -612,7 +614,51 @@ class VentasRepository {
     required double cashAmount,
     required double transferAmount,
     String? note,
+  }) => _withCurrentOwner(() async {
+    final scope = OperationScope.current;
+    final key = '${scope?.companyId}/${scope?.userId}/$saleId';
+    if (!_creditPaymentsInFlight.add(key)) {
+      throw ApiException(
+        'Ya se está registrando un abono. Espera su confirmación.',
+      );
+    }
+    try {
+      return await _addCreditPayment(
+        saleId: saleId,
+        cashAmount: cashAmount,
+        transferAmount: transferAmount,
+        note: note,
+      );
+    } finally {
+      _creditPaymentsInFlight.remove(key);
+    }
+  });
+
+  Future<SaleModel> _addCreditPayment({
+    required String saleId,
+    required double cashAmount,
+    required double transferAmount,
+    String? note,
   }) async {
+    final owner = await _tokenStorage.getUserSnapshot();
+    if (owner == null || (owner.companyId ?? '').isEmpty) {
+      throw ApiException('Inicia sesión para registrar el abono.');
+    }
+    final pending = await _offlineStore.listPendingActions(
+      companyId: owner.companyId,
+      userId: owner.id,
+      limit: null,
+    );
+    if (pending.any(
+      (action) =>
+          action.type == _creditPaymentSyncType &&
+          action.entityId == saleId &&
+          action.status != 'review_resolved',
+    )) {
+      throw ApiException(
+        'Este crédito tiene un abono pendiente de confirmar. Sincroniza o revisa esa operación antes de registrar otro.',
+      );
+    }
     final operationCashSessionId = await _resolveOriginCashSessionId();
     if (operationCashSessionId.isEmpty) {
       throw ApiException('Debes abrir caja antes de registrar un abono.');
@@ -635,8 +681,28 @@ class VentasRepository {
           : 'transfer',
       if ((note ?? '').trim().isNotEmpty) 'note': note!.trim(),
     };
+    final action = PendingSyncAction(
+      id: '$_creditPaymentSyncType:$operationId',
+      type: _creditPaymentSyncType,
+      scope: 'sales',
+      companyId: owner.companyId,
+      userId: owner.id,
+      entityType: 'sale_credit_payment',
+      entityId: saleId,
+      idempotencyKey: operationId,
+      payload: payload,
+      status: 'pending',
+      attempts: 0,
+      createdAt: paidAt,
+      updatedAt: paidAt,
+      // If the process stops after POST, the same identity resumes after this
+      // bounded lease. The background queue cannot race the foreground POST.
+      nextAttemptAt: paidAt.add(const Duration(minutes: 2)),
+    );
+    await _offlineStore.putPendingAction(action, requireDatabase: !kIsWeb);
     try {
-      return await _addCreditPaymentRemote(
+      await _assertCurrentOwner();
+      final confirmed = await _addCreditPaymentRemote(
         saleId: saleId,
         operationId: operationId,
         operationCashSessionId: operationCashSessionId,
@@ -645,23 +711,42 @@ class VentasRepository {
         transferAmount: transferAmount,
         note: note,
       );
+      await _assertCurrentOwner();
+      await _offlineStore.removePendingAction(action.id);
+      await _syncQueue.refreshStats();
+      return confirmed;
     } on DioException catch (e) {
       if (_shouldQueueNetworkFailure(e)) {
-        await _enqueuePendingSalesAction(
-          id: '$_creditPaymentSyncType:$operationId',
-          type: _creditPaymentSyncType,
-          entityType: 'sale_credit_payment',
-          entityId: saleId,
-          idempotencyKey: operationId,
-          payload: payload,
-          occurredAt: paidAt,
+        await _syncQueue.retainFailedAttempt(action, e);
+        return _minimalPendingSale(saleId, status: 'PENDING_SYNC');
+      }
+      final status = e.response?.statusCode;
+      final balanceChanged =
+          e.response?.data is Map &&
+          e.response!.data['code'] == 'CREDIT_BALANCE_CHANGED';
+      if (status == 400 || status == 422 || balanceChanged) {
+        // Definitive rejection, retained for audit, never replayed.
+        await _offlineStore.updatePendingAction(
+          action.copyWith(
+            status: 'review_resolved',
+            permanent: true,
+            error: _extractMessage(
+              e.response?.data,
+              'Abono rechazado; no aplicado.',
+            ),
+            updatedAt: DateTime.now().toUtc(),
+          ),
         );
-        return _minimalPendingSale(saleId);
+      } else {
+        await _syncQueue.retainFailedAttempt(action, e);
       }
       throw ApiException(
         _extractMessage(e.response?.data, 'No se pudo registrar el abono'),
         e.response?.statusCode,
       );
+    } catch (error) {
+      await _syncQueue.retainFailedAttempt(action, error);
+      rethrow;
     }
   }
 
@@ -689,7 +774,30 @@ class VentasRepository {
     );
     final data = (res.data as Map).cast<String, dynamic>();
     final sale = data['sale'];
-    return SaleModel.fromJson((sale as Map).cast<String, dynamic>());
+    final payment = data['payment'];
+    final owner = await _tokenStorage.getUserSnapshot();
+    if (sale is! Map ||
+        sale['id'] != saleId ||
+        (sale['companyId'] != null && sale['companyId'] != owner?.companyId) ||
+        payment is! Map ||
+        '${payment['id'] ?? ''}'.isEmpty ||
+        payment['saleId'] != saleId ||
+        payment['operationId'] != operationId ||
+        payment['companyId'] != owner?.companyId ||
+        payment['userId'] != owner?.id ||
+        payment['cashSessionId'] != operationCashSessionId ||
+        ((_nullableDouble(payment['cashAmount']) ?? double.nan) * 100)
+                .roundToDouble() !=
+            (cashAmount * 100).roundToDouble() ||
+        ((_nullableDouble(payment['transferAmount']) ?? double.nan) * 100)
+                .roundToDouble() !=
+            (transferAmount * 100).roundToDouble()) {
+      throw ApiException(
+        'No se pudo comprobar la respuesta del abono. La operación se conserva pendiente; no repitas el pago.',
+        409,
+      );
+    }
+    return SaleModel.fromJson(sale.cast<String, dynamic>());
   }
 
   Future<Map<String, dynamic>> reportsSalesOverview({
@@ -993,7 +1101,12 @@ class VentasRepository {
     }
   }
 
-  Future<T> _withCurrentOwner<T>(Future<T> Function() body) async {
+  Future<T> _withCurrentOwner<T>(Future<T> Function() body) =>
+      UpdateCriticalOperationGate.instance.run(
+        () => _withCurrentOwnerGuarded(body),
+      );
+
+  Future<T> _withCurrentOwnerGuarded<T>(Future<T> Function() body) async {
     if (OperationScope.current != null) return body();
     final user = await _tokenStorage.getUserSnapshot();
     if (user == null || (user.companyId ?? '').isEmpty) return body();
@@ -1053,16 +1166,27 @@ class VentasRepository {
     final occurredAt = DateTime.now().toUtc();
     final syncIdentity = await _resolveSaleSyncIdentity();
     final owner = await _tokenStorage.getUserSnapshot();
-    final ticketRequestId = posSaleRequestId(companyId: owner?.companyId, userId: owner?.id,
-      deviceId: syncIdentity.deviceFingerprint, ticketId: clientTicketId);
+    final ticketRequestId = posSaleRequestId(
+      companyId: owner?.companyId,
+      userId: owner?.id,
+      deviceId: syncIdentity.deviceFingerprint,
+      ticketId: clientTicketId,
+    );
     if ((clientTicketId ?? '').trim().isNotEmpty && ticketRequestId == null) {
-      throw ApiException('No se pudo identificar el ticket. Conserva el carrito y revisa la sesión.');
+      throw ApiException(
+        'No se pudo identificar el ticket. Conserva el carrito y revisa la sesión.',
+      );
     }
-    if (ticketRequestId != null && (clientRequestId ?? '').trim().isNotEmpty && clientRequestId != ticketRequestId) {
+    if (ticketRequestId != null &&
+        (clientRequestId ?? '').trim().isNotEmpty &&
+        clientRequestId != ticketRequestId) {
       throw ApiException('La identidad del cobro no coincide con el ticket.');
     }
-    final requestId = ticketRequestId ?? ((clientRequestId ?? '').trim().isNotEmpty
-        ? clientRequestId!.trim() : 'sale_req_${DateTime.now().microsecondsSinceEpoch}');
+    final requestId =
+        ticketRequestId ??
+        ((clientRequestId ?? '').trim().isNotEmpty
+            ? clientRequestId!.trim()
+            : 'sale_req_${DateTime.now().microsecondsSinceEpoch}');
     final originCashSessionId = await _resolveOriginCashSessionId();
     if (originCashSessionId.isEmpty) {
       throw ApiException('Debes abrir caja antes de facturar.');
@@ -1669,9 +1793,10 @@ class VentasRepository {
     );
   }
 
-  SaleModel _minimalPendingSale(String id) {
+  SaleModel _minimalPendingSale(String id, {String status = ''}) {
     return SaleModel(
       id: id,
+      status: status,
       userId: '',
       userName: null,
       customerId: null,

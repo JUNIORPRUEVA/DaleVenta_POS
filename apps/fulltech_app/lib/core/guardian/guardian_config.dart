@@ -4,8 +4,7 @@ import 'guardian_runtime_env.dart';
 
 /// Configuración del cliente Guardian en la app POS.
 ///
-/// **Desactivado por defecto**: en un build sin `--dart-define` no se captura ni
-/// se envía nada, por lo que las versiones ya instaladas no cambian su comportamiento.
+/// Enabled in new release builds; debug/tests stay opt-in. Server company authorization remains mandatory.
 class GuardianConfig {
   const GuardianConfig({
     required this.enabled,
@@ -98,11 +97,11 @@ class GuardianConfig {
     flushInterval: Duration(minutes: 2),
   );
 
-  /// Lee los flags de compilación (`--dart-define`). Sin defines → desactivado.
+  /// Release builds include monitoring; GUARDIAN_ENABLED=false explicitly disables it.
   factory GuardianConfig.fromEnvironment() {
     const enabled = bool.fromEnvironment(
       'GUARDIAN_ENABLED',
-      defaultValue: false,
+      defaultValue: kReleaseMode,
     );
     if (!enabled) return GuardianConfig.disabled;
 
@@ -136,11 +135,11 @@ class GuardianConfig {
       ),
       useMachineApi: const bool.fromEnvironment(
         'GUARDIAN_USE_MACHINE_API',
-        defaultValue: false,
+        defaultValue: kReleaseMode,
       ),
       autoEnroll: const bool.fromEnvironment(
         'GUARDIAN_AUTO_ENROLL',
-        defaultValue: false,
+        defaultValue: kReleaseMode,
       ),
       // El código NUNCA se compila: solo la ruta del archivo que lo contiene.
       enrollmentCodeFile: const String.fromEnvironment(

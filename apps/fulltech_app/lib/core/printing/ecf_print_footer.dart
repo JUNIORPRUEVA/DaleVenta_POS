@@ -9,9 +9,11 @@ pw.Widget ecfPrintFooter(
   EcfPrintDocument? ecf, {
   double pageLeftInsetMm = 0,
   bool includeIdentity = false,
+  pw.TextStyle? textStyle,
 }) {
   if (ecf == null) return pw.SizedBox();
-  final style = pw.TextStyle(fontSize: 7, font: pw.Font.helvetica());
+  final style =
+      textStyle ?? pw.TextStyle(fontSize: 7, font: pw.Font.helvetica());
   return pw.Container(
     width: double.infinity,
     child: pw.Column(

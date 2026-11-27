@@ -10,6 +10,7 @@ import '../../core/errors/user_safe_error_text.dart';
 import '../../core/printing/unified_ticket_printer.dart';
 import '../../core/utils/money_formatters.dart';
 import '../../core/widgets/fulltech_dialog.dart';
+import '../../core/widgets/square_pos_dialog.dart';
 
 double? parseDominicanAmount(String raw) {
   var value = raw
@@ -1062,7 +1063,7 @@ class _CashMovementDialogState extends State<_CashMovementDialog> {
     final subtitle = _isOut
         ? 'Registra una salida manual de efectivo'
         : 'Registra un ingreso manual de efectivo';
-    return CallbackShortcuts(
+    return SquarePosDialog(child: CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.enter): _submit,
         const SingleActivator(LogicalKeyboardKey.numpadEnter): _submit,
@@ -1081,7 +1082,7 @@ class _CashMovementDialogState extends State<_CashMovementDialog> {
             child: DecoratedBox(
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: SquarePosDialog.corners,
                 border: Border.all(color: const Color(0xFFE2E8F0)),
                 boxShadow: [
                   BoxShadow(
@@ -1092,7 +1093,7 @@ class _CashMovementDialogState extends State<_CashMovementDialog> {
                 ],
               ),
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: SquarePosDialog.corners,
                 child: Form(
                   key: _formKey,
                   child: Column(
@@ -1171,10 +1172,7 @@ class _CashMovementDialogState extends State<_CashMovementDialog> {
                               margin: const EdgeInsets.fromLTRB(0, 0, 10, 0),
                               decoration: BoxDecoration(
                                 color: softColor,
-                                borderRadius: const BorderRadius.only(
-                                  topLeft: Radius.circular(11),
-                                  bottomLeft: Radius.circular(11),
-                                ),
+                                borderRadius: SquarePosDialog.corners,
                                 border: const Border(
                                   right: BorderSide(color: Color(0xFFE2E8F0)),
                                 ),
@@ -1222,7 +1220,7 @@ class _CashMovementDialogState extends State<_CashMovementDialog> {
                                     color: Color(0xFFCBD5E1),
                                   ),
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10),
+                                    borderRadius: SquarePosDialog.corners,
                                   ),
                                   textStyle: const TextStyle(
                                     fontWeight: FontWeight.w800,
@@ -1240,7 +1238,7 @@ class _CashMovementDialogState extends State<_CashMovementDialog> {
                                   foregroundColor: Colors.white,
                                   minimumSize: const Size.fromHeight(44),
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10),
+                                    borderRadius: SquarePosDialog.corners,
                                   ),
                                   textStyle: const TextStyle(
                                     fontWeight: FontWeight.w900,
@@ -1278,7 +1276,7 @@ class _CashMovementDialogState extends State<_CashMovementDialog> {
           ),
         ),
       ),
-    );
+    ));
   }
 }
 
@@ -1289,12 +1287,13 @@ InputDecoration _cashMovementInputDecoration(
 }) {
   return InputDecoration(
     labelText: label,
+    constraints: const BoxConstraints(minHeight: 44),
     hintText: hint,
     prefixIcon: prefixIcon,
-    prefixIconConstraints: const BoxConstraints(minWidth: 64, minHeight: 48),
+    prefixIconConstraints: const BoxConstraints(minWidth: 64, minHeight: 44),
     filled: true,
     fillColor: const Color(0xFFF8FAFC),
-    contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 17),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
     labelStyle: const TextStyle(
       color: Color(0xFF52667C),
       fontWeight: FontWeight.w700,
@@ -1305,23 +1304,23 @@ InputDecoration _cashMovementInputDecoration(
     ),
     errorStyle: const TextStyle(fontWeight: FontWeight.w700),
     border: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: SquarePosDialog.corners,
       borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
     ),
     enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: SquarePosDialog.corners,
       borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
     ),
     focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: SquarePosDialog.corners,
       borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.5),
     ),
     errorBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: SquarePosDialog.corners,
       borderSide: const BorderSide(color: Color(0xFFDC2626)),
     ),
     focusedErrorBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: SquarePosDialog.corners,
       borderSide: const BorderSide(color: Color(0xFFDC2626), width: 1.4),
     ),
   );

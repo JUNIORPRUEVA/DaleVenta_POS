@@ -38,6 +38,7 @@ class GuardianClient {
     required this.store,
     required this.transport,
     required this.config,
+    this.companyIdProvider,
     Random? random,
     DateTime Function()? clock,
   }) : _random = random ?? Random(),
@@ -54,6 +55,7 @@ class GuardianClient {
   final GuardianStore store;
   final GuardianTransport transport;
   final GuardianConfig config;
+  final Future<String?> Function()? companyIdProvider;
   final Random _random;
   final DateTime Function() _clock;
 
@@ -75,25 +77,35 @@ class GuardianClient {
     }
 
     try {
+      if (companyIdProvider != null) {
+        event = event.copyWith(
+          context: {
+            ...?event.context,
+            '_guardianCompanyId': await companyIdProvider!() ?? 'unattributed',
+          },
+        );
+      }
       final alreadySeen = await store.wasRecentlyRecorded(
-        guardianFingerprint(
-          module: event.module,
-          operation: event.operation,
-          exceptionType: event.exceptionType,
-          stack: event.stack,
-        ),
+        '${event.context?['_guardianCompanyId'] ?? ''}:' +
+            guardianFingerprint(
+              module: event.module,
+              operation: event.operation,
+              exceptionType: event.exceptionType,
+              stack: event.stack,
+            ),
         window: _dedupeWindow,
       );
       if (alreadySeen) return false;
 
       await store.upsert(event);
       await store.markRecorded(
-        guardianFingerprint(
-          module: event.module,
-          operation: event.operation,
-          exceptionType: event.exceptionType,
-          stack: event.stack,
-        ),
+        '${event.context?['_guardianCompanyId'] ?? ''}:' +
+            guardianFingerprint(
+              module: event.module,
+              operation: event.operation,
+              exceptionType: event.exceptionType,
+              stack: event.stack,
+            ),
       );
       await _enforceQuotas();
       unawaited(
@@ -151,9 +163,14 @@ class GuardianClient {
     try {
       final batches = maxBatches ?? 3;
       for (var batch = 0; batch < batches; batch++) {
+        final companyId = companyIdProvider == null
+            ? null
+            : await companyIdProvider!();
+        if (companyIdProvider != null && companyId == null) break;
         final due = await store.dueEvents(
           limit: config.batchSize,
           now: _clock(),
+          companyId: companyId,
         );
         if (due.isEmpty) break;
         attempted += due.length;
@@ -175,7 +192,12 @@ class GuardianClient {
           ),
         );
 
-        final durable = <String>[...result.acked, ...result.duplicates];
+        final sentIds = due.map((event) => event.eventId).toSet();
+        final durable = <String>{...result.acked, ...result.duplicates}
+            .where(
+              (id) => sentIds.contains(id) && !result.rejected.contains(id),
+            )
+            .toList();
         if (durable.isNotEmpty) {
           await store.removeAll(durable);
           acknowledged += durable.length;
@@ -189,6 +211,7 @@ class GuardianClient {
             ),
           );
           for (final eventId in result.rejected) {
+            if (!sentIds.contains(eventId)) continue;
             await store.recordDiscard(
               GuardianDiscardRecord(
                 eventId: eventId,
@@ -196,8 +219,12 @@ class GuardianClient {
                 at: _clock(),
               ),
             );
+            await store.markFailure(
+              eventId,
+              attempts: 1,
+              nextAttemptAtMs: 253402300799000,
+            );
           }
-          await store.removeAll(result.rejected);
           rejected += result.rejected.length;
         }
 
@@ -211,7 +238,9 @@ class GuardianClient {
 
         if (pending.isNotEmpty) {
           final attempts = pending.first.attempts + 1;
-          final nextAt = _clock().millisecondsSinceEpoch + _backoffMs(attempts);
+          final nextAt =
+              _clock().millisecondsSinceEpoch +
+              max(_backoffMs(attempts), result.retryAfterMs ?? 0).toInt();
           for (final event in pending) {
             await store.markFailure(
               event.eventId,

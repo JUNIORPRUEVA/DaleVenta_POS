@@ -467,18 +467,11 @@ void main() {
       expect(find.byKey(const ValueKey('phone-checkout-sale-summary')), findsOneWidget,
         reason: tester.widgetList<Text>(find.byType(Text)).map((text) => text.data).join(' | '));
       expect(find.text('Cliente general'), findsOneWidget);
-      expect(find.text('Comprobante'), findsOneWidget);
+      expect(find.descendant(of: find.byType(Dialog), matching: find.text('Comprobante')), findsNothing);
       final confirm = find.widgetWithText(FilledButton, 'Cobrar y facturar');
       expect(tester.widget<FilledButton>(confirm).onPressed, isNotNull);
-      final selector = tester.widget<EcfPosFiscalSelector>(find.byType(EcfPosFiscalSelector));
-      expect(selector.selected, EcfPosFiscalMode.normal);
-      selector.onSelected(EcfPosFiscalMode.e31);
-      await tester.pump();
-      expect(find.text('E31 exige un cliente con RNC/Cédula y nombre.'), findsOneWidget);
-      expect(tester.widget<FilledButton>(confirm).onPressed, isNull);
-      selector.onSelected(EcfPosFiscalMode.normal);
-      await tester.pump();
-      expect(tester.widget<FilledButton>(confirm).onPressed, isNotNull);
+      expect(find.descendant(of: find.byType(Dialog), matching: find.byType(EcfPosFiscalSelector)), findsNothing);
+      await _savePhonePreview(tester, 'pos-square-checkout');
       expect(tester.takeException(), isNull);
       // Cancel only: this test never confirms or posts a sale.
       await tester.tap(find.text('Cancelar'));
@@ -536,7 +529,8 @@ void main() {
     expect(dialog, findsOneWidget, reason: tester.allWidgets.map((w) => w.runtimeType.toString())
       .where((name) => name.contains('Dialog') || name.contains('Entry') || name.contains('Edit')).toSet().join(', '));
     final shape = tester.widget<Dialog>(dialog).shape! as RoundedRectangleBorder;
-    expect(shape.borderRadius, BorderRadius.circular(4));
+    expect(shape.borderRadius, BorderRadius.circular(1));
+    await _savePhonePreview(tester, 'pos-square-item-discount');
     final fields = find.descendant(of: dialog, matching: find.byType(TextField));
     await tester.tap(fields.first);
     tester.view.viewInsets = const FakeViewPadding(bottom: 300);
@@ -562,6 +556,36 @@ void main() {
       );
     },
   );
+
+  testWidgets('discount dialog cancels safely and checkout keeps the detail selection', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await _pumpScreen(tester, quotationEditor: false);
+    final originalMode = tester.widget<EcfPosFiscalSelector>(find.byType(EcfPosFiscalSelector)).selected;
+    final collect = find.widgetWithText(FilledButton, 'Cobrar');
+    final discountGesture = find.ancestor(of: collect, matching: find.byWidgetPredicate((w) => w is GestureDetector && w.onDoubleTap != null)).first;
+    tester.widget<GestureDetector>(discountGesture).onDoubleTap!();
+    for (var i = 0; i < 12; i++) { await tester.pump(const Duration(milliseconds: 100)); }
+    expect(find.text('Descuento general'), findsOneWidget);
+    final applyDiscount = find.widgetWithText(FilledButton, 'Aplicar descuento');
+    final applyWidget = tester.widget<FilledButton>(applyDiscount);
+    final shape = (applyWidget.style?.shape ?? FilledButtonTheme.of(tester.element(applyDiscount)).style!.shape)!.resolve({}) as RoundedRectangleBorder;
+    expect(shape.borderRadius, BorderRadius.circular(1));
+    expect(tester.getSize(applyDiscount).height, 44);
+    expect(tester.getSize(find.byWidgetPredicate((w) => w is SegmentedButton)).height, 44);
+    expect(tester.getSize(find.descendant(of: find.byType(Dialog), matching: find.byType(TextField))).height, 44);
+    await _savePhonePreview(tester, 'pos-square-general-discount');
+    await tester.tap(find.byTooltip('Cerrar').last);
+    for (var i = 0; i < 12; i++) { await tester.pump(const Duration(milliseconds: 100)); }
+    await tester.tap(collect);
+    for (var i = 0; i < 12; i++) { await tester.pump(const Duration(milliseconds: 100)); }
+    expect(find.byType(Dialog), findsOneWidget);
+    expect(find.descendant(of: find.byType(Dialog), matching: find.byType(EcfPosFiscalSelector)), findsNothing);
+    await _savePhonePreview(tester, 'pos-square-desktop-checkout');
+    await tester.tap(find.text('Cancelar'));
+    for (var i = 0; i < 12; i++) { await tester.pump(const Duration(milliseconds: 100)); }
+    expect(tester.widget<EcfPosFiscalSelector>(find.byType(EcfPosFiscalSelector)).selected, originalMode);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('muestra el selector cuando el servidor devuelve capacidades', (
     tester,

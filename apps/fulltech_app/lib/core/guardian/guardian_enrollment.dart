@@ -74,11 +74,14 @@ class GuardianEnrollmentService {
               'code': code,
               'installId': installId,
               if (platform != null && platform.isNotEmpty) 'platform': platform,
-              if (appVersion != null && appVersion.isNotEmpty) 'appVersion': appVersion,
+              if (appVersion != null && appVersion.isNotEmpty)
+                'appVersion': appVersion,
             },
             options: Options(
               validateStatus: (_) => true,
-              headers: const <String, String>{'content-type': 'application/json'},
+              headers: const <String, String>{
+                'content-type': 'application/json',
+              },
             ),
           )
           .timeout(timeout);
@@ -87,9 +90,11 @@ class GuardianEnrollmentService {
       if (status < 200 || status >= 300) {
         // El servidor pudo consumir el código y rechazar la respuesta: dejar
         // rastro es obligatorio para no diagnosticar esto a ciegas.
-        unawaited(GuardianAgentLog.warn(
-          'enrolamiento rechazado http=$status motivo=${_describeBody(response.data)}',
-        ));
+        unawaited(
+          GuardianAgentLog.warn(
+            'enrolamiento rechazado http=$status motivo=${_describeBody(response.data)}',
+          ),
+        );
         return null;
       }
 
@@ -98,18 +103,22 @@ class GuardianEnrollmentService {
         // Defecto corregido (fase 13): antes se exigía `Map` y, si el proxy
         // devolvía el cuerpo como texto, el código ya consumido se perdía sin
         // una sola traza en el log. Ahora se decodifica y se deja evidencia.
-        unawaited(GuardianAgentLog.warn(
-          'enrolamiento con cuerpo no interpretable: ${_describeBody(response.data)}',
-        ));
+        unawaited(
+          GuardianAgentLog.warn(
+            'enrolamiento con cuerpo no interpretable: ${_describeBody(response.data)}',
+          ),
+        );
         return null;
       }
       final credential = data['credential']?.toString() ?? '';
       final resolvedInstallId = data['installId']?.toString() ?? installId;
       final expiresAt = DateTime.tryParse(data['expiresAt']?.toString() ?? '');
       if (credential.isEmpty || expiresAt == null) {
-        unawaited(GuardianAgentLog.warn(
-          'enrolamiento sin credencial utilizable (credential=${credential.isNotEmpty} expiresAt=${expiresAt != null})',
-        ));
+        unawaited(
+          GuardianAgentLog.warn(
+            'enrolamiento sin credencial utilizable (credential=${credential.isNotEmpty} expiresAt=${expiresAt != null})',
+          ),
+        );
         return null;
       }
 
@@ -117,6 +126,9 @@ class GuardianEnrollmentService {
         installId: resolvedInstallId,
         credential: credential,
         expiresAt: expiresAt.toUtc(),
+        companyId: data['companyId'] is String
+            ? data['companyId'] as String
+            : null,
       );
       await store.write(issued);
 
@@ -125,9 +137,11 @@ class GuardianEnrollmentService {
       // reiniciar. Se usa la credencial en memoria y se deja constancia.
       final persisted = await store.read();
       if (persisted == null || persisted.credential != issued.credential) {
-        unawaited(GuardianAgentLog.warn(
-          'credencial emitida pero NO persistida: se usa solo en memoria (revisar almacén seguro)',
-        ));
+        unawaited(
+          GuardianAgentLog.warn(
+            'credencial emitida pero NO persistida: se usa solo en memoria (revisar almacén seguro)',
+          ),
+        );
       }
 
       await _consumeCode();
@@ -165,7 +179,10 @@ class GuardianEnrollmentService {
     if (raw is Map) {
       final code = raw['code']?.toString() ?? '';
       final message = raw['message']?.toString() ?? '';
-      if (code.isNotEmpty || message.isNotEmpty) return '${code.isEmpty ? 'sin_code' : code} ${message.isEmpty ? '' : message}'.trim();
+      if (code.isNotEmpty || message.isNotEmpty) {
+        return '${code.isEmpty ? 'sin_code' : code} ${message.isEmpty ? '' : message}'
+            .trim();
+      }
       return 'mapa(${raw.length} claves)';
     }
     final text = raw.toString();

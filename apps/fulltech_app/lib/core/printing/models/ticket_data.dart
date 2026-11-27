@@ -6,6 +6,25 @@ import '../../../modules/ventas/sales_models.dart';
 
 enum TicketType { sale, quote, refund, credit, copy, custom }
 
+/// Confirmed amounts from the sale. The payment ledger is not added again.
+class TicketCreditSummary {
+  const TicketCreditSummary({
+    required this.amount,
+    required this.paid,
+    required this.balance,
+  });
+
+  final double amount;
+  final double paid;
+  final double balance;
+
+  List<({String label, double amount})> get rows => [
+    (label: 'COMPRA A CREDITO', amount: amount),
+    (label: 'ABONADO', amount: paid),
+    (label: 'SALDO PENDIENTE', amount: balance),
+  ];
+}
+
 class ClientInfo {
   const ClientInfo({this.name = '', this.phone = '', this.document = ''});
 
@@ -72,10 +91,12 @@ class TicketData {
     this.isCopy = false,
     this.customLines,
     this.ecf,
+    this.credit,
   });
 
   final String ticketNumber;
   final EcfPrintDocument? ecf;
+  final TicketCreditSummary? credit;
   final DateTime dateTime;
   final List<TicketItemData> items;
   final double total;
@@ -264,6 +285,16 @@ class TicketData {
       type: sale.isDeleted ? TicketType.refund : TicketType.sale,
       isCopy: isCopy,
       paymentMethod: paymentMethod ?? _paymentDescription(sale),
+      credit:
+          sale.paymentMethod == 'credit' &&
+              !sale.isDeleted &&
+              sale.kind.toLowerCase() != 'refund'
+          ? TicketCreditSummary(
+              amount: sale.totalSold,
+              paid: sale.creditPaidAmount,
+              balance: sale.creditBalance,
+            )
+          : null,
       cashReceived: sale.cashReceived,
       changeAmount: sale.changeAmount,
     );
@@ -357,6 +388,7 @@ class TicketData {
     if (transfer > 0) {
       parts.add('Transferencia ${_money(transfer)}');
     }
+    if (sale.paymentMethod == 'credit') parts.insert(0, 'Credito');
     if (parts.isNotEmpty) return parts.join(' + ');
 
     return switch (sale.paymentMethod.trim()) {

@@ -45,7 +45,11 @@ class GuardianEvent {
   /// Momento (epoch ms) a partir del cual se puede reintentar.
   final int nextAttemptAtMs;
 
-  GuardianEvent copyWith({int? attempts, int? nextAttemptAtMs}) {
+  GuardianEvent copyWith({
+    int? attempts,
+    int? nextAttemptAtMs,
+    Map<String, dynamic>? context,
+  }) {
     return GuardianEvent(
       eventId: eventId,
       severity: severity,
@@ -60,7 +64,7 @@ class GuardianEvent {
       stack: stack,
       message: message,
       offlineMinutes: offlineMinutes,
-      context: context,
+      context: context ?? this.context,
       attempts: attempts ?? this.attempts,
       nextAttemptAtMs: nextAttemptAtMs ?? this.nextAttemptAtMs,
     );

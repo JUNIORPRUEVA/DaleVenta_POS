@@ -67,3 +67,7 @@ __pycache__/
 uat-artifacts/
 uat-api.log
 uat-runtime-sandbox/
+
+# Private Guardian runtime queues: never source or release inputs.
+/apps/api/data/guardian-outbox/
+/data/guardian-outbox/

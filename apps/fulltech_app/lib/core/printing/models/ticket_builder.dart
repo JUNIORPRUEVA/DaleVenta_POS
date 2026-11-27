@@ -643,16 +643,8 @@ class TicketBuilder {
     _ThermalSalesMetrics metrics,
   ) {
     final qty = ReceiptTextUtils.qty(item.qty);
-    final price = _fitMoney(
-      _tableMoney(item.unitPrice),
-      metrics.tableFontSize,
-      columns.price,
-    );
-    final amount = _fitMoney(
-      _tableMoney(item.total),
-      metrics.tableFontSize,
-      columns.amount,
-    );
+    final price = _tableMoney(item.unitPrice);
+    final amount = _tableMoney(item.total);
     return pw.Row(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
@@ -677,6 +669,7 @@ class TicketBuilder {
           fonts.regular,
           metrics.tableFontSize,
           align: pw.TextAlign.right,
+          fit: true,
         ),
         _gap(columns),
         _cell(
@@ -685,6 +678,7 @@ class TicketBuilder {
           fonts.bold,
           metrics.tableFontSize,
           align: pw.TextAlign.right,
+          fit: true,
         ),
       ],
     );
@@ -722,7 +716,21 @@ class TicketBuilder {
     pw.Font font,
     double fontSize, {
     pw.TextAlign align = pw.TextAlign.left,
+    bool fit = false,
   }) {
+    if (fit) {
+      return pw.SizedBox(
+        width: width,
+        child: pw.FittedBox(
+          fit: pw.BoxFit.scaleDown,
+          alignment: pw.Alignment.centerRight,
+          child: pw.Text(
+            _upper(text),
+            style: pw.TextStyle(font: font, fontSize: fontSize, height: 1.0),
+          ),
+        ),
+      );
+    }
     return pw.SizedBox(
       width: width,
       child: pw.Text(
@@ -800,14 +808,6 @@ class TicketBuilder {
     ).replaceFirst('RD\$ ', '').replaceFirst('RD\$', '');
   }
 
-  String _fitMoney(String value, double fontSize, double maxWidth) {
-    final clean = _upper(value).replaceAll(RegExp(r'\s+'), ' ').trim();
-    if (_textWidth(clean, fontSize) <= maxWidth) return clean;
-    final compact = clean.replaceFirst('RD\$ ', '').replaceFirst('RD\$', '');
-    if (_textWidth(compact, fontSize) <= maxWidth) return compact;
-    return _fitText(compact, fontSize, maxWidth);
-  }
-
   pw.Widget _totalsBlock(
     TicketData data,
     ({pw.Font regular, pw.Font bold}) fonts,
@@ -817,8 +817,8 @@ class TicketBuilder {
     final showFiscalTotals =
         layout.showItbis &&
         (data.fiscalTaxEnabled ||
+            data.ecf != null ||
             data.taxableBase > 0 ||
-            data.exemptAmount > 0 ||
             data.itbis > 0) &&
         (data.taxableBase > 0 || data.exemptAmount > 0 || data.itbis > 0);
     if (layout.showSubtotalItbisTotal) {
@@ -889,7 +889,17 @@ class TicketBuilder {
           fonts: fonts,
           metrics: metrics,
         ),
-        if (layout.showPaymentMethod &&
+        if (data.credit case final credit?)
+          for (final row in credit.rows)
+            _moneyRow(
+              row.label,
+              ReceiptTextUtils.money(row.amount),
+              fonts,
+              metrics.subtotalFontSize,
+              valueWidth: metrics.totalsValueWidth,
+            ),
+        if (data.credit == null &&
+            layout.showPaymentMethod &&
             ((data.paymentMethod ?? '').trim().isNotEmpty ||
                 data.hasCashTender)) ...[
           _lightRule(top: 5, bottom: 2),
@@ -1021,13 +1031,21 @@ class TicketBuilder {
           pw.SizedBox(width: 3),
           pw.SizedBox(
             width: amountWidth,
-            child: pw.Text(
-              _fitMoney(value, fontSize, amountWidth),
-              textAlign: pw.TextAlign.right,
-              style: pw.TextStyle(font: font, fontSize: fontSize, height: 1.0),
-              maxLines: 1,
-              softWrap: false,
-              overflow: pw.TextOverflow.clip,
+            child: pw.FittedBox(
+              fit: pw.BoxFit.scaleDown,
+              alignment: pw.Alignment.centerRight,
+              child: pw.Text(
+                value,
+                textAlign: pw.TextAlign.right,
+                style: pw.TextStyle(
+                  font: font,
+                  fontSize: fontSize,
+                  height: 1.0,
+                ),
+                maxLines: 1,
+                softWrap: false,
+                overflow: pw.TextOverflow.clip,
+              ),
             ),
           ),
         ],
@@ -1097,6 +1115,7 @@ class TicketBuilder {
         ((data.note ?? '').trim().isNotEmpty ? 28 : 0) +
         (_isFiscalTicket(data) ? 34 : 0) +
         (data.fiscalTaxEnabled ? 22 : 0) +
+        (data.credit == null ? 0 : 3 * (metrics.subtotalFontSize + 5)) +
         _warrantyOptionalHeight();
     final itemRows =
         data.items.length +

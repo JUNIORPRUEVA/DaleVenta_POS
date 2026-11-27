@@ -518,3 +518,17 @@ hasElectronicFiscalDocument for historical NULL intents linked to E31/E32,
 scoped to the active company. New typed E31/E32 are explicit; NORMAL overrides
 any fiscal link. Ticket/PDF callers use this identity instead of taxEnabled.
 Absent additive fields remain compatible with old ordinary sale responses.
+
+### Guardian administration in APPYRA CRM (2026-11-27)
+
+FullPOS remains the source of Guardian incidents, evidence, diagnoses and alerts.
+The CRM exposes an administrator-only backend proxy and a Flutter Guardian module;
+platform credentials never enter Flutter. Optional `GUARDIAN_AI_PROVIDER=crm`
+uses the CRM's existing AI service and encrypted account through a separate service
+credential. Urgent SEV1/SEV2 alerts do not wait for AI. Alert and diagnosis work run
+independently. Backend capture and remote telemetry retain a private disk outbox,
+with company-scoped identity, original dates and acknowledgement before removal.
+Client queues bind new events to company identity and preserve uncertain/rejected
+evidence; old unscoped events are not assigned to a new account. New release builds
+include Guardian, while server company policy still controls enrollment and ingestion.
+Manual opt-out is marked so auto-enrollment cannot silently reactivate it.

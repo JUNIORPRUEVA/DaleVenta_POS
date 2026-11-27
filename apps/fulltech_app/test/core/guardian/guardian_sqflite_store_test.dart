@@ -17,19 +17,21 @@ void main() {
   });
 
   GuardianEvent event(String id) => GuardianEvent(
-        eventId: id,
-        severity: 'SEV2',
-        module: 'flutter',
-        operation: 'GET /selftest',
-        occurredAt: DateTime.now(),
-        exceptionType: 'SyntheticGuardianProbeException',
-        message: 'sonda',
-        platform: 'windows',
-      );
+    eventId: id,
+    severity: 'SEV2',
+    module: 'flutter',
+    operation: 'GET /selftest',
+    occurredAt: DateTime.now(),
+    exceptionType: 'SyntheticGuardianProbeException',
+    message: 'sonda',
+    platform: 'windows',
+  );
 
   test('crea el esquema y persiste el evento de forma durable', () async {
     final dir = await Directory.systemTemp.createTemp('guardian_store_');
-    final store = SqfliteGuardianStore(databasePath: '${dir.path}/guardian_outbox.db');
+    final store = SqfliteGuardianStore(
+      databasePath: '${dir.path}/guardian_outbox.db',
+    );
 
     await store.init();
     await store.upsert(event('evt-1'));
@@ -41,13 +43,52 @@ void main() {
     expect(due.first.exceptionType, 'SyntheticGuardianProbeException');
 
     // Reapertura: el evento sigue ahí (no se pierde al cerrar la app).
-    final reopened = SqfliteGuardianStore(databasePath: '${dir.path}/guardian_outbox.db');
+    final reopened = SqfliteGuardianStore(
+      databasePath: '${dir.path}/guardian_outbox.db',
+    );
     await reopened.init();
     expect(await reopened.count(), 1);
 
     await store.close();
     await dir.delete(recursive: true);
   });
+
+  test(
+    'SQLite scopes pending incidents before limiting and survives reopening',
+    () async {
+      final dir = await Directory.systemTemp.createTemp('guardian_company_');
+      final path = '${dir.path}/guardian.db';
+      final store = SqfliteGuardianStore(databasePath: path);
+      await store.init();
+      await store.upsert(
+        event('a').copyWith(context: {'_guardianCompanyId': 'company-a'}),
+      );
+      await store.upsert(
+        event('b').copyWith(context: {'_guardianCompanyId': 'company-b'}),
+      );
+      await store.upsert(event('legacy'));
+      await store.close();
+      final reopened = SqfliteGuardianStore(databasePath: path);
+      await reopened.init();
+      expect(
+        (await reopened.dueEvents(
+          limit: 1,
+          companyId: 'company-b',
+        )).single.eventId,
+        'b',
+      );
+      expect(
+        (await reopened.dueEvents(
+          limit: 1,
+          companyId: 'company-a',
+        )).single.eventId,
+        'a',
+      );
+      expect(await reopened.count(), 3);
+      await reopened.close();
+      await dir.delete(recursive: true);
+    },
+  );
 
   test('las tablas del agente existen y están separadas de ventas', () async {
     final dir = await Directory.systemTemp.createTemp('guardian_store_');
@@ -66,7 +107,10 @@ void main() {
     expect(names.contains('guardian_discards'), isTrue);
     expect(names.contains('guardian_fingerprints'), isTrue);
     // Ninguna tabla de negocio debe existir en esta base.
-    expect(names.any((name) => name.contains('sale') || name.contains('cash')), isFalse);
+    expect(
+      names.any((name) => name.contains('sale') || name.contains('cash')),
+      isFalse,
+    );
     await db.close();
 
     await store.close();
@@ -76,9 +120,9 @@ void main() {
   test('un fallo de almacenamiento no propaga excepción al llamante', () async {
     // Ruta imposible: el contrato es "nunca lanza desde record()".
     final store = SqfliteGuardianStore(
-      databasePath: '${Directory.systemTemp.path}/no-existe-${DateTime.now().microsecondsSinceEpoch}/x/guardian.db',
+      databasePath:
+          '${Directory.systemTemp.path}/no-existe-${DateTime.now().microsecondsSinceEpoch}/x/guardian.db',
     );
     await expectLater(store.init().catchError((_) {}), completes);
   });
 }
-

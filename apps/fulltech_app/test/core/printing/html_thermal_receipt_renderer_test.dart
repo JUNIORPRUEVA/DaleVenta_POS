@@ -8,6 +8,7 @@ import 'package:daleventa_pos/core/printing/models/ticket_data.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   test('renders standalone 80mm HTML without recalculating fiscal values', () {
     final html = const HtmlThermalReceiptRenderer().render(
       _receipt(

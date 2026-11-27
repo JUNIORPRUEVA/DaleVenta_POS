@@ -738,6 +738,8 @@ void main() {
             phase: AppUpdatePhase.updaterStarted,
             targetBuild: 131,
             artifactRelativePath: '131/setup.exe.ready',
+            fileSizeExpected: 123456789,
+            sha256Expected: _sha,
           ),
         ),
         downloader: FakeUpdateDownloader(
@@ -836,21 +838,19 @@ void main() {
   });
 
   group('AppUpdateMiniControl widget', () {
-    testWidgets('AVAILABLE shows update and dismiss controls', (tester) async {
+    testWidgets('AVAILABLE remains silent until package is ready', (
+      tester,
+    ) async {
       final controller = WidgetAppUpdateController(
         _readyWidgetState().copyWith(phase: AppUpdatePhase.available),
       );
 
       await tester.pumpWidget(_updateWidget(controller));
 
-      expect(find.text('Actualizar'), findsOneWidget);
-      expect(find.byTooltip('Preparar actualización'), findsOneWidget);
-      expect(find.byTooltip('Ocultar actualización'), findsOneWidget);
-
-      await tester.tap(find.byTooltip('Preparar actualización'));
-      await tester.pump();
-
-      expect(controller.prepareRequests, 1);
+      expect(find.text('Actualizar'), findsNothing);
+      expect(find.byTooltip('Preparar actualización'), findsNothing);
+      expect(find.byTooltip('Ocultar actualización'), findsNothing);
+      expect(controller.prepareRequests, 0);
     });
 
     testWidgets('READY shows update and dismiss controls', (tester) async {
@@ -863,22 +863,22 @@ void main() {
       expect(find.byTooltip('Ocultar actualización'), findsOneWidget);
     });
 
-    testWidgets('DOWNLOADING and VERIFYING stay visible as progress', (
+    testWidgets('DOWNLOADING and VERIFYING stay silent in the shell', (
       tester,
     ) async {
       final downloading = WidgetAppUpdateController(
         _readyWidgetState().copyWith(phase: AppUpdatePhase.downloading),
       );
       await tester.pumpWidget(_updateWidget(downloading));
-      expect(find.text('Preparando actualización...'), findsOneWidget);
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.text('Preparando actualización...'), findsNothing);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
 
       final verifying = WidgetAppUpdateController(
         _readyWidgetState().copyWith(phase: AppUpdatePhase.verifyingSha),
       );
       await tester.pumpWidget(_updateWidget(verifying));
-      expect(find.text('Preparando actualización...'), findsOneWidget);
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.text('Preparando actualización...'), findsNothing);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
     });
 
     testWidgets('dismiss hides current build prompt', (tester) async {
@@ -1170,6 +1170,12 @@ class FakeUpdatePersistence extends UpdatePersistence {
   Future<void> save(PersistedUpdateState state) async {
     saved.add(state);
   }
+
+  @override
+  Future<bool> saveAndConfirm(PersistedUpdateState state) async {
+    await save(state);
+    return true;
+  }
 }
 
 class FakeRestartGuard implements UpdateRestartGuard {
@@ -1228,6 +1234,16 @@ class FakeUpdateDownloader extends UpdateDownloader {
   final List<int> discardedBuilds = [];
   int downloads = 0;
   bool promoted = false;
+
+  @override
+  Future<String> resolvePreparedArtifact(PersistedUpdateState state) async =>
+      r'C:\updates\prepared.exe.ready';
+
+  @override
+  Future<String> preparedUpdateRoot() async => r'C:\updates';
+
+  @override
+  Future<void> beginInstallAttempt(int buildNumber) async {}
 
   @override
   Future<UpdateDownloadResult> download(
@@ -1322,6 +1338,7 @@ class FakeUpdateSignatureVerifier extends UpdateSignatureVerifier {
     required String filePath,
     required String updateRootPath,
     String? expectedSha256,
+    int? targetBuild,
     String? expectedPublisher,
     bool? allowUnsignedForUat,
     bool? allowUnsignedForProduction,
@@ -1344,6 +1361,7 @@ class DelayedFakeUpdateSignatureVerifier extends UpdateSignatureVerifier {
     required String filePath,
     required String updateRootPath,
     String? expectedSha256,
+    int? targetBuild,
     String? expectedPublisher,
     bool? allowUnsignedForUat,
     bool? allowUnsignedForProduction,

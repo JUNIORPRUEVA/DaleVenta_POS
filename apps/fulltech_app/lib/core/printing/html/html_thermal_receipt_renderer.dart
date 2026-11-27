@@ -450,7 +450,7 @@ body {
         _totalRow('DESC. PRODUCTOS', '-${_money(receipt.productDiscount)}'),
       if (receipt.generalDiscount > 0)
         _totalRow('DESC. GENERAL', '-${_money(receipt.generalDiscount)}'),
-      if (receipt.exemptAmount > 0)
+      if (receipt.showTaxBreakdown && receipt.exemptAmount > 0)
         _totalRow('MONTO EXENTO', _money(receipt.exemptAmount)),
       if (receipt.taxableBase > 0)
         _totalRow('MONTO GRAVADO', _money(receipt.taxableBase)),
@@ -464,9 +464,13 @@ body {
     final payment = _clean(receipt.paymentMethod ?? '');
     final cashReceived = receipt.cashReceived ?? 0;
     final showCash = cashReceived > 0;
-    if (payment.isEmpty && !showCash) return '';
+    if (payment.isEmpty && !showCash && receipt.credit == null) return '';
     final rows = <String>[];
-    if (payment.isNotEmpty) {
+    if (receipt.credit case final credit?) {
+      for (final row in credit.rows) {
+        rows.add(_totalRow(row.label, _escape(_money(row.amount))));
+      }
+    } else if (payment.isNotEmpty) {
       rows.add(
         _totalRow(
           'PAGO: ${_escape(payment.toUpperCase())}',

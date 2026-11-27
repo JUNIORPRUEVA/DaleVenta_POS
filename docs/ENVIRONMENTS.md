@@ -276,3 +276,19 @@ It does not resolve a timeout or promote a 202 pending response.
 - For DaleVentas clients, reject `ventas-fullpos-backend.gcdndd.easypanel.host`
   as a wrong-product backend.
 - Back up or checkpoint before approved shared-environment changes.
+
+## Guardian CRM integration (2026-11-27)
+
+Guardian's private outbox requires `GUARDIAN_OUTBOX_DIR` on a persistent, writable
+volume outside public uploads. Use one writer per directory; worker processes use
+a separate subdirectory. An ephemeral container filesystem cannot guarantee
+retention across container replacement. No production configuration was changed.
+
+The CRM needs `GUARDIAN_API_BASE_URL` and `GUARDIAN_PLATFORM_TOKEN` (or `_FILE`).
+FullPOS can use `GUARDIAN_AI_PROVIDER=crm`, `GUARDIAN_CRM_BASE_URL` and
+`GUARDIAN_CRM_BRIDGE_TOKEN` (or `_FILE`); the CRM receives the same service secret.
+This is not the vendor AI key: the CRM reuses its existing encrypted AI account.
+TLS is mandatory except for loopback tests. Preserve company opt-in, enrollment
+allowlists, licensing rules and the existing Guardian notification credentials.
+Before rollout, verify backend switches, worker heartbeats, persistent volume,
+approved company enrollment and an explicitly authorized real delivery receipt.

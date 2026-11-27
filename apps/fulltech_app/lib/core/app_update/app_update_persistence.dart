@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../debug/trace_log.dart';
@@ -54,5 +55,16 @@ class UpdatePersistence {
         });
     _lastSave = nextSave;
     return nextSave;
+  }
+
+  /// A package must not be advertised or handed off on an unconfirmed write.
+  /// Ordinary updater failures remain isolated from the POS business flow.
+  Future<bool> saveAndConfirm(PersistedUpdateState state) async {
+    await save(state);
+    try {
+      return jsonEncode(await _store.readJson()) == jsonEncode(state.toJson());
+    } on Object {
+      return false;
+    }
   }
 }

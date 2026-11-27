@@ -195,6 +195,11 @@ export class SalesController {
     return this.sales.remove(user, id);
   }
 
+  @Get(":id")
+  getById(@Req() req: Request, @Param("id", new ParseUUIDPipe()) id: string) {
+    return this.sales.getById(req.user as TenantUser, id);
+  }
+
   @Post(":id/credit-payments")
   addCreditPayment(
     @Req() req: Request,

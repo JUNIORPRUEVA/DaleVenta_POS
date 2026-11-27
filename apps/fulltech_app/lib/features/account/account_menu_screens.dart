@@ -133,7 +133,9 @@ class _AccountUpdatesScreenState extends ConsumerState<AccountUpdatesScreen> {
     final showInlineTitle = MediaQuery.sizeOf(context).width < 900;
 
     Future<void> handlePendingAction() async {
-      if (state.phase == AppUpdatePhase.readyToInstall) {
+      if (state.phase == AppUpdatePhase.readyToInstall ||
+          (state.phase == AppUpdatePhase.installFailed &&
+              state.persisted.artifactRelativePath != null)) {
         await controller.requestInstallPreparedUpdate();
         return;
       }
@@ -189,6 +191,8 @@ class _AccountUpdatesScreenState extends ConsumerState<AccountUpdatesScreen> {
                     hasUpdate
                         ? '${update?.latestVersion ?? 'Sin versión'}'
                               '${update?.latestBuild == null ? '' : '+${update!.latestBuild}'}'
+                        : state.persisted.targetVersion != null
+                        ? '${state.persisted.targetVersion}+${state.persisted.targetBuild}'
                         : 'Sin actualización pendiente',
                   ),
                   if ((update?.releaseNotesText ?? '').trim().isNotEmpty)
@@ -270,13 +274,14 @@ class AccountSettingsScreen extends ConsumerWidget {
             accent: const Color(0xFF0F6170),
             onTap: () => context.go(Routes.configuracionAlmacenes),
           ),
-        if (!phone) _SettingsActionCard(
-          icon: Icons.system_update_alt_rounded,
-          title: 'App',
-          description: 'Versión instalada y actualizaciones de Windows.',
-          accent: const Color(0xFF1957E6),
-          onTap: () => context.go(Routes.actualizaciones),
-        ),
+        if (!phone)
+          _SettingsActionCard(
+            icon: Icons.system_update_alt_rounded,
+            title: 'App',
+            description: 'Versión instalada y actualizaciones de Windows.',
+            accent: const Color(0xFF1957E6),
+            onTap: () => context.go(Routes.actualizaciones),
+          ),
         _SettingsActionCard(
           icon: Icons.devices_other_rounded,
           title: 'Apps de la empresa',
@@ -895,12 +900,14 @@ class _SettingsHubScaffold extends ConsumerWidget {
         child: ConstrainedBox(
           constraints: BoxConstraints(maxWidth: mobile ? 760 : 620),
           child: Padding(
-            padding: phone ? const EdgeInsets.fromLTRB(12, 12, 12, 16) : EdgeInsets.fromLTRB(
-              mobile ? 20 : 22,
-              mobile ? 16 : 26,
-              mobile ? 20 : 22,
-              28,
-            ),
+            padding: phone
+                ? const EdgeInsets.fromLTRB(12, 12, 12, 16)
+                : EdgeInsets.fromLTRB(
+                    mobile ? 20 : 22,
+                    mobile ? 16 : 26,
+                    mobile ? 20 : 22,
+                    28,
+                  ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -909,7 +916,11 @@ class _SettingsHubScaffold extends ConsumerWidget {
                     itemCount: children.length,
                     padding: EdgeInsets.only(bottom: mobile ? 24 : 18),
                     separatorBuilder: (_, _) => phone
-                        ? const Divider(height: 1, thickness: 0.5, color: AppColors.border)
+                        ? const Divider(
+                            height: 1,
+                            thickness: 0.5,
+                            color: AppColors.border,
+                          )
                         : SizedBox(height: mobile ? 10 : 8),
                     itemBuilder: (context, index) => children[index],
                   ),
@@ -987,11 +998,13 @@ class _SettingsDetailScaffold extends ConsumerWidget {
       backgroundColor: AppColors.background,
       drawer: buildAdaptiveDrawer(context, currentUser: user),
       appBar: plainMobileBar && !isDesktopLayout
-          ? MobilePageAppBar(appBar: AppBar(
-              title: Text(title),
-              leading: backButton,
-              actions: [if (action != null) action!],
-            ))
+          ? MobilePageAppBar(
+              appBar: AppBar(
+                title: Text(title),
+                leading: backButton,
+                actions: [if (action != null) action!],
+              ),
+            )
           : CustomAppBar(
               title: '',
               showLogo: false,
@@ -1649,17 +1662,38 @@ class _SettingsActionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     if (usesNativePhoneLayout(context)) {
       return Material(
-        key: ValueKey('phone-settings-row-$title'), color: Colors.transparent,
+        key: ValueKey('phone-settings-row-$title'),
+        color: Colors.transparent,
         child: ListTile(
-          minTileHeight: 56, dense: true,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-          minLeadingWidth: 24, horizontalTitleGap: 12,
+          minTileHeight: 56,
+          dense: true,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 4,
+            vertical: 4,
+          ),
+          minLeadingWidth: 24,
+          horizontalTitleGap: 12,
           leading: Icon(icon, color: AppColors.primary, size: 22),
-          title: Text(title, style: Theme.of(context).textTheme.bodyMedium
-            ?.copyWith(color: AppColors.textPrimary, fontWeight: FontWeight.w600)),
-          subtitle: Text(description, maxLines: 2, overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
-          trailing: const Icon(Icons.chevron_right, color: AppColors.textSecondary, size: 18),
+          title: Text(
+            title,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          subtitle: Text(
+            description,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+          ),
+          trailing: const Icon(
+            Icons.chevron_right,
+            color: AppColors.textSecondary,
+            size: 18,
+          ),
           onTap: onTap,
         ),
       );

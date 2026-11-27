@@ -70,6 +70,7 @@ import 'presentation/widgets/sales_client_selector.dart';
 import 'presentation/widgets/sales_catalog_command_bar.dart';
 import 'presentation/widgets/sales_auxiliary_dock.dart';
 import '../../core/widgets/fulltech_dialog.dart';
+import '../../core/widgets/square_pos_dialog.dart';
 import '../../core/widgets/fulltech_page_header.dart';
 import '../../core/widgets/pdf_action_menu.dart';
 import '../../core/widgets/pdf_preview_panel.dart';
@@ -103,9 +104,7 @@ import '../ventas/data/ventas_repository.dart';
 import '../ventas/application/ventas_controller.dart';
 import '../ventas/sales_credit_screen.dart';
 import '../ventas/sales_models.dart';
-import '../ventas/utils/sales_pdf_service.dart';
 import '../ventas/widgets/recent_sales_panel.dart';
-import '../../features/settings/data/printer_settings_repository.dart';
 import 'ai/application/quotation_ai_controller.dart';
 import 'ai/domain/models/ai_warning.dart';
 import 'ai/domain/models/quotation_context.dart';
@@ -2978,7 +2977,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
       context: context,
       barrierColor: FullTechDialogTokens.overlayColor,
       builder: (dialogContext) {
-        return FullTechDialog(
+        return SquarePosDialog(child: FullTechDialog(
           title: 'Editar ticket',
           maxWidth: 420,
           showCloseButton: true,
@@ -2992,7 +2991,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                 autofocus: true,
                 decoration: const InputDecoration(
                   labelText: 'Nombre del ticket',
-                  border: OutlineInputBorder(),
+                  border: OutlineInputBorder(borderRadius: SquarePosDialog.corners),
                 ),
                 textInputAction: TextInputAction.done,
                 onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
@@ -3018,7 +3017,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
               ),
             ],
           ),
-        );
+        ));
       },
     );
     controller.dispose();
@@ -3054,7 +3053,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
           : 'El ticket "${ticket.title.trim().isEmpty ? 'Ticket' : ticket.title.trim()}" será eliminado.\n¿Desea continuar?',
       confirmText: 'Aceptar',
       cancelText: 'Cancelar',
-      icon: Icons.delete_outline_rounded,
+      square: true,
+      iconWidget: Padding(padding: const EdgeInsets.all(12), child: Image.asset('assets/image/product_delete.png', color: const Color(0xFFDC2626))),
       iconColor: const Color(0xFFDC2626),
       isDestructive: true,
     );
@@ -4234,13 +4234,13 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
               Navigator.pop(dialogContext);
             }
 
-            return Dialog(
+            return SquarePosDialog(child: Dialog(
               insetPadding: const EdgeInsets.symmetric(
                 horizontal: 24,
                 vertical: 24,
               ),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: SquarePosDialog.corners,
               ),
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 420),
@@ -4278,7 +4278,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                         ),
                       ),
                       const SizedBox(height: 18),
-                      SegmentedButton<_DiscountType>(
+                      SizedBox(height: 44, child: SegmentedButton<_DiscountType>(
                         segments: const [
                           ButtonSegment(
                             value: _DiscountType.fixed,
@@ -4292,7 +4292,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                         selected: {type},
                         onSelectionChanged: (value) =>
                             setDialogState(() => type = value.first),
-                      ),
+                      )),
                       const SizedBox(height: 14),
                       TextField(
                         controller: amountCtrl,
@@ -4315,7 +4315,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                           filled: true,
                           fillColor: const Color(0xFFF8FAFC),
                           border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: SquarePosDialog.corners,
                           ),
                         ),
                       ),
@@ -4343,7 +4343,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                               style: FilledButton.styleFrom(
                                 backgroundColor: const Color(0xFF1957E6),
                                 foregroundColor: Colors.white,
-                                minimumSize: const Size.fromHeight(46),
+                                minimumSize: const Size.fromHeight(44),
                               ),
                               child: const Text('Aplicar descuento'),
                             ),
@@ -4354,7 +4354,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
                   ),
                 ),
               ),
-            );
+            ));
           },
         ),
       );
@@ -7287,18 +7287,9 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
   }
 
   Future<void> _openRecentSalePdf(SaleModel sale) async {
-    final company = await _getCompanySettingsForPdf();
-    final printerSettings = await ref
-        .read(printerSettingsRepositoryProvider)
-        .getOrCreate();
-    final bytes = await buildSaleInvoicePdf(
-      sale: sale,
-      ecf: sale.requiresElectronicPrint
-          ? await ref.read(ecfRepositoryProvider).printForSale(sale.id,
-              requireElectronic: true) : null,
-      company: company,
-      warrantyPolicy: printerSettings.warrantyPolicy,
-    );
+    final current = sale.paymentMethod == 'credit'
+        ? await ref.read(ventasRepositoryProvider).getById(sale.id) : sale;
+    final bytes = await ref.read(unifiedTicketPrinterProvider).buildSaleInvoicePdf(sale: current);
     if (!mounted) return;
     final filename = 'factura_${_saleShortId(sale).replaceAll('...', '')}.pdf';
     final downloadFileName = buildPdfDocumentFileName(
@@ -12821,7 +12812,7 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
   late final TextEditingController _cashController;
   late final TextEditingController _transferController;
   bool _confirming = false;
-  EcfPosFiscalMode? _ecfMode;
+  late final EcfPosFiscalMode? _ecfMode;
 
   @override
   void initState() {
@@ -12873,7 +12864,7 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
 
   bool get _canConfirm {
     // El E31 exige receptor identificado: no se puede confirmar el cobro si el
-    // cliente actual no lo está. El selector ya lo advierte en el propio campo.
+    // cliente actual no lo está. Se conserva el modo elegido en el detalle.
     if (widget.ecfModes.isNotEmpty &&
         _ecfMode == EcfPosFiscalMode.e31 &&
         !widget.ecfBuyerComplete) {
@@ -13040,7 +13031,7 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
               : 'El abono no puede superar el total'
         : 'Monto recibido insuficiente';
 
-    return CallbackShortcuts(
+    return SquarePosDialog(child: CallbackShortcuts(
       bindings: {
         if (_canConfirm)
           const SingleActivator(LogicalKeyboardKey.enter): _confirmCheckout,
@@ -13061,7 +13052,7 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
           ),
           backgroundColor: Colors.white,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(isMobile ? 6 : 8),
+            borderRadius: SquarePosDialog.corners,
             side: const BorderSide(color: _billingBorderColor),
           ),
           child: ConstrainedBox(
@@ -13088,7 +13079,7 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
                           height: 40,
                           decoration: BoxDecoration(
                             color: const Color(0xFFEAF1FF),
-                            borderRadius: BorderRadius.circular(7),
+                            borderRadius: SquarePosDialog.corners,
                             border: Border.all(color: const Color(0xFFDDEAFF)),
                           ),
                           child: const Icon(
@@ -13148,31 +13139,14 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // El comprobante se elige al cobrar, no al cotizar.
+                        // Preserve the fiscal mode selected in the sale detail.
                         if (widget.mobileClientLabel != null) ...[
                           MobileSalesCheckoutSummary(
                             clientName: widget.mobileClientLabel!,
                             priceLabel: widget.mobilePriceLabel,
-                            voucherSelector: widget.ecfModes.isEmpty ? null : EcfPosFiscalSelector(
-                              modes: widget.ecfModes, selected: _ecfMode,
-                              missingBuyer: _ecfMode == EcfPosFiscalMode.e31 && !widget.ecfBuyerComplete,
-                              compact: true, embedded: true,
-                              onSelected: (mode) => setState(() => _ecfMode = mode),
-                            ),
+                            showVoucher: false,
                           ),
                           const SizedBox(height: 8),
-                        ] else if (widget.ecfModes.isNotEmpty) ...[
-                          EcfPosFiscalSelector(
-                            modes: widget.ecfModes,
-                            selected: _ecfMode,
-                            missingBuyer:
-                                _ecfMode == EcfPosFiscalMode.e31 &&
-                                !widget.ecfBuyerComplete,
-                            compact: isMobile,
-                            onSelected: (mode) =>
-                                setState(() => _ecfMode = mode),
-                          ),
-                          SizedBox(height: isMobile ? 8 : 12),
                         ],
                         Container(
                           padding: EdgeInsets.symmetric(
@@ -13181,9 +13155,7 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
                           ),
                           decoration: BoxDecoration(
                             color: const Color(0xFFFCFEFF),
-                            borderRadius: BorderRadius.circular(
-                              isMobile ? 10 : 8,
-                            ),
+                            borderRadius: SquarePosDialog.corners,
                             border: Border.all(color: const Color(0xFFDCE5F0)),
                           ),
                           child: Column(
@@ -13414,12 +13386,12 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
                                 backgroundColor: const Color(0xFF1957E6),
                                 foregroundColor: Colors.white,
                                 padding: const EdgeInsets.symmetric(
-                                  vertical: 13,
+                                  vertical: 0,
                                 ),
                                 shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(6),
+                                  borderRadius: SquarePosDialog.corners,
                                 ),
-                                textStyle: const TextStyle(
+                                textStyle: const TextStyle(fontFamily: 'Manrope',
                                   fontSize: 14,
                                   fontWeight: FontWeight.w600,
                                   letterSpacing: 0,
@@ -13432,7 +13404,7 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
                                   : () => Navigator.of(context).pop(),
                               style: TextButton.styleFrom(
                                 foregroundColor: const Color(0xFF1957E6),
-                                textStyle: const TextStyle(
+                                textStyle: const TextStyle(fontFamily: 'Manrope',
                                   fontSize: 13,
                                   fontWeight: FontWeight.w500,
                                   letterSpacing: 0,
@@ -13463,7 +13435,7 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
                               onPressed: () => Navigator.of(context).pop(),
                               style: TextButton.styleFrom(
                                 foregroundColor: const Color(0xFF1957E6),
-                                textStyle: const TextStyle(
+                                textStyle: const TextStyle(fontFamily: 'Manrope',
                                   fontWeight: FontWeight.w800,
                                   letterSpacing: 0,
                                 ),
@@ -13497,12 +13469,12 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
                                 foregroundColor: Colors.white,
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 22,
-                                  vertical: 15,
+                                  vertical: 0,
                                 ),
                                 shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
+                                  borderRadius: SquarePosDialog.corners,
                                 ),
-                                textStyle: const TextStyle(
+                                textStyle: const TextStyle(fontFamily: 'Manrope',
                                   fontWeight: FontWeight.w900,
                                   letterSpacing: 0,
                                 ),
@@ -13516,7 +13488,7 @@ class _CheckoutPaymentDialogState extends State<_CheckoutPaymentDialog> {
           ),
         ),
       ),
-    );
+    ));
   }
 }
 
@@ -13557,16 +13529,16 @@ class _QuickCashAmountButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 34,
+      height: 44,
       child: OutlinedButton(
         onPressed: onTap,
         style: OutlinedButton.styleFrom(
           backgroundColor: Colors.white,
           foregroundColor: const Color(0xFF1E293B),
           side: const BorderSide(color: Color(0xFFDCE5F0)),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          shape: RoundedRectangleBorder(borderRadius: SquarePosDialog.corners),
           padding: const EdgeInsets.symmetric(horizontal: 10),
-          textStyle: const TextStyle(
+          textStyle: const TextStyle(fontFamily: 'Manrope',
             fontSize: 12,
             fontWeight: FontWeight.w500,
             letterSpacing: 0,
@@ -13607,7 +13579,7 @@ class _PaymentAmountInput extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 5),
-          SizedBox(height: 46, child: _amountField()),
+          SizedBox(height: 44, child: _amountField()),
         ],
       );
     }
@@ -13623,7 +13595,7 @@ class _PaymentAmountInput extends StatelessWidget {
             ),
           ),
         ),
-        SizedBox(width: 210, height: 46, child: _amountField()),
+        SizedBox(width: 210, height: 44, child: _amountField()),
       ],
     );
   }
@@ -13642,19 +13614,21 @@ class _PaymentAmountInput extends StatelessWidget {
       ),
       decoration: InputDecoration(
         prefixText: r'RD$  ',
+        isDense: true,
+        constraints: const BoxConstraints.tightFor(height: 44),
         filled: true,
         fillColor: Colors.white,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: SquarePosDialog.corners,
           borderSide: const BorderSide(color: Color(0xFFDCE5F0)),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: SquarePosDialog.corners,
           borderSide: const BorderSide(color: Color(0xFFDCE5F0)),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: SquarePosDialog.corners,
           borderSide: const BorderSide(color: Color(0xFF1957E6), width: 1.4),
         ),
         prefixStyle: const TextStyle(
@@ -13685,11 +13659,11 @@ class _ReadonlyPaymentLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 42,
+      height: 44,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
         color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(7),
+        borderRadius: SquarePosDialog.corners,
         border: Border.all(color: const Color(0xFFE3EBF2)),
       ),
       child: Row(
@@ -13741,15 +13715,15 @@ class _PaymentMethodTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: selected ? const Color(0xFF2563EB) : const Color(0xFFFFFFFF),
-      borderRadius: BorderRadius.circular(compact ? 7 : 8),
+      borderRadius: SquarePosDialog.corners,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(compact ? 7 : 8),
+        borderRadius: SquarePosDialog.corners,
         child: Container(
-          height: compact ? 44 : 50,
+          height: 44,
           padding: EdgeInsets.symmetric(horizontal: compact ? 12 : 14),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(compact ? 7 : 8),
+            borderRadius: SquarePosDialog.corners,
             border: Border.all(
               color: selected
                   ? const Color(0xFF2563EB)
@@ -19071,7 +19045,7 @@ class _LineEditDialogState extends State<_LineEditDialog> {
     final theme = Theme.of(context);
     final item = widget.item;
 
-    return CallbackShortcuts(
+    return SquarePosDialog(child: CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.enter): _submit,
         const SingleActivator(LogicalKeyboardKey.numpadEnter): _submit,
@@ -19086,7 +19060,7 @@ class _LineEditDialogState extends State<_LineEditDialog> {
             horizontal: 20,
             vertical: 24,
           ),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(phone ? 4 : 8)),
+          shape: RoundedRectangleBorder(borderRadius: SquarePosDialog.corners),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 480),
             child: MobileSalesLineEditorContent(compact: phone, child: Padding(
@@ -19168,7 +19142,7 @@ class _LineEditDialogState extends State<_LineEditDialog> {
                   const SizedBox(height: 6),
                   Row(
                     children: [
-                      SegmentedButton<_LineDiscountMode>(
+                      SizedBox(height: 44, child: SegmentedButton<_LineDiscountMode>(
                         segments: const [
                           ButtonSegment(
                             value: _LineDiscountMode.percent,
@@ -19187,12 +19161,12 @@ class _LineEditDialogState extends State<_LineEditDialog> {
                           });
                         },
                         style: ButtonStyle(
-                          visualDensity: VisualDensity.compact,
+                          visualDensity: VisualDensity.standard,
                           textStyle: WidgetStateProperty.all(
-                            const TextStyle(fontWeight: FontWeight.w900),
+                            const TextStyle(fontFamily: 'Manrope', fontWeight: FontWeight.w900),
                           ),
                         ),
-                      ),
+                      )),
                       const SizedBox(width: 8),
                       Expanded(
                         child: TextField(
@@ -19212,10 +19186,10 @@ class _LineEditDialogState extends State<_LineEditDialog> {
                       FilledButton(
                         onPressed: _submit,
                         style: FilledButton.styleFrom(
-                          minimumSize: const Size(42, 38),
+                          minimumSize: const Size(44, 44),
                           padding: EdgeInsets.zero,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(phone ? 4 : 8),
+                            borderRadius: SquarePosDialog.corners,
                           ),
                         ),
                         child: const Icon(Icons.check_rounded, size: 19),
@@ -19239,27 +19213,28 @@ class _LineEditDialogState extends State<_LineEditDialog> {
           ),
         ),
       ),
-    );
+    ));
   }
 
   InputDecoration _lineInputDecoration({String? hintText}) {
-    final radius = usesNativePhoneLayout(context) ? 4.0 : 8.0;
+
     return InputDecoration(
       hintText: hintText,
       isDense: true,
+      constraints: const BoxConstraints(minHeight: 44),
       filled: true,
       fillColor: const Color(0xFFF8FBFF),
       contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(radius),
+        borderRadius: SquarePosDialog.corners,
         borderSide: const BorderSide(color: _billingBorderColor),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(radius),
+        borderRadius: SquarePosDialog.corners,
         borderSide: const BorderSide(color: _billingBorderColor),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(radius),
+        borderRadius: SquarePosDialog.corners,
         borderSide: const BorderSide(color: Color(0xFF1957E6), width: 1.2),
       ),
     );
@@ -19285,8 +19260,8 @@ class _LineEditIconButton extends StatelessWidget {
         backgroundColor: const Color(0xFFF3F7FB),
         foregroundColor: const Color(0xFF43566B),
         side: const BorderSide(color: Color(0xFFD8E5F3)),
-        fixedSize: const Size(34, 34),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(usesNativePhoneLayout(context) ? 4 : 8)),
+        fixedSize: const Size(44, 44),
+        shape: RoundedRectangleBorder(borderRadius: SquarePosDialog.corners),
       ),
     );
   }

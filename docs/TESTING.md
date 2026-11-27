@@ -146,3 +146,19 @@ hardware test is required when compatible equipment is available:
 
 Without compatible hardware the implementation is CODE COMPLETE but remains
 `NO-GO — HARDWARE QA PENDING`; hardware results must never be faked.
+
+## Guardian repair regression (2026-11-27)
+
+Run Guardian unit suites, client `test/core/guardian`, and PostgreSQL Guardian
+suites against a disposable loopback database. The added
+`guardian.repair.pg.integration-spec.ts` specifically requires local
+`guardian_repair_test`. It checks persisted concurrent capture, tenant identity,
+old incidents without AI, opt-out and correct monitoring projection.
+Do not point the destructive fixture cleanup in older integration suites at a
+shared database. Local HTTP receivers and simulated AI must replace paid/external
+providers. Verify acceptance versus delivery, restart/retry retention, credentials,
+partial acknowledgements, company switches, browser write concurrency and roles.
+CRM integration also requires its backend authorization/AI suites, Flutter
+navigation/widget checks and visual review at desktop/mobile sizes.
+Passing local tests does not certify deployed switches, persistent volumes or
+actual WhatsApp delivery; those require controlled rollout and recipient evidence.

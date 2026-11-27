@@ -60,6 +60,13 @@ class UpdateDownloader {
 
   Future<void> discardBuild(int buildNumber) async {}
 
+  Future<String> resolvePreparedArtifact(PersistedUpdateState state) async {
+    throw const UpdateDownloadException('UNSUPPORTED_PLATFORM');
+  }
+
+  Future<String> preparedUpdateRoot() async => '';
+  Future<void> beginInstallAttempt(int buildNumber) async {}
+
   Future<UpdateInstallerResult?> readInstallerResult(int buildNumber) async {
     return null;
   }

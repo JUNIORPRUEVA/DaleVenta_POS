@@ -1,0 +1,50 @@
+Guardian: reparacion, panel CRM y evidencia local — 2026-11-27
+
+Implementado en FullPOS: cola privada persistente, captura concurrente y dedupe por
+empresa, politica de opt-in, identidad/fecha conservadas, reintentos y confirmacion
+de recepcion, alertas graves sin esperar IA, worker con recorridos independientes,
+rescate de incidencias antiguas, proteccion contra reactivacion de opt-out manual.
+Cliente: activacion en nuevos release, autoenrolamiento autorizado, credenciales
+separadas por API/entorno, cola ligada a empresa, confirmaciones parciales seguras,
+evidencia rechazada conservada y escrituras web serializadas.
+No cambia reglas fiscales, licencias ni inventario. No crea migracion Prisma.
+
+Parte complementaria obligatoria en APPYRA CRM:
+backend/server/guardian.mjs y entrada Flutter Guardian IA exclusiva de ADMIN.
+Proxy con secreto solo servidor, controles de sesion/rol/origen, evidencia e
+historial, avisos y procesos. GUARDIAN_AI_PROVIDER=crm reutiliza la IA existente.
+Consultar CRM/docs/implementation/GUARDIAN_INTEGRATION_20261127.txt para activacion.
+
+Verificado localmente:
+- 326 pruebas unitarias backend Guardian, incluida IA/saldo pendientes sin parar avisos.
+- 100 pruebas PostgreSQL, cuatro con rol real de solo lectura y escrituras denegadas.
+- 56 pruebas Flutter Guardian, incluyendo SQLite reabierto y concurrencia web.
+- 74 pruebas CRM backend y seis de modulo/navegacion/render visual.
+- Typecheck API correcto y compilacion CRM Windows Debug correcta.
+- Analisis Guardian sin errores/warnings; ocho avisos informativos de estilo.
+- Recorrido HTTP entre PostgreSQL, API, login/proxy CRM y proveedor IA local.
+- Fallos HTTP reales via GlobalExceptionFilter; caida REAL de PostgreSQL aislado,
+  archivo e intento fallido persistidos, reconexion automatica sin invocar capture/
+  flush manualmente; cuatro incidencias y cuatro avisos al receptor local, sin
+  duplicados en los reintentos probados; IA/receptor HTTP 503 y receipt de entrega.
+
+Arnes portable: scripts/uat/guardian-real-fault-verification.cjs.
+Preparar exclusivamente el contenedor fullpos_guardian_fault_verify_20261127,
+PostgreSQL loopback 14671, base guardian_fault_verification_test y rol
+guardian_fault_reader con SELECT, sin permisos de escritura. Cargar el schema solo
+en esa base descartable. El arnes detiene y reinicia ESE contenedor para comprobar
+la caida; no ejecutarlo contra otro destino. Ejecutar desde la raiz con
+TS_NODE_PROJECT=apps/api/tsconfig.scripts.json y node --experimental-sqlite
+-r ts-node/register/transpile-only scripts/uat/guardian-real-fault-verification.cjs.
+Los resultados quedan en .uat/guardian-real-fault-verification.json; los datos de
+prueba se conservan. Las credenciales, colas, logs y paquetes locales no se publican.
+
+Estado: GO tecnico LOCAL para lo probado. NO-GO para afirmar activacion productiva.
+Pendientes: despliegue autorizado en ambos proyectos, nueva version POS,
+variables/origen/credenciales de servicio y canal, empresas autorizadas, volumen
+persistente privado y workers/watchdog comprobados. Confirmar un aviso REAL al
+destinatario administrativo, con autorizacion y evidencia de recepcion.
+Web depende del almacenamiento y ejecucion del navegador; no hubo QA fisico
+Android/iPhone en esta tarea. Conservar eventos historicos sin empresa comprobable;
+no adivinar pertenencias ni borrar evidencia para cerrar incidencias.
+Ningun mensaje externo, llamada IA pagada ni dato de produccion se modifico.

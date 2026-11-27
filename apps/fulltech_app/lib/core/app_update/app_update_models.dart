@@ -119,7 +119,10 @@ class UpdateManifest {
   }
 
   factory UpdateManifest.fromJson(Map<String, dynamic> json) {
-    final updateAvailable = json['updateAvailable'] == true;
+    final updateAvailable = json['updateAvailable'];
+    if (updateAvailable is! bool) {
+      throw const FormatException('Missing or invalid updateAvailable flag.');
+    }
     if (!updateAvailable) return UpdateManifest.noUpdate();
 
     final version = _asTrimmedString(json['version']);
@@ -316,6 +319,14 @@ class PersistedUpdateState {
   }
 
   PersistedUpdateState normalizeForStartup() {
+    if (phase == AppUpdatePhase.waitingSafeState ||
+        phase == AppUpdatePhase.installRequested) {
+      return copyWith(
+        phase: AppUpdatePhase.readyToInstall,
+        lastUpdateResult: 'PREPARED_RECOVERED',
+        clearLastError: true,
+      );
+    }
     if (!phase.isTransient) return this;
     return copyWith(
       phase: AppUpdatePhase.idle,
@@ -465,7 +476,9 @@ class AppUpdateState {
 
   bool get hasVisibleMainPrompt =>
       phase == AppUpdatePhase.readyToInstall &&
-      manifest?.isDismissedBy(persisted.dismissedBuild) == false;
+      (manifest?.buildNumber ?? persisted.targetBuild) != null &&
+      (manifest?.buildNumber ?? persisted.targetBuild) !=
+          persisted.dismissedBuild;
 
   bool get blocksUsage => false;
 }

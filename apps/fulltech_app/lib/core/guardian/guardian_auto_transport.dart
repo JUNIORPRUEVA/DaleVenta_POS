@@ -109,9 +109,22 @@ class AutoEnrollingGuardianTransport implements GuardianTransport {
     if (credential == null) {
       return sessionTransport.send(events);
     }
+    if (credential.companyId != null &&
+        events.any(
+          (event) =>
+              event.context?['_guardianCompanyId'] != null &&
+              event.context?['_guardianCompanyId'] != credential.companyId,
+        )) {
+      invalidateCredential();
+      await credentialStore.clear();
+      _lastEnrollmentAttemptAt = null;
+      return sessionTransport.send(events);
+    }
 
     final result = await _machineFor(credential.credential).send(events);
-    if (result.reason == 'HTTP_401' || result.reason == 'HTTP_403') {
+    if (result.reason == 'HTTP_401' ||
+        result.reason == 'HTTP_403' ||
+        result.reason == 'COMPANY_SCOPE_MISMATCH') {
       // Credencial revocada/caducada: se descarta y se usa la sesión.
       invalidateCredential();
       unawaited(credentialStore.clear());

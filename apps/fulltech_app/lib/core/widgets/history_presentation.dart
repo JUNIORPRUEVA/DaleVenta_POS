@@ -184,7 +184,10 @@ class HistoryActionBar extends StatelessWidget {
               dimension: 40,
               child: PopupMenuButton<int>(
                 tooltip: 'Más acciones',
-                icon: const MobileActionIcon(Icons.more_horiz_rounded, size: 22),
+                icon: const MobileActionIcon(
+                  Icons.more_horiz_rounded,
+                  size: 22,
+                ),
                 onSelected: (index) => actions[index].onPressed?.call(),
                 itemBuilder: (_) => [
                   for (var i = count; i < actions.length; i++)
@@ -382,6 +385,7 @@ class HistoryDocumentRow extends StatelessWidget {
     this.date,
     this.extra,
     this.actions = const [],
+    this.preserveCompactAmount = false,
   });
   final String document;
   final String client;
@@ -391,6 +395,7 @@ class HistoryDocumentRow extends StatelessWidget {
   final String? date;
   final String? extra;
   final List<Widget> actions;
+  final bool preserveCompactAmount;
 
   Widget _text(
     String value, {
@@ -444,13 +449,17 @@ class HistoryDocumentRow extends StatelessWidget {
                     Expanded(flex: 16, child: _text(extra!, muted: true)),
                   ],
                   const SizedBox(width: 10),
-                  Expanded(
-                    flex: 16,
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: _text(amount, bold: true),
+                  if (preserveCompactAmount &&
+                      constraints.maxWidth / scale < 480)
+                    _text(amount, bold: true)
+                  else
+                    Expanded(
+                      flex: 16,
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: _text(amount, bold: true),
+                      ),
                     ),
-                  ),
                   if (actions.isNotEmpty) ...[
                     const SizedBox(width: 8),
                     ...actions,

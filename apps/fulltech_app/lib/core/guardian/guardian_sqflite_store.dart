@@ -106,13 +106,15 @@ class SqfliteGuardianStore implements GuardianStore {
   Future<List<GuardianEvent>> dueEvents({
     required int limit,
     DateTime? now,
+    String? companyId,
   }) async {
     final db = await _database;
     final at = (now ?? DateTime.now()).millisecondsSinceEpoch;
     final rows = await db.query(
       'guardian_events',
-      where: 'next_attempt_at_ms <= ?',
-      whereArgs: <Object?>[at],
+      where:
+          'next_attempt_at_ms <= ?${companyId == null ? '' : " AND json_extract(payload, '\$.context._guardianCompanyId') = ?"}',
+      whereArgs: <Object?>[at, if (companyId != null) companyId],
       orderBy: 'severity ASC, occurred_at_ms ASC',
       limit: limit,
     );

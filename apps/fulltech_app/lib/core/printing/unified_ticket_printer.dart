@@ -9,6 +9,8 @@ import '../../features/settings/data/printer_settings_model.dart';
 import '../../features/settings/data/printer_settings_repository.dart';
 import '../errors/user_safe_error_text.dart';
 import '../../modules/ventas/sales_models.dart';
+import '../../modules/ventas/utils/sales_pdf_service.dart' as invoices;
+import '../company/company_settings_repository.dart';
 import '../../features/ecf/data/ecf_repository.dart';
 import '../../features/ecf/ecf_print_document.dart';
 import '../update/print_activity_tracker.dart';
@@ -629,6 +631,42 @@ class UnifiedTicketPrinter {
       }
     }
     return result;
+  }
+
+  /// Same sale identity, items, fiscal checks and thermal layout as checkout.
+  /// This read-only copy never creates a sale or opens the cash drawer.
+  Future<Uint8List> buildSaleTicketPdf({required SaleModel sale}) async {
+    final ecf = sale.requiresElectronicPrint
+        ? await _ref
+              .read(ecfRepositoryProvider)
+              .printForSale(sale.id, requireElectronic: true)
+        : null;
+    if (ecf != null && !ecf.matchesTotal(sale.totalSold)) {
+      throw StateError(
+        'El importe de la venta no coincide con su comprobante electrónico.',
+      );
+    }
+    final company = await _ref
+        .read(companyInfoRepositoryProvider)
+        .getCurrentCompanyInfo();
+    final settings = await _ref
+        .read(printerSettingsRepositoryProvider)
+        .getOrCreate();
+    return TicketBuilder(
+      layout: TicketLayoutConfig.fromPrinterSettings(settings),
+      company: company,
+    ).buildPdf(TicketData.fromSale(sale, isCopy: true, ecf: ecf));
+  }
+
+  /// The existing A4 invoice, shared by checkout, history and customer credit.
+  Future<Uint8List> buildSaleInvoicePdf({required SaleModel sale}) async {
+    final ecf = sale.requiresElectronicPrint
+        ? await _ref.read(ecfRepositoryProvider).printForSale(sale.id, requireElectronic: true)
+        : null;
+    final company = await _ref.read(companySettingsRepositoryProvider).getCachedSettings();
+    final settings = await _ref.read(printerSettingsRepositoryProvider).getOrCreate();
+    return invoices.buildSaleInvoicePdf(sale: sale, ecf: ecf, company: company,
+      warrantyPolicy: settings.warrantyPolicy);
   }
 
   Future<PrintTicketResult> autoPrintSale({

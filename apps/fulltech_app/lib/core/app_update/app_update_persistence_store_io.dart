@@ -5,11 +5,16 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../storage/windows_product_paths.dart';
+import 'app_update_models.dart';
 
 class UpdateStateFileStore {
-  const UpdateStateFileStore();
+  const UpdateStateFileStore({Directory? rootDirectory})
+    : _rootDirectory = rootDirectory;
+
+  final Directory? _rootDirectory;
 
   Future<Directory> _root() async {
+    if (_rootDirectory != null) return _rootDirectory;
     if (Platform.isWindows) {
       final productUpdates = WindowsProductPaths.folder(
         WindowsProductFolder.updates,
@@ -50,7 +55,14 @@ class UpdateStateFileStore {
     final root = await _root();
     final candidates = <File>[];
     final rootState = await _rootStateFile();
-    if (await rootState.exists()) candidates.add(rootState);
+    Future<void> addCandidates(File file) async {
+      for (final path in [file.path, '${file.path}.tmp', '${file.path}.bak']) {
+        final candidate = File(path);
+        if (await candidate.exists()) candidates.add(candidate);
+      }
+    }
+
+    await addCandidates(rootState);
 
     if (await root.exists()) {
       await for (final entity in root.list(followLinks: false)) {
@@ -58,25 +70,34 @@ class UpdateStateFileStore {
         final name = p.basename(entity.path);
         if (int.tryParse(name) == null) continue;
         final stateFile = File(p.join(entity.path, 'update_state.json'));
-        if (await stateFile.exists()) candidates.add(stateFile);
+        await addCandidates(stateFile);
       }
     }
 
     Map<String, dynamic>? latest;
     DateTime? latestUpdatedAt;
     for (final file in candidates) {
-      final parsed = await _readOne(file);
+      Map<String, dynamic>? parsed;
+      try {
+        parsed = await _readOne(file);
+      } on Object {
+        // A damaged/locked old build must not hide another valid candidate.
+        continue;
+      }
       if (parsed == null) continue;
       final updatedAt = DateTime.tryParse(
         parsed['updatedAt']?.toString() ?? '',
       );
+      if (updatedAt == null) continue;
       if (latest == null ||
-          updatedAt == null ||
           latestUpdatedAt == null ||
           updatedAt.isAfter(latestUpdatedAt)) {
         latest = parsed;
         latestUpdatedAt = updatedAt;
       }
+    }
+    if (latest == null && candidates.isNotEmpty) {
+      throw const FormatException('No readable update state');
     }
     return latest;
   }
@@ -84,7 +105,12 @@ class UpdateStateFileStore {
   Future<Map<String, dynamic>?> _readOne(File file) async {
     final raw = await file.readAsString();
     final decoded = jsonDecode(raw);
-    if (decoded is Map<String, dynamic>) return decoded;
+    if (decoded is Map<String, dynamic> &&
+        AppUpdatePhase.values.any((phase) => phase.code == decoded['state']) &&
+        DateTime.tryParse(decoded['createdAt']?.toString() ?? '') != null &&
+        DateTime.tryParse(decoded['updatedAt']?.toString() ?? '') != null) {
+      return decoded;
+    }
     return null;
   }
 
@@ -93,8 +119,10 @@ class UpdateStateFileStore {
     await file.parent.create(recursive: true);
     final temp = File('${file.path}.tmp');
     await temp.writeAsString(jsonEncode(json), flush: true);
+    final backup = File('${file.path}.bak');
     if (await file.exists()) {
-      await file.delete();
+      if (await backup.exists()) await backup.delete();
+      await file.rename(backup.path);
     }
     await temp.rename(file.path);
   }
