@@ -181,7 +181,7 @@ void main() {
     },
   );
   test(
-    'HTML keeps official QR after totals, with quiet zone, security and signature',
+    'HTML keeps official QR after totals and before closing, with quiet zone, security and signature',
     () {
       final html = const HtmlThermalReceiptRenderer().render(receipt());
       expect(html, contains('data:image/svg+xml;base64,'));
@@ -189,8 +189,9 @@ void main() {
       expect(html, contains('padding:3mm'));
       expect(
         html.indexOf('QR de consulta DGII'),
-        greaterThan(html.indexOf('¡GRACIAS')),
+        lessThan(html.indexOf('¡GRACIAS')),
       );
+      expect(html.indexOf('QR de consulta DGII'), greaterThan(html.indexOf('class="totals"')));
       expect(html, contains('S9Qvrj'));
       expect(html, contains('13-11-2026 08:45:19'));
       expect(html, contains('SIN VALIDEZ FISCAL'));

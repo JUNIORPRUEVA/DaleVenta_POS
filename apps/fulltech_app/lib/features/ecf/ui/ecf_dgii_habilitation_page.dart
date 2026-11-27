@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../../core/utils/native_phone_layout.dart';
 import '../../../core/widgets/custom_app_bar.dart';
@@ -34,7 +33,6 @@ import 'ecf_production_activation_action.dart';
 import 'ecf_support_grant_card.dart';
 import 'ecf_ready_home.dart';
 import 'ecf_fiscal_overview.dart';
-import 'debug/ecf_debug_screen_selector.dart';
 import 'flow/ecf_authorization_step.dart';
 import 'flow/ecf_completed_view.dart';
 import 'flow/ecf_dosa_activation_status.dart';
@@ -76,7 +74,6 @@ class EcfDgiiHabilitationPage extends ConsumerStatefulWidget {
 class _EcfDgiiHabilitationPageState
     extends ConsumerState<EcfDgiiHabilitationPage> {
   bool _busy = false;
-  EcfDebugScreen? _debugScreen;
   bool _applicationOpen = false;
   bool _fiscalOpen = false;
   bool _reviewFiscalData = false;
@@ -117,10 +114,6 @@ class _EcfDgiiHabilitationPageState
   }
 
   void _navigateBack() {
-    if (kDebugMode && _debugScreen != null) {
-      setState(() => _debugScreen = null);
-      return;
-    }
     if (_applicationOpen) {
       _wizardKey.currentState?.goBack();
       return;
@@ -150,7 +143,6 @@ class _EcfDgiiHabilitationPageState
   }
 
   bool get _canGoBack =>
-      (kDebugMode && _debugScreen != null) ||
       _applicationOpen ||
       _activationOpen ||
       _certificateOpen ||
@@ -181,7 +173,6 @@ class _EcfDgiiHabilitationPageState
         ref.invalidate(dosaIntentStateProvider);
         setState(() {
           _step = null;
-          _debugScreen = null;
           _fiscalOpen = false;
           _certificateOpen = false;
           _applicationOpen = false;
@@ -199,17 +190,7 @@ class _EcfDgiiHabilitationPageState
           .state = DesktopShellRouteActions(
         route: Routes.ecf,
         onBack: _navigateBack,
-        actions: [
-          // Exclusivo de depuración. En release esta rama es constante y el
-          // selector no se registra ni se puede habilitar por URL/dart-define.
-          if (kDebugMode)
-            DesktopShellActionItem(
-              icon: Icons.visibility_outlined,
-              tooltip: 'Ver pantallas (solo depuración)',
-              label: 'Ver pantallas',
-              onPressed: _showDebugScreens,
-            ),
-        ],
+        actions: const [],
       );
     });
   }
@@ -424,93 +405,8 @@ class _EcfDgiiHabilitationPageState
     );
   }
 
-  Future<void> _showDebugScreens() async {
-    if (!kDebugMode) return;
-    final selected = await showModalBottomSheet<EcfDebugScreen>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (context) => SafeArea(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 560),
-          child: ListView(
-            shrinkWrap: true,
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
-            children: [
-              const Padding(
-                padding: EdgeInsets.fromLTRB(8, 4, 8, 10),
-                child: Text(
-                  'Ver pantallas',
-                  style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-              ),
-              for (final screen in EcfDebugScreen.values)
-                ListTile(
-                  dense: true,
-                  leading: const Icon(
-                    Icons.visibility_outlined,
-                    size: 19,
-                    color: AppColors.primary,
-                  ),
-                  title: Text(
-                    screen.label,
-                    style: const TextStyle(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  trailing: _debugScreen == screen
-                      ? const Icon(
-                          Icons.check_circle_rounded,
-                          size: 18,
-                          color: AppColors.primary,
-                        )
-                      : const Icon(
-                          Icons.chevron_right_rounded,
-                          size: 18,
-                          color: AppColors.textMuted,
-                        ),
-                  onTap: () => Navigator.of(context).pop(screen),
-                ),
-              const Padding(
-                padding: EdgeInsets.fromLTRB(8, 8, 8, 0),
-                child: EcfInlineNote(
-                  tone: EcfTone.pending,
-                  icon: Icons.info_outline_rounded,
-                  text:
-                      'Solo depuración. Estas vistas usan datos en memoria y no ejecutan acciones del backend.',
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-    if (!mounted || selected == null) return;
-    setState(() => _debugScreen = selected);
-  }
-
-  Widget _buildDebugPreview(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: SafeArea(
-        child: EcfDebugPreview(
-          screen: _debugScreen!,
-          onExit: () => setState(() => _debugScreen = null),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    if (kDebugMode && _debugScreen != null) {
-      return _buildDebugPreview(context);
-    }
     final user = ref.watch(authStateProvider).user;
     // Cada acción se gatea con EL MISMO permiso que valida `RolesGuard` en el
     // backend. Mostrar un botón que el servidor va a rechazar es peor que no

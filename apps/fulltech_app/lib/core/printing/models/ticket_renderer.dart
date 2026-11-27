@@ -311,13 +311,6 @@ class TicketRenderer {
         add(line);
       }
     }
-    if (layout.footerMessage.trim().isNotEmpty) {
-      if (!compact58) blank();
-      for (final line in ReceiptTextUtils.wrap(layout.footerMessage, width)) {
-        add(ReceiptTextUtils.center(line, width));
-      }
-    }
-
     if (data.ecf != null) {
       blank();
       for (final value in data.ecf!.identityLines) {
@@ -335,6 +328,12 @@ class TicketRenderer {
             add(line);
           }
         }
+      }
+    }
+    if (layout.footerMessage.trim().isNotEmpty) {
+      if (!compact58) blank();
+      for (final line in ReceiptTextUtils.wrap(layout.footerMessage, width)) {
+        add(ReceiptTextUtils.center(line, width));
       }
     }
     final bottomBlanks = compact58 ? 0 : layout.bottomMargin ~/ 4;

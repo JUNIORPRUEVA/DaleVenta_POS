@@ -46,11 +46,11 @@ ${receipt.ecf == null ? '' : '.company-name,.company-line,.client-line,.item-nam
     ${_payment(receipt)}
     ${_notes(receipt)}
     ${_warrantyPolicy()}
+    ${_ecfFooter(receipt)}
     <footer class="footer">
       <strong>¡GRACIAS POR SU PREFERENCIA!</strong>
       <div>FullPOS Cloud</div>
     </footer>
-    ${_ecfFooter(receipt)}
   </main>
 </body>
 </html>
@@ -308,7 +308,9 @@ body {
   String _header(ThermalReceiptViewModel receipt, String? logoSrc) {
     final company = receipt.company;
     final logo = logoSrc == null
-        ? '<div class="logo logo-placeholder">LOGO</div>'
+        ? (receipt.ecf == null
+              ? '<div class="logo logo-placeholder">LOGO</div>'
+              : '')
         : '<img class="logo" src="$logoSrc" alt="Logo">';
     return '''
     <section class="company">
