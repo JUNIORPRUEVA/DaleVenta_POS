@@ -4,6 +4,7 @@ import { GuardianCaptureRegistry, GuardianBackendErrorInput } from '../guardian.
 import { buildFingerprint } from '../guardian.fingerprint';
 import { redactContext, redactText } from '../guardian.redaction';
 import { guardianSecretValue } from '../guardian.secret';
+import { GuardianDurableOutbox } from '../guardian.durable-outbox';
 import {
   GuardianTelemetryConfig,
   describeGuardianTelemetryConfig,
@@ -53,25 +54,24 @@ export type GuardianTelemetryStats = {
  * Puente de telemetría DaleVentas POS → APPYRA Guardian.
  *
  * Contrato (no negociable):
- * - **No bloquea**: `offer()` solo encola en memoria y retorna; el envío ocurre
- *   en un temporizador con `unref()`.
+ * - **No bloquea**: `offer()` agenda escritura local y retorna. El envío urgente
+ *   empieza después de persistir, con respaldo periódico.
  * - **No lanza**: cualquier fallo interno se captura y se cuenta. Un error de
  *   telemetría jamás puede convertirse en un error de negocio.
  * - **No toca transacciones**: no participa en ninguna transacción de Prisma ni
  *   se invoca desde dentro de una; solo desde el filtro global de excepciones y
  *   desde tareas de fondo, siempre después de responder o de fallar.
- * - **Acotado**: cola con capacidad fija (descarta el más antiguo), lote máximo,
- *   timeout absoluto por petición, reintentos limitados y caudal por minuto.
- * - **Fail-open**: si Guardian no responde, se descarta y se sigue operando.
+ * - Vista en memoria acotada; los eventos durables no se descartan por capacidad.
+ * - **Fail-open** para el negocio: si Guardian no responde, se conserva y reintenta.
  */
 @Injectable()
 export class GuardianTelemetryBridgeService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(GuardianTelemetryBridgeService.name);
   private config: GuardianTelemetryConfig;
   private readonly queue: GuardianTelemetryEvent[] = [];
+  private readonly outbox = new GuardianDurableOutbox<GuardianTelemetryEvent>(GuardianDurableOutbox.directory('telemetry'));
   private readonly recent = new Map<string, number>();
   private timer: NodeJS.Timeout | null = null;
-  private flushing = false;
   private rateWindow: { startedAt: number; count: number } = { startedAt: 0, count: 0 };
   private readonly stats: GuardianTelemetryStats = {
     received: 0,
@@ -121,8 +121,7 @@ export class GuardianTelemetryBridgeService implements OnModuleInit, OnModuleDes
       clearInterval(this.timer);
       this.timer = null;
     }
-    // Intento final best-effort; nunca bloquea el apagado más que el timeout.
-    void this.flush();
+    // The durable queue resumes on the next process; no unawaited shutdown send.
   }
 
   /** Diagnóstico para pruebas y para el panel (sin credenciales). */
@@ -168,9 +167,11 @@ export class GuardianTelemetryBridgeService implements OnModuleInit, OnModuleDes
         appVersion: this.config.appVersion,
       });
 
-      if (!this.acceptByDedupe(fingerprint)) return;
-      if (!this.acceptByRateLimit()) return;
-      if (!this.acceptBySample(fingerprint)) return;
+      if (!this.acceptByDedupe(`${input.companyId ?? 'unattributed'}:${fingerprint}`)) return;
+      if (!['SEV1', 'SEV2'].includes(classification.severity)) {
+        if (!this.acceptByRateLimit()) return;
+        if (!this.acceptBySample(fingerprint)) return;
+      }
 
       const event = this.buildEvent({
         input,
@@ -280,26 +281,32 @@ export class GuardianTelemetryBridgeService implements OnModuleInit, OnModuleDes
 
   private enqueue(event: GuardianTelemetryEvent): void {
     if (this.queue.length >= this.config.queueCapacity) {
+      // Only the in-memory preview is bounded. The durable record is retained.
       this.queue.shift();
-      this.stats.droppedQueueFull += 1;
     }
     this.queue.push(event);
     this.stats.queued += 1;
+    void this.outbox.enqueue(event).then(() => {
+      if (event.severity === 'SEV1' || event.severity === 'SEV2') void this.flush();
+    }).catch(() => {
+      this.recent.clear();
+      this.stats.lastError = 'OUTBOX_WRITE_FAILED';
+      this.logger.error('Guardian: no se pudo persistir la telemetría');
+      // Keep memory copy and surface the failure; do not claim successful persistence.
+    });
   }
 
-  /** Envía un lote. Nunca lanza; los fallos se cuentan y se descartan. */
+  /** Sends persisted events; failed or uncertain receipts stay in the outbox. */
   async flush(): Promise<void> {
-    if (!this.config.enabled || this.flushing || this.queue.length === 0) return;
-    this.flushing = true;
+    if (!this.config.enabled) return;
     try {
-      while (this.queue.length > 0) {
-        const batch = this.queue.splice(0, this.config.batchSize);
-        await this.postBatch(batch);
-      }
+      await this.outbox.flush(async event => {
+        await this.postBatch([event]);
+        const index = this.queue.findIndex(item => item.eventId === event.eventId);
+        if (index >= 0) this.queue.splice(index, 1);
+      }, this.config.batchSize);
     } catch (error) {
       this.stats.lastError = error instanceof Error ? error.message : String(error);
-    } finally {
-      this.flushing = false;
     }
   }
 
@@ -333,6 +340,9 @@ export class GuardianTelemetryBridgeService implements OnModuleInit, OnModuleDes
           this.stats.accepted += Number(payload?.accepted ?? 0);
           this.stats.duplicatesRemote += Number(payload?.duplicates ?? 0);
           this.stats.rejectedRemote += Number(payload?.rejected ?? 0);
+          if (Number(payload?.accepted ?? 0) + Number(payload?.duplicates ?? 0) !== batch.length || Number(payload?.rejected ?? 0) > 0) {
+            throw new Error('Guardian no confirmó todos los eventos');
+          }
           this.stats.lastSuccessAt = new Date().toISOString();
           return;
         }
@@ -340,11 +350,19 @@ export class GuardianTelemetryBridgeService implements OnModuleInit, OnModuleDes
         // 4xx (salvo 408/429) = problema nuestro: reintentar no ayuda.
         const retryable = response.status >= 500 || response.status === 408 || response.status === 429;
         this.stats.lastError = `HTTP ${response.status}`;
+        if (response.status === 429) {
+          const header = response.headers.get('retry-after');
+          const seconds = Number(header);
+          const retryAfterMs = header && Number.isFinite(seconds) ? Math.max(0, seconds * 1000)
+            : Math.max(0, Date.parse(header || '') - Date.now()) || 60_000;
+          throw Object.assign(new Error('Guardian HTTP 429'), { retryAfterMs });
+        }
         if (!retryable) {
           this.stats.rejectedRemote += batch.length;
-          return;
+          throw Object.assign(new Error(`Guardian HTTP ${response.status}`), { retryAfterMs: 3600_000 });
         }
       } catch (error) {
+        if ((error as { retryAfterMs?: number })?.retryAfterMs) throw error;
         this.stats.failedAttempts += 1;
         this.stats.lastError =
           error instanceof Error
@@ -361,7 +379,7 @@ export class GuardianTelemetryBridgeService implements OnModuleInit, OnModuleDes
       }
     }
 
-    this.stats.droppedAfterAttempts += batch.length;
+    throw new Error('Guardian temporalmente no disponible; eventos conservados');
   }
 }
 

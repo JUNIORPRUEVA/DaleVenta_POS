@@ -13,6 +13,7 @@ param(
   [string]$ApiBaseUrl = 'https://daleventapos-backend.gcdndd.easypanel.host',
   [string]$AppBaseUrl = 'https://daleventapos-backend.gcdndd.easypanel.host',
   [int]$ApiTimeoutMs = 15000,
+  [bool]$GuardianEnabled = $true,
   [bool]$AllowUnsignedUpdatesForProduction = $true,
   [string]$UpdateDownloadAllowedHosts = '612fe68377329d5c3fbc84056a28aa64.r2.cloudflarestorage.com'
 )
@@ -273,6 +274,7 @@ try {
       --build-name=$($version.Version) `
       --build-number=$($version.BuildNumber) `
       --dart-define=FULLPOS_PRODUCTION_BUILD=true `
+      --dart-define=GUARDIAN_ENABLED=$($GuardianEnabled.ToString().ToLowerInvariant()) `
       --dart-define=API_BASE_URL=$ApiBaseUrl `
       --dart-define=APP_BASE_URL=$AppBaseUrl `
       --dart-define=API_TIMEOUT_MS=$ApiTimeoutMs `

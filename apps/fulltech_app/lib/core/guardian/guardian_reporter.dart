@@ -56,15 +56,25 @@ class GuardianReporter {
 
     final event = toEvent(details);
     if (event == null) {
-      unawaited(GuardianAgentLog.info(
-        'evento descartado por el reportero kind=${details.kind.name} type=${details.errorType}',
-      ));
+      unawaited(
+        GuardianAgentLog.info(
+          'evento descartado por el reportero kind=${details.kind.name} type=${details.errorType}',
+        ),
+      );
       return;
     }
-    unawaited(GuardianAgentLog.info(
-      'evento convertido sev=${event.severity} mod=${event.module} op=${event.operation}',
-    ));
-    unawaited(client.record(event));
+    unawaited(
+      GuardianAgentLog.info(
+        'evento convertido sev=${event.severity} mod=${event.module} op=${event.operation}',
+      ),
+    );
+    unawaited(
+      client.record(event).then((saved) async {
+        if (saved && (event.severity == 'SEV1' || event.severity == 'SEV2')) {
+          await client.flush();
+        }
+      }),
+    );
   }
 
   String? _lastSignature;
@@ -98,10 +108,12 @@ class GuardianReporter {
       stack: stack.isEmpty ? null : stack,
       message: message.isEmpty ? null : message,
       context: <String, dynamic>{
-        if (details.endpointUrl != null) 'endpoint': redactText(details.endpointUrl, maxChars: 200),
+        if (details.endpointUrl != null)
+          'endpoint': redactText(details.endpointUrl, maxChars: 200),
         if (details.method != null) 'method': details.method,
         'kind': kind.name,
-        if (details.context != null) 'context': redactText(details.context, maxChars: 200),
+        if (details.context != null)
+          'context': redactText(details.context, maxChars: 200),
         'severity': details.severity.name,
       },
     );
@@ -122,9 +134,11 @@ class GuardianReporter {
     if (has('/sales')) return 'sales';
     if (has('/sync') || has('sincroniz')) return 'sync';
     if (has('/license') || has('licencia')) return 'license';
-    if (has('/app-updates') || has('/app_update') || has('actualizaci')) return 'updater';
+    if (has('/app-updates') || has('/app_update') || has('actualizaci'))
+      return 'updater';
     if (has('/auth') || has('/login') || has('session')) return 'auth';
-    if (has('/products') || has('/inventory') || has('/warehouses')) return 'inventory';
+    if (has('/products') || has('/inventory') || has('/warehouses'))
+      return 'inventory';
     if (has('/reports')) return 'reporting';
     if (has('/tax') || has('/ncf') || has('/ecf')) return 'fiscal';
     if (has('print') || has('impresi')) return 'printing';
@@ -140,7 +154,9 @@ class GuardianReporter {
       case 'media':
         return 'SEV4';
       case 'server':
-        return (module == 'cash' || module == 'sales' || module == 'fiscal') ? 'SEV1' : 'SEV2';
+        return (module == 'cash' || module == 'sales' || module == 'fiscal')
+            ? 'SEV1'
+            : 'SEV2';
       case 'sync':
       case 'auth':
       case 'permission':
@@ -153,7 +169,9 @@ class GuardianReporter {
 
   String operationFor(AppErrorDetails details) {
     final method = (details.method ?? '').toUpperCase();
-    final path = _normalizePath(details.endpointUrl ?? details.context ?? 'app');
+    final path = _normalizePath(
+      details.endpointUrl ?? details.context ?? 'app',
+    );
     final operation = method.isEmpty ? path : '$method $path';
     return operation.length <= 80 ? operation : operation.substring(0, 80);
   }
@@ -170,7 +188,9 @@ class GuardianReporter {
     if (queryIndex >= 0) value = value.substring(0, queryIndex);
     // Reemplaza identificadores (UUID / numéricos largos) por marcador.
     value = value.replaceAll(
-      RegExp(r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'),
+      RegExp(
+        r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}',
+      ),
       ':id',
     );
     value = value.replaceAll(RegExp(r'/\d{3,}'), '/:id');

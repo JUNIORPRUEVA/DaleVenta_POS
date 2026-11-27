@@ -26,6 +26,7 @@ import { resolveGuardianConfig } from './guardian.config';
  * que el diagnóstico IA y el envío de alertas no compitan con ventas/caja.
  */
 export async function runGuardianWorker(): Promise<void> {
+  process.env.GUARDIAN_PROCESS_ROLE = 'worker';
   const logger = new Logger('GuardianWorkers');
 
   // Watchdog de arranque (fase 12). El tope por ciclo vive dentro de `tick()`,
@@ -82,6 +83,7 @@ export async function runGuardianWorker(): Promise<void> {
     Number(process.env.GUARDIAN_WORKER_CYCLE_TIMEOUT_SECONDS ?? 120) * 1_000,
   );
   let consecutiveFailures = 0;
+  let diagnosisRunning = false;
 
   // Latido real: el watchdog independiente no puede distinguir "sin trabajo" de
   // "proceso muerto" solo con contadores, así que cada worker deja su marca.
@@ -138,10 +140,19 @@ export async function runGuardianWorker(): Promise<void> {
         logger.error(`Alertas: ${error instanceof Error ? error.message : String(error)}`);
         return null;
       });
-      const diagnosisOutcome = await diagnosis.runBatch(5).catch((error: unknown) => {
-        logger.error(`Diagnóstico: ${error instanceof Error ? error.message : String(error)}`);
-        return null;
-      });
+      // AI runs in its own lane: a slow provider must never stall urgent alerts.
+      if (!diagnosisRunning) {
+        diagnosisRunning = true;
+        const diagnosisGuard = setTimeout(() => {
+          logger.error('Diagnóstico Guardian bloqueado: reiniciando worker para recuperar la tarea');
+          process.exit(1);
+        }, cycleTimeoutMs);
+        void diagnosis.runBatch(1).then(async outcome => {
+          await beat('diagnosis', outcome?.processed ?? 0);
+        }).catch((error: unknown) => {
+          logger.error(`Diagnóstico: ${error instanceof Error ? error.message : String(error)}`);
+        }).finally(() => { clearTimeout(diagnosisGuard); diagnosisRunning = false; });
+      }
 
       // Autoguardado (fase 12): un healthcheck en rojo NO reinicia el contenedor
       // en Swarm. La señal de vida fiable es el LATIDO persistido: si no se
@@ -149,11 +160,9 @@ export async function runGuardianWorker(): Promise<void> {
       // varios ciclos seguidos sin latido se sale con código != 0 para que la
       // política `--restart-condition any` lo levante de nuevo.
       // No se considera fallo "processed=0": con Guardian desactivado es normal.
-      // Fase 13: si la alerta no pudo planificarse en la ingesta (alertas
-      // apagadas en ese instante), se planifica ahora que ya existe diagnóstico.
-      // El dedupeKey la hace idempotente: nunca duplica un aviso existente.
-      if (diagnosisOutcome && (diagnosisOutcome.diagnosed ?? 0) > 0) {
-        await alerts.planMissingForDiagnosed(5).catch((error: unknown) => {
+      // Recover unscheduled alerts without waiting for an AI result or excluding old incidents.
+      {
+        await alerts.planMissingAlerts(20).catch((error: unknown) => {
           logger.error(
             `planificación de alertas: ${error instanceof Error ? error.message : String(error)}`,
           );
@@ -161,8 +170,7 @@ export async function runGuardianWorker(): Promise<void> {
       }
 
       const beatAlerts = await beat('alerts', alertOutcome?.processed ?? 0);
-      const beatDiagnosis = await beat('diagnosis', diagnosisOutcome?.processed ?? 0);
-      if (!beatAlerts && !beatDiagnosis) {
+      if (!beatAlerts) {
         consecutiveFailures += 1;
         logger.warn(
           `latido no persistido (${consecutiveFailures}/${maxConsecutiveFailures})`,
@@ -185,17 +193,12 @@ export async function runGuardianWorker(): Promise<void> {
           `alertas procesadas=${alertOutcome.processed} enviadas=${alertOutcome.sent} fallidas=${alertOutcome.failed} esperando-diagnostico=${alertOutcome.deferred ?? 0}`,
         );
       }
-      if (diagnosisOutcome && diagnosisOutcome.processed > 0) {
-        logger.log(
-          `diagnósticos procesados=${diagnosisOutcome.processed} ok=${diagnosisOutcome.diagnosed} fallidos=${diagnosisOutcome.failed}`,
-        );
-      }
 
       // Monitor de saldo/coste real de la IA. Nunca bloquea el ciclo: cualquier
       // fallo se registra y el bucle continúa.
       if (Date.now() - lastBalanceCheckAt >= balanceIntervalMs) {
         lastBalanceCheckAt = Date.now();
-        await balanceMonitor.check().catch((error: unknown) => {
+        void balanceMonitor.check().catch((error: unknown) => {
           logger.error(
             `saldo IA: ${error instanceof Error ? error.message : String(error)}`,
           );

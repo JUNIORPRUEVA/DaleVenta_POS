@@ -8,6 +8,7 @@ import {
 import { hostname } from 'node:os';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ALERT_IMMEDIATE_SEVERITIES, ALERT_DIAGNOSIS_WAIT_SEVERITIES } from './guardian.alert.readiness';
 import { resolveGuardianConfig } from './guardian.config';
 import { guardianSecretValue } from './guardian.secret';
 import { formatGuardianDateTime } from './guardian.time';
@@ -255,6 +256,21 @@ export class GuardianAlertService {
    * Política 24/7: SEV1 y SEV2 se envían a cualquier hora, incluso madrugada,
    * domingo o feriado. Los horarios comerciales de mensajes a clientes no se tocan.
    */
+  async planMissingAlerts(limit = 20): Promise<number> {
+    if (!resolveGuardianConfig().alertsEnabled) return 0;
+    const rows = await this.prisma.guardianIncident.findMany({
+      where: { alerts: { none: { kind: 'initial' } }, company: { guardianEnabled: true },
+        severity: { in: [GuardianSeverity.SEV1, GuardianSeverity.SEV2,
+          ...(String(process.env.GUARDIAN_ALERT_SEV3_ENABLED ?? 'true') !== 'false' ? [GuardianSeverity.SEV3] : []),
+          ...(String(process.env.GUARDIAN_ALERT_SEV4_ENABLED ?? 'false') === 'true' ? [GuardianSeverity.SEV4] : [])] },
+        status: { notIn: ['RESOLVED', 'CLOSED', 'WONT_FIX'] } },
+      select: { id: true }, orderBy: { receivedAt: 'asc' }, take: Math.max(1, limit),
+    });
+    let planned = 0;
+    for (const row of rows) if ((await this.planForIncident(row.id)).created) planned++;
+    return planned;
+  }
+
   async planForIncident(incidentId: string, now = new Date()): Promise<GuardianAlertPlan> {
     const config = resolveGuardianConfig();
     if (!config.alertsEnabled) return { created: false, skipped: 'ALERTS_DISABLED' };
@@ -371,14 +387,14 @@ export class GuardianAlertService {
       { OR: [{ lockedAt: null }, { lockedAt: { lt: lockExpiry } }] },
     ];
 
-    // Fase 4: SEV2/SEV3 esperan al diagnóstico hasta el plazo configurado.
-    // SEV1 nunca se bloquea. La lista de severidades que esperan viene del módulo
+    // SEV3 espera hasta el plazo; SEV1/SEV2 no dependen de IA.
+    // La lista de severidades que esperan viene del módulo
     // de readiness para que la regla viva en un solo lugar.
     if (waitSeconds > 0) {
       const deadline = new Date(now.getTime() - waitSeconds * 1000);
       conditions.push({
         OR: [
-          { incident: { severity: GuardianSeverity.SEV1 } },
+          { incident: { severity: { in: [...ALERT_IMMEDIATE_SEVERITIES] } } },
           { incident: { diagnoses: { some: { status: GuardianDiagnosisStatus.DONE } } } },
           { incident: { receivedAt: { lte: deadline } } },
         ],
@@ -451,7 +467,7 @@ export class GuardianAlertService {
         state: GuardianAlertState.PENDING,
         nextAttemptAt: { lte: now },
         incident: {
-          severity: { in: [GuardianSeverity.SEV2, GuardianSeverity.SEV3] },
+          severity: { in: [...ALERT_DIAGNOSIS_WAIT_SEVERITIES] },
           receivedAt: { gt: deadline },
           NOT: { diagnoses: { some: { status: GuardianDiagnosisStatus.DONE } } },
         },

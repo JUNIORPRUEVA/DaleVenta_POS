@@ -12,6 +12,7 @@ import 'guardian_auto_transport.dart';
 import 'guardian_client.dart';
 import 'guardian_config.dart';
 import 'guardian_dio_transport.dart';
+import 'guardian_identity.dart';
 import 'guardian_enrollment.dart';
 import 'guardian_enrollment_code_source.dart';
 import 'guardian_install_credential_store.dart';
@@ -75,10 +76,12 @@ class GuardianBootstrap {
 
   /// Punto de prueba: mismo buffer que usa la captura de arranque.
   @visibleForTesting
-  static void debugRecordEarlyFault(AppErrorDetails details) => _bufferEarlyFault(details);
+  static void debugRecordEarlyFault(AppErrorDetails details) =>
+      _bufferEarlyFault(details);
 
   static void _bufferEarlyFault(AppErrorDetails details) {
-    if (_earlyFaults.any((fault) => fault.details.eventId == details.eventId)) return;
+    if (_earlyFaults.any((fault) => fault.details.eventId == details.eventId))
+      return;
     _earlyFaults.add(_EarlyFault(details));
     while (_earlyFaults.length > _maxEarlyFaults) {
       _earlyFaults.removeAt(0);
@@ -90,13 +93,17 @@ class GuardianBootstrap {
     final config = GuardianConfig.fromEnvironment();
     if (!config.enabled) {
       if (kDebugMode) {
-        debugPrint('GUARDIAN: desactivado (sin --dart-define=GUARDIAN_ENABLED=true)');
+        debugPrint(
+          'GUARDIAN: desactivado (sin --dart-define=GUARDIAN_ENABLED=true)',
+        );
       }
       return;
     }
 
     try {
-      final GuardianStore store = kIsWeb ? WebGuardianStore() : SqfliteGuardianStore();
+      final GuardianStore store = kIsWeb
+          ? WebGuardianStore()
+          : SqfliteGuardianStore();
       await store.init();
       unawaited(GuardianAgentLog.info('store listo (${store.runtimeType})'));
 
@@ -112,11 +119,27 @@ class GuardianBootstrap {
         appVersion: identity['x-client-app-version'],
       );
 
-      final client = GuardianClient(store: store, transport: transport, config: config);
+      final client = GuardianClient(
+        store: store,
+        transport: transport,
+        config: config,
+        companyIdProvider: () async {
+          final token = await TokenStorage().getAccessToken();
+          if (token != null && token.isNotEmpty)
+            return guardianCompanyFromToken(token);
+          if (!config.usesInstallCredential) return null;
+          final credential = await GuardianInstallCredentialStore().read();
+          return credential?.isValid(margin: Duration.zero) == true
+              ? credential?.companyId
+              : null;
+        },
+      );
       GuardianClient.install(client);
-      unawaited(GuardianAgentLog.info(
-        'cliente listo transporte=${transport.runtimeType} endpoint=${config.effectiveEndpointPath} baseUrl=$resolvedBaseUrl',
-      ));
+      unawaited(
+        GuardianAgentLog.info(
+          'cliente listo transporte=${transport.runtimeType} endpoint=${config.effectiveEndpointPath} baseUrl=$resolvedBaseUrl',
+        ),
+      );
 
       final reporter = GuardianReporter(client: client)..attach();
 
@@ -127,11 +150,19 @@ class GuardianBootstrap {
       unawaited(_flushEarlyFaults());
       AppErrorReporter.instance.lastRecorded.removeListener(_onEarlyFault);
 
-
       unawaited(client.flush());
-      _timer = Timer.periodic(config.flushInterval, (_) => unawaited(client.flush()));
+      _timer = Timer.periodic(
+        config.flushInterval,
+        (_) => unawaited(client.flush()),
+      );
 
-      unawaited(GuardianSelfTest.maybeRun(config: config, client: client, installId: installId));
+      unawaited(
+        GuardianSelfTest.maybeRun(
+          config: config,
+          client: client,
+          installId: installId,
+        ),
+      );
 
       if (kDebugMode) {
         debugPrint('GUARDIAN: activo (${config.effectiveEndpointPath})');
@@ -171,7 +202,9 @@ class GuardianBootstrap {
 
     try {
       final credentialStore = GuardianInstallCredentialStore();
-      final codeSource = GuardianEnrollmentCodeSource(filePath: config.enrollmentCodeFile);
+      final codeSource = GuardianEnrollmentCodeSource(
+        filePath: config.enrollmentCodeFile,
+      );
       final autoSource = config.autoEnroll
           ? GuardianAutoEnrollmentCodeSource(
               baseUrl: baseUrl,
@@ -197,9 +230,11 @@ class GuardianBootstrap {
       if (config.autoEnroll) {
         // Enrolamiento diferido: el arranque nunca espera a la red ni a un
         // código, y el POS sigue funcionando aunque esté offline.
-        unawaited(GuardianAgentLog.info(
-          'auto-enrolamiento configurado (empresa de la sesion, installId=$installId)',
-        ));
+        unawaited(
+          GuardianAgentLog.info(
+            'auto-enrolamiento configurado (empresa de la sesion, installId=$installId)',
+          ),
+        );
         return AutoEnrollingGuardianTransport(
           enrollment: enrollment,
           credentialStore: credentialStore,
@@ -222,12 +257,18 @@ class GuardianBootstrap {
         appVersion: appVersion,
       );
       if (credential == null) {
-        unawaited(GuardianAgentLog.info('sin credencial de instalación: se usa transporte de sesión'));
+        unawaited(
+          GuardianAgentLog.info(
+            'sin credencial de instalación: se usa transporte de sesión',
+          ),
+        );
         return sessionTransport;
       }
-      unawaited(GuardianAgentLog.info(
-        'credencial de instalación activa (caduca ${credential.expiresAt.toIso8601String()})',
-      ));
+      unawaited(
+        GuardianAgentLog.info(
+          'credencial de instalación activa (caduca ${credential.expiresAt.toIso8601String()})',
+        ),
+      );
       return MachineGuardianTransport(
         baseUrl: baseUrl,
         path: GuardianConfig.machineEndpointPath,
@@ -264,7 +305,11 @@ class GuardianBootstrap {
         // Best-effort: un fallo de arranque no puede romper el arranque.
       }
     }
-    unawaited(GuardianAgentLog.info('fallos de arranque reinyectados=${pending.length}'));
+    unawaited(
+      GuardianAgentLog.info(
+        'fallos de arranque reinyectados=${pending.length}',
+      ),
+    );
   }
 
   static Future<void> stop() async {

@@ -155,8 +155,8 @@ describeOnPg('despacho de alertas con diagnóstico (PostgreSQL real)', () => {
     return rows.filter((row) => Boolean(row.providerMessageId)).length;
   };
 
-  it('SEV2 sin diagnóstico: la alerta espera y no se envía nada', async () => {
-    const incident = await makeIncident({ suffix: 'sev2-wait', severity: 'SEV2' });
+  it('SEV3 sin diagnóstico: la alerta espera y no se envía nada', async () => {
+    const incident = await makeIncident({ suffix: 'sev3-wait', severity: 'SEV3' });
     const plan = await alerts.planForIncident(incident.id);
     expect(plan.created).toBe(true);
 

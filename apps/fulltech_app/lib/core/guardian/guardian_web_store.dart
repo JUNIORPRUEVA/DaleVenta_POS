@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'guardian_event.dart';
 import 'guardian_store.dart';
+import '../config/uat_identity.dart';
 
 /// Cola de incidentes para **Web**.
 ///
@@ -13,9 +14,18 @@ import 'guardian_store.dart';
 class WebGuardianStore implements GuardianStore {
   WebGuardianStore({this.maxPersistedEvents = 100});
 
-  static const String _eventsKey = 'guardian.outbox.events.v1';
-  static const String _discardsKey = 'guardian.outbox.discards.v1';
-  static const String _fingerprintsKey = 'guardian.outbox.fingerprints.v1';
+  static String get _eventsKey =>
+      UatIdentity.storageKey('guardian.outbox.events.v1');
+  static String get _discardsKey =>
+      UatIdentity.storageKey('guardian.outbox.discards.v1');
+  static String get _fingerprintsKey =>
+      UatIdentity.storageKey('guardian.outbox.fingerprints.v1');
+  Future<void> _writes = Future<void>.value();
+  Future<void> _mutate(Future<void> Function() action) {
+    final work = _writes.then((_) => action());
+    _writes = work.catchError((Object _) {});
+    return work;
+  }
 
   /// localStorage es limitado (~5 MB por origen); se acota más que en escritorio.
   final int maxPersistedEvents;
@@ -49,14 +59,17 @@ class WebGuardianStore implements GuardianStore {
 
   Future<void> _saveEvents(Map<String, dynamic> events) async {
     final prefs = await _prefs();
-    await prefs.setString(_eventsKey, jsonEncode(events));
+    if (!await prefs.setString(_eventsKey, jsonEncode(events)))
+      throw StateError('Guardian web storage did not confirm persistence');
   }
 
   @override
   Future<void> init() async {}
 
   @override
-  Future<void> upsert(GuardianEvent event) async {
+  Future<void> upsert(GuardianEvent event) => _mutate(() => _upsert(event));
+
+  Future<void> _upsert(GuardianEvent event) async {
     final events = await _loadEvents();
     if (events.containsKey(event.eventId)) return;
 
@@ -95,6 +108,7 @@ class WebGuardianStore implements GuardianStore {
   Future<List<GuardianEvent>> dueEvents({
     required int limit,
     DateTime? now,
+    String? companyId,
   }) async {
     final at = (now ?? DateTime.now()).millisecondsSinceEpoch;
     final events = await _loadEvents();
@@ -102,7 +116,11 @@ class WebGuardianStore implements GuardianStore {
         events.entries
             .where(
               (entry) =>
-                  ((entry.value['next_attempt_at_ms'] as int?) ?? 0) <= at,
+                  ((entry.value['next_attempt_at_ms'] as int?) ?? 0) <= at &&
+                  (companyId == null ||
+                      ((entry.value['payload'] as Map?)?['context']
+                              as Map?)?['_guardianCompanyId'] ==
+                          companyId),
             )
             .toList()
           ..sort((a, b) {
@@ -130,6 +148,18 @@ class WebGuardianStore implements GuardianStore {
     String eventId, {
     required int attempts,
     required int nextAttemptAtMs,
+  }) => _mutate(
+    () => _markFailure(
+      eventId,
+      attempts: attempts,
+      nextAttemptAtMs: nextAttemptAtMs,
+    ),
+  );
+
+  Future<void> _markFailure(
+    String eventId, {
+    required int attempts,
+    required int nextAttemptAtMs,
   }) async {
     final events = await _loadEvents();
     final current = events[eventId];
@@ -143,7 +173,10 @@ class WebGuardianStore implements GuardianStore {
   }
 
   @override
-  Future<void> removeAll(Iterable<String> eventIds) async {
+  Future<void> removeAll(Iterable<String> eventIds) =>
+      _mutate(() => _removeAll(eventIds));
+
+  Future<void> _removeAll(Iterable<String> eventIds) async {
     final events = await _loadEvents();
     for (final id in eventIds) {
       events.remove(id);
@@ -199,7 +232,10 @@ class WebGuardianStore implements GuardianStore {
   }
 
   @override
-  Future<void> recordDiscard(GuardianDiscardRecord record) async {
+  Future<void> recordDiscard(GuardianDiscardRecord record) =>
+      _mutate(() => _recordDiscard(record));
+
+  Future<void> _recordDiscard(GuardianDiscardRecord record) async {
     final prefs = await _prefs();
     final discards = _decodeList(prefs.getString(_discardsKey));
     discards.add(<String, dynamic>{
@@ -240,7 +276,10 @@ class WebGuardianStore implements GuardianStore {
   }
 
   @override
-  Future<void> markRecorded(String fingerprint) async {
+  Future<void> markRecorded(String fingerprint) =>
+      _mutate(() => _markRecorded(fingerprint));
+
+  Future<void> _markRecorded(String fingerprint) async {
     final prefs = await _prefs();
     final entries = _decodeMap(prefs.getString(_fingerprintsKey));
     entries[fingerprint] = DateTime.now().millisecondsSinceEpoch;

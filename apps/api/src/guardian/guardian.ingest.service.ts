@@ -37,6 +37,7 @@ export type GuardianIngestOutcome = {
   results: GuardianIngestResultItem[];
   /** `true` cuando la empresa no tiene Guardian activado (Fase 7). */
   disabled?: boolean;
+  retryAfterSeconds?: number;
 };
 
 /**
@@ -98,6 +99,7 @@ export class GuardianIngestService {
     if (!decision.allowed) {
       return {
         ok: false,
+        retryAfterSeconds: decision.retryAfterSeconds,
         accepted: 0,
         duplicates: 0,
         rejected: events.length,
@@ -113,6 +115,10 @@ export class GuardianIngestService {
     const results: GuardianIngestResultItem[] = [];
 
     for (const event of events) {
+      if (event.context?._guardianCompanyId && event.context._guardianCompanyId !== params.companyId) {
+        results.push({eventId:event.eventId,status:'rejected',reason:'COMPANY_SCOPE_MISMATCH',severity:event.severity});
+        continue;
+      }
       try {
         const result = await this.persistOne({
           companyId: params.companyId,

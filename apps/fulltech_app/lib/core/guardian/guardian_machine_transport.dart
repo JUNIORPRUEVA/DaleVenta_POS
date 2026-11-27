@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import '../api/retry_after.dart';
 
 import 'guardian_event.dart';
 import 'guardian_transport.dart';
@@ -8,11 +9,12 @@ GuardianSendResult parseGuardianIngestResponse(
   dynamic data,
   List<GuardianEvent> events,
 ) {
-  final results = data is Map ? (data['results'] as List?) : null;
+  final rawResults = data is Map ? data['results'] : null;
+  final results = rawResults is List ? rawResults : null;
   if (results == null) {
-    // 2xx sin detalle: contrato mínimo, se asume aceptado.
-    return GuardianSendResult(
-      acked: events.map((event) => event.eventId).toList(),
+    return const GuardianSendResult(
+      retryable: true,
+      reason: 'UNCONFIRMED_RESPONSE',
     );
   }
 
@@ -26,6 +28,12 @@ GuardianSendResult parseGuardianIngestResponse(
     final eventId = item['eventId']?.toString();
     final status = item['status']?.toString();
     if (eventId == null || eventId.isEmpty) continue;
+    if (!events.any((event) => event.eventId == eventId) ||
+        results
+                .where((entry) => entry is Map && entry['eventId'] == eventId)
+                .length !=
+            1)
+      continue;
 
     switch (status) {
       case 'accepted':
@@ -35,8 +43,9 @@ GuardianSendResult parseGuardianIngestResponse(
         duplicates.add(eventId);
         break;
       case 'rejected':
-        rejected.add(eventId);
         reason = item['reason']?.toString() ?? reason;
+        // Validation is terminal; policy changes, quotas and DB failures are not.
+        if (item['reason'] == 'INVALID_OCCURRED_AT') rejected.add(eventId);
         break;
       default:
         break;
@@ -47,8 +56,12 @@ GuardianSendResult parseGuardianIngestResponse(
     acked: acked,
     duplicates: duplicates,
     rejected: rejected,
-    retryable: rejected.isEmpty && (acked.isEmpty && duplicates.isEmpty),
+    retryable:
+        acked.length + duplicates.length + rejected.length < events.length,
     reason: reason,
+    retryAfterMs: data is Map && data['retryAfterSeconds'] is num
+        ? ((data['retryAfterSeconds'] as num) * 1000).toInt()
+        : null,
   );
 }
 
@@ -130,12 +143,12 @@ class MachineGuardianTransport implements GuardianTransport {
     if (status >= 200 && status < 300) {
       return parseGuardianIngestResponse(response.data, events);
     }
+    if (status == 401 || status == 403) {
+      await onCredentialRejected?.call();
+      return GuardianSendResult(retryable: true, reason: 'HTTP_$status');
+    }
 
-    if (status == 400 ||
-        status == 401 ||
-        status == 403 ||
-        status == 413 ||
-        status == 422) {
+    if (status == 400 || status == 413 || status == 422) {
       // Credencial inválida/caducada o lote rechazado: no reintentar en bucle.
       if (status == 401 || status == 403) {
         await onCredentialRejected?.call();
@@ -147,6 +160,12 @@ class MachineGuardianTransport implements GuardianTransport {
       );
     }
 
-    return GuardianSendResult(retryable: true, reason: 'HTTP_$status');
+    return GuardianSendResult(
+      retryable: true,
+      reason: 'HTTP_$status',
+      retryAfterMs: parseRetryAfter(
+        response.headers.value('retry-after'),
+      )?.inMilliseconds,
+    );
   }
 }

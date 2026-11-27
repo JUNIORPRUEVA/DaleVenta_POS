@@ -1,6 +1,8 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import '../api/env.dart';
+import '../config/uat_identity.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../storage/serialized_secure_storage.dart';
 
@@ -14,11 +16,13 @@ class GuardianInstallCredential {
     required this.installId,
     required this.credential,
     required this.expiresAt,
+    this.companyId,
   });
 
   final String installId;
   final String credential;
   final DateTime expiresAt;
+  final String? companyId;
 
   bool isValid({Duration margin = const Duration(days: 1)}) {
     return credential.isNotEmpty &&
@@ -27,10 +31,11 @@ class GuardianInstallCredential {
   }
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'installId': installId,
-        'credential': credential,
-        'expiresAt': expiresAt.toUtc().toIso8601String(),
-      };
+    'installId': installId,
+    'credential': credential,
+    'expiresAt': expiresAt.toUtc().toIso8601String(),
+    if (companyId != null) 'companyId': companyId,
+  };
 
   static GuardianInstallCredential? fromJson(String raw) {
     try {
@@ -38,12 +43,18 @@ class GuardianInstallCredential {
       if (decoded == null) return null;
       final installId = decoded['installId']?.toString() ?? '';
       final credential = decoded['credential']?.toString() ?? '';
-      final expiresAt = DateTime.tryParse(decoded['expiresAt']?.toString() ?? '');
-      if (installId.isEmpty || credential.isEmpty || expiresAt == null) return null;
+      final expiresAt = DateTime.tryParse(
+        decoded['expiresAt']?.toString() ?? '',
+      );
+      if (installId.isEmpty || credential.isEmpty || expiresAt == null)
+        return null;
       return GuardianInstallCredential(
         installId: installId,
         credential: credential,
         expiresAt: expiresAt.toUtc(),
+        companyId: decoded['companyId'] is String
+            ? decoded['companyId'] as String
+            : null,
       );
     } catch (_) {
       return null;
@@ -70,9 +81,11 @@ class GuardianInstallCredential {
 /// - Cualquier fallo se trata como "sin credencial" (fail-open).
 class GuardianInstallCredentialStore {
   GuardianInstallCredentialStore({FlutterSecureStorage? storage})
-      : _storage = SerializedSecureStorage(storage: storage);
+    : _storage = SerializedSecureStorage(storage: storage);
 
-  static const _key = 'daleventas.guardian.install_credential.v1';
+  static String get _key => UatIdentity.storageKey(
+    'daleventas.guardian.install_credential.v1:${Uri.encodeComponent(Env.apiBaseUrl)}',
+  );
 
   final SerializedSecureStorage _storage;
 

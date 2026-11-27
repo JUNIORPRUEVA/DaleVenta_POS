@@ -32,7 +32,7 @@
 
 import { guardianSecretValue } from '../guardian.secret';
 
-export type GuardianAiAdapterKind = 'mock' | 'openai' | 'deepseek';
+export type GuardianAiAdapterKind = 'mock' | 'openai' | 'deepseek' | 'crm';
 
 export type GuardianAiRuntimeErrorCode =
   | 'AI_PROVIDER_UNKNOWN'
@@ -141,6 +141,22 @@ export function resolveGuardianAiRuntime(
 
   const errors: GuardianAiRuntimeErrorCode[] = [];
   const warnings: string[] = [];
+
+  if (providerVariable?.toLowerCase() === 'crm') {
+    const credentialPresent = Boolean(guardianSecretValue(env, 'GUARDIAN_CRM_BRIDGE_TOKEN'));
+    const crmBase = read(env, 'GUARDIAN_CRM_BASE_URL');
+    let valid = false;
+    try {
+      const url = new URL(crmBase);
+      valid = !url.username && !url.password && !url.search && !url.hash &&
+        (url.protocol === 'https:' || (url.protocol === 'http:' && ['localhost','127.0.0.1','[::1]'].includes(url.hostname)));
+    } catch { /* Invalid configuration is reported without credentials. */ }
+    if (!credentialPresent) errors.push('AI_API_KEY_MISSING');
+    if (!valid) errors.push('AI_BASE_URL_INVALID');
+    return {adapter:'crm',providerVariable,apiKeyPresent:credentialPresent,
+      baseUrl:valid ? crmBase : null,baseUrlHost:valid ? parseHost(crmBase) : null,
+      model:'CRM compartida',modelSupported:true,timeoutMs,maxTokens,maxConcurrent,errors,warnings};
+  }
 
   // 1. Proveedor declarado.
   const requested: GuardianAiAdapterKind | null =

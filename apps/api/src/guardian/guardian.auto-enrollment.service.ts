@@ -54,6 +54,7 @@ export type GuardianAutoEnrollmentStore = {
       where: { id: string };
       select: {
         guardianEnabled: true;
+        guardianEnabledBy?: true;
         status: true;
         licenseStatus: true;
         licenseBlockedAt: true;
@@ -61,6 +62,7 @@ export type GuardianAutoEnrollmentStore = {
       };
     }): Promise<{
       guardianEnabled: boolean;
+      guardianEnabledBy?: string | null;
       status: string;
       licenseStatus: string;
       licenseBlockedAt: Date | null;
@@ -199,6 +201,7 @@ export class GuardianAutoEnrollmentService {
       where: { id: companyId },
       select: {
         guardianEnabled: true,
+        guardianEnabledBy: true,
         status: true,
         licenseStatus: true,
         licenseBlockedAt: true,
@@ -207,6 +210,9 @@ export class GuardianAutoEnrollmentService {
     });
     if (!company) {
       return { ok: false, code: 'COMPANY_NOT_FOUND', message: 'Empresa no disponible' };
+    }
+    if (!company.guardianEnabled && company.guardianEnabledBy?.startsWith('DISABLED_BY_')) {
+      return {ok:false,code:GUARDIAN_COMPANY_DISABLED,message:'Monitoreo desactivado por un administrador'};
     }
     if (!isCompanyLicenseEligible(company, now)) {
       return {
@@ -374,7 +380,7 @@ export class GuardianAutoEnrollmentService {
     const now = new Date();
     await this.store.company.update({
       where: { id: companyId },
-      data: { guardianEnabled: false },
+      data: { guardianEnabled: false, guardianEnabledBy:'DISABLED_BY_ADMIN' },
     });
     const credentials = await this.store.guardianMachineCredential.updateMany({
       where: { companyId, revokedAt: null },

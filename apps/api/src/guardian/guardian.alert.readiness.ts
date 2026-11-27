@@ -5,9 +5,9 @@
  * WhatsApp sin bloquear los incidentes críticos.
  *
  * Regla:
- * - **SEV1** → siempre listo (no se espera a la IA). Un incidente crítico no
+ * - **SEV1 / SEV2** → siempre listo (no se espera a la IA). Un incidente grave no
  *   puede quedarse sin aviso porque el proveedor de IA esté lento o caído.
- * - **SEV2 / SEV3** → se espera al diagnóstico hasta un plazo configurable
+ * - **SEV3** → se espera al diagnóstico hasta un plazo configurable
  *   (`GUARDIAN_ALERT_DIAGNOSIS_WAIT_SECONDS`). Se envía en cuanto el diagnóstico
  *   está `DONE`, o al vencer el plazo con texto de respaldo.
  * - **SEV4** → no genera alerta (solo se registra), igual que antes.
@@ -17,11 +17,13 @@
  * divergir, y estas funciones se prueban de forma determinista.
  */
 
-export const ALERT_DIAGNOSIS_WAIT_SEVERITIES = ['SEV2', 'SEV3'] as const;
+export const ALERT_DIAGNOSIS_WAIT_SEVERITIES = ['SEV3'] as const;
 export const ALERT_IMMEDIATE_SEVERITY = 'SEV1';
+export const ALERT_IMMEDIATE_SEVERITIES = ['SEV1', 'SEV2'] as const;
 
 export type AlertReadinessReason =
   | 'SEV1_IMMEDIATE'
+  | 'SEV2_IMMEDIATE'
   | 'DIAGNOSIS_DONE'
   | 'DEADLINE_REACHED'
   | 'WAIT_DISABLED'
@@ -63,6 +65,7 @@ export function resolveAlertReadiness(input: AlertReadinessInput): AlertReadines
   if (input.severity === ALERT_IMMEDIATE_SEVERITY) {
     return { ready: true, reason: 'SEV1_IMMEDIATE', deadlineAt: null };
   }
+  if (input.severity === 'SEV2') return {ready:true,reason:'SEV2_IMMEDIATE',deadlineAt:null};
 
   // Sin espera configurada: comportamiento previo (envío inmediato).
   if (waitSeconds <= 0) {

@@ -1,5 +1,8 @@
 import { GuardianCaptureRegistry } from '../guardian.capture.registry';
 import { GuardianTelemetryBridgeService } from './guardian.telemetry.bridge.service';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 /**
  * Puente de telemetría: garantías que no pueden romperse.
@@ -13,11 +16,13 @@ describe('puente de telemetría Guardian', () => {
   const KEY_OK = 'gmk_0123456789abcdefghijklmnopqrstuvwxyz';
   let bridge: GuardianTelemetryBridgeService | null = null;
   let fetchMock: jest.Mock;
+  let outboxDirectory: string;
 
   const configure = (extra: Record<string, string> = {}) => {
     process.env = {
       ...originalEnv,
       GUARDIAN_TELEMETRY_ENABLED: 'true',
+      GUARDIAN_OUTBOX_DIR: outboxDirectory,
       GUARDIAN_TELEMETRY_URL: URL_OK,
       GUARDIAN_TELEMETRY_KEY: KEY_OK,
       GUARDIAN_TELEMETRY_INSTALL_ID: 'pos-test',
@@ -40,17 +45,20 @@ describe('puente de telemetría Guardian', () => {
       json: async () => ({ ok: true, accepted: 1, duplicates: 0, rejected: 0 }),
     } as unknown as Response);
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    outboxDirectory = await mkdtemp(join(tmpdir(),'guardian-telemetry-'));
     fetchMock = jest.fn(() => okResponse());
     (global as unknown as { fetch: unknown }).fetch = fetchMock;
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     bridge?.onModuleDestroy();
+    await bridge?.flush();
     bridge = null;
     GuardianCaptureRegistry.registerBridge(null);
     process.env = { ...originalEnv };
     jest.restoreAllMocks();
+    await rm(outboxDirectory,{recursive:true,force:true});
   });
 
   it('sin configuración no envía nada y no registra consumidor', async () => {
@@ -143,7 +151,7 @@ describe('puente de telemetría Guardian', () => {
     expect(service.snapshot().stats.droppedDuplicate).toBe(2);
   });
 
-  it('respeta la capacidad de la cola descartando el más antiguo', async () => {
+  it('limita la vista en memoria sin descartar los eventos persistidos', async () => {
     configure({ GUARDIAN_TELEMETRY_QUEUE_CAPACITY: '2', GUARDIAN_TELEMETRY_BATCH_SIZE: '10' });
     const service = build();
     for (const path of ['/api/v1/a', '/api/v1/b', '/api/v1/c']) {
@@ -151,22 +159,24 @@ describe('puente de telemetría Guardian', () => {
     }
     const snapshot = service.snapshot();
     expect(snapshot.queued).toBe(2);
-    expect(snapshot.stats.droppedQueueFull).toBe(1);
+    expect(snapshot.stats.droppedQueueFull).toBe(0);
+    await service.flush();
+    expect(service.snapshot().stats.accepted).toBe(3);
   });
 
-  it('aplica el límite de caudal por minuto', async () => {
+  it('no descarta errores graves por el límite de caudal', async () => {
     configure({ GUARDIAN_TELEMETRY_MAX_PER_MINUTE: '1' });
     const service = build();
     service.offer({ method: 'GET', path: '/api/v1/a', status: 500, message: 'uno' });
     service.offer({ method: 'GET', path: '/api/v1/b', status: 500, message: 'dos' });
-    expect(service.snapshot().stats.droppedRateLimit).toBe(1);
+    expect(service.snapshot().stats.droppedRateLimit).toBe(0);
   });
 
-  it('aplica muestreo cuando la tasa es cero', async () => {
+  it('no aplica muestreo a errores graves', async () => {
     configure({ GUARDIAN_TELEMETRY_SAMPLE_RATE: '0' });
     const service = build();
     service.offer({ method: 'GET', path: '/api/v1/a', status: 500, message: 'uno' });
-    expect(service.snapshot().stats.droppedSample).toBe(1);
+    expect(service.snapshot().stats.droppedSample).toBe(0);
   });
 
   it('no propaga errores cuando Guardian está caído (fail-open)', async () => {
@@ -180,7 +190,8 @@ describe('puente de telemetría Guardian', () => {
 
     await expect(service.flush()).resolves.toBeUndefined();
     const stats = service.snapshot().stats;
-    expect(stats.droppedAfterAttempts).toBe(1);
+    expect(stats.droppedAfterAttempts).toBe(0);
+    expect(service.snapshot().queued).toBe(1);
     expect(stats.failedAttempts).toBeGreaterThanOrEqual(1);
     expect(stats.lastError).toContain('ECONNREFUSED');
   });
@@ -212,7 +223,8 @@ describe('puente de telemetría Guardian', () => {
     const service = build();
     service.offer({ method: 'GET', path: '/api/v1/sales', status: 500, message: 'boom' });
     await expect(service.flush()).resolves.toBeUndefined();
-    expect(service.snapshot().stats.droppedAfterAttempts).toBe(1);
+    expect(service.snapshot().stats.droppedAfterAttempts).toBe(0);
+    expect(service.snapshot().queued).toBe(1);
   });
 
   it('no envía nada cuando la cola está vacía', async () => {

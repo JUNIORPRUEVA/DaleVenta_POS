@@ -63,6 +63,55 @@ GuardianEvent _event({
 
 void main() {
   group('GuardianClient — cola local', () {
+    test(
+      'company switches do not deduplicate or send another company pending events',
+      () async {
+        final store = InMemoryGuardianStore();
+        var company = 'company-a';
+        final transport = _FakeTransport(
+          (events) async => GuardianSendResult(
+            acked: events.map((event) => event.eventId).toList(),
+          ),
+        );
+        final client = GuardianClient(
+          store: store,
+          transport: transport,
+          config: _config(),
+          companyIdProvider: () async => company,
+        );
+        await client.record(_event(eventId: 'event-a'));
+        company = 'company-b';
+        expect(await client.record(_event(eventId: 'event-b')), isTrue);
+        await client.flush();
+        expect(transport.lastBatch.single.eventId, 'event-b');
+        expect(await store.count(), 1);
+        company = 'company-a';
+        await client.flush();
+        expect(transport.lastBatch.single.eventId, 'event-a');
+        expect(await store.count(), 0);
+      },
+    );
+
+    test(
+      'a foreign acknowledgement cannot delete another locally saved event',
+      () async {
+        final store = InMemoryGuardianStore();
+        await store.upsert(
+          _event(eventId: 'foreign', nextAttemptAtMs: 253402300799000),
+        );
+        final transport = _FakeTransport(
+          (events) async => const GuardianSendResult(acked: ['foreign']),
+        );
+        final client = GuardianClient(
+          store: store,
+          transport: transport,
+          config: _config(),
+        );
+        await client.record(_event(eventId: 'sent'));
+        await client.flush();
+        expect(await store.count(), 2);
+      },
+    );
     test('desactivado no persiste nada', () async {
       final store = InMemoryGuardianStore();
       final client = GuardianClient(
@@ -75,18 +124,21 @@ void main() {
       expect(await store.count(), 0);
     });
 
-    test('persiste el incidente y deduplica el mismo patrón en ventana corta', () async {
-      final store = InMemoryGuardianStore();
-      final client = GuardianClient(
-        store: store,
-        transport: _FakeTransport((_) async => const GuardianSendResult()),
-        config: _config(),
-      );
+    test(
+      'persiste el incidente y deduplica el mismo patrón en ventana corta',
+      () async {
+        final store = InMemoryGuardianStore();
+        final client = GuardianClient(
+          store: store,
+          transport: _FakeTransport((_) async => const GuardianSendResult()),
+          config: _config(),
+        );
 
-      expect(await client.record(_event()), isTrue);
-      expect(await client.record(_event()), isFalse);
-      expect(await store.count(), 1);
-    });
+        expect(await client.record(_event()), isTrue);
+        expect(await client.record(_event()), isFalse);
+        expect(await store.count(), 1);
+      },
+    );
 
     test('no persiste SEV4 cuando la severidad mínima es SEV3', () async {
       final store = InMemoryGuardianStore();
@@ -100,63 +152,100 @@ void main() {
       expect(await store.count(), 0);
     });
 
-    test('un evento solo se borra tras confirmación durable del servidor', () async {
-      final store = InMemoryGuardianStore();
-      final transport = _FakeTransport((_) async => const GuardianSendResult(retryable: true, reason: 'sin red'));
-      final client = GuardianClient(store: store, transport: transport, config: _config());
+    test(
+      'un evento solo se borra tras confirmación durable del servidor',
+      () async {
+        final store = InMemoryGuardianStore();
+        final transport = _FakeTransport(
+          (_) async =>
+              const GuardianSendResult(retryable: true, reason: 'sin red'),
+        );
+        final client = GuardianClient(
+          store: store,
+          transport: transport,
+          config: _config(),
+        );
 
-      final event = _event();
-      await client.record(event);
-      final summary = await client.flush();
+        final event = _event();
+        await client.record(event);
+        final summary = await client.flush();
 
-      expect(summary.retried, 1);
-      expect(await store.count(), 1, reason: 'sin ACK no se puede borrar');
+        expect(summary.retried, 1);
+        expect(await store.count(), 1, reason: 'sin ACK no se puede borrar');
 
-      final due = await store.dueEvents(limit: 10, now: DateTime.now().add(const Duration(hours: 1)));
-      expect(due.single.attempts, 1);
-      expect(due.single.nextAttemptAtMs, greaterThan(DateTime.now().millisecondsSinceEpoch));
-    });
+        final due = await store.dueEvents(
+          limit: 10,
+          now: DateTime.now().add(const Duration(hours: 1)),
+        );
+        expect(due.single.attempts, 1);
+        expect(
+          due.single.nextAttemptAtMs,
+          greaterThan(DateTime.now().millisecondsSinceEpoch),
+        );
+      },
+    );
 
-    test('ACK del servidor limpia la cola y los duplicados también son durables', () async {
-      final store = InMemoryGuardianStore();
-      var call = 0;
-      final transport = _FakeTransport((events) async {
-        call += 1;
-        if (call == 1) {
-          return GuardianSendResult(acked: [events.first.eventId], retryable: false);
-        }
-        return GuardianSendResult(duplicates: [events.first.eventId], retryable: false);
-      });
-      final client = GuardianClient(store: store, transport: transport, config: _config());
+    test(
+      'ACK del servidor limpia la cola y los duplicados también son durables',
+      () async {
+        final store = InMemoryGuardianStore();
+        var call = 0;
+        final transport = _FakeTransport((events) async {
+          call += 1;
+          if (call == 1) {
+            return GuardianSendResult(
+              acked: [events.first.eventId],
+              retryable: false,
+            );
+          }
+          return GuardianSendResult(
+            duplicates: [events.first.eventId],
+            retryable: false,
+          );
+        });
+        final client = GuardianClient(
+          store: store,
+          transport: transport,
+          config: _config(),
+        );
 
-      await client.record(_event(eventId: 'evt-a', operation: 'op1'));
-      await client.flush();
-      expect(await store.count(), 0);
+        await client.record(_event(eventId: 'evt-a', operation: 'op1'));
+        await client.flush();
+        expect(await store.count(), 0);
 
-      await client.record(_event(eventId: 'evt-b', operation: 'op2'));
-      await client.flush();
-      expect(await store.count(), 0);
-    });
+        await client.record(_event(eventId: 'evt-b', operation: 'op2'));
+        await client.flush();
+        expect(await store.count(), 0);
+      },
+    );
 
-    test('un rechazo permanente se registra como descarte y no se reintenta', () async {
-      final store = InMemoryGuardianStore();
-      final transport = _FakeTransport(
-        (events) async => GuardianSendResult(
-          rejected: events.map((event) => event.eventId).toList(),
-          retryable: false,
-          reason: 'INVALID_OCCURRED_AT',
-        ),
-      );
-      final client = GuardianClient(store: store, transport: transport, config: _config());
+    test(
+      'un rechazo permanente conserva evidencia y no se reintenta automáticamente',
+      () async {
+        final store = InMemoryGuardianStore();
+        final transport = _FakeTransport(
+          (events) async => GuardianSendResult(
+            rejected: events.map((event) => event.eventId).toList(),
+            retryable: false,
+            reason: 'INVALID_OCCURRED_AT',
+          ),
+        );
+        final client = GuardianClient(
+          store: store,
+          transport: transport,
+          config: _config(),
+        );
 
-      await client.record(_event());
-      final summary = await client.flush();
+        await client.record(_event());
+        final summary = await client.flush();
 
-      expect(summary.rejected, 1);
-      expect(await store.count(), 0);
-      final discards = await store.discards();
-      expect(discards.single.reason, 'INVALID_OCCURRED_AT');
-    });
+        expect(summary.rejected, 1);
+        expect(await store.count(), 1);
+        expect(await store.dueEvents(limit: 20), isEmpty);
+        final discards = await store.discards();
+        expect(discards.single.reason, 'INVALID_OCCURRED_AT');
+      },
+    );
 
     test('respeta el límite de eventos sin descartar nunca SEV1', () async {
       final store = InMemoryGuardianStore();
@@ -166,9 +255,17 @@ void main() {
         config: _config(maxEvents: 2),
       );
 
-      await client.record(_event(eventId: 'critico', severity: 'SEV1', operation: 'op-critica'));
+      await client.record(
+        _event(eventId: 'critico', severity: 'SEV1', operation: 'op-critica'),
+      );
       for (var index = 0; index < 5; index += 1) {
-        await client.record(_event(eventId: 'ruido-$index', severity: 'SEV3', operation: 'op-$index'));
+        await client.record(
+          _event(
+            eventId: 'ruido-$index',
+            severity: 'SEV3',
+            operation: 'op-$index',
+          ),
+        );
       }
 
       expect(await store.count(), lessThanOrEqualTo(2));
@@ -179,11 +276,21 @@ void main() {
 
     test('prioriza severidades altas en el siguiente envío', () async {
       final store = InMemoryGuardianStore();
-      final transport = _FakeTransport((_) async => const GuardianSendResult(retryable: true));
-      final client = GuardianClient(store: store, transport: transport, config: _config());
+      final transport = _FakeTransport(
+        (_) async => const GuardianSendResult(retryable: true),
+      );
+      final client = GuardianClient(
+        store: store,
+        transport: transport,
+        config: _config(),
+      );
 
-      await client.record(_event(eventId: 'sev3-1', severity: 'SEV3', operation: 'op3'));
-      await client.record(_event(eventId: 'sev1-1', severity: 'SEV1', operation: 'op1'));
+      await client.record(
+        _event(eventId: 'sev3-1', severity: 'SEV3', operation: 'op3'),
+      );
+      await client.record(
+        _event(eventId: 'sev1-1', severity: 'SEV1', operation: 'op1'),
+      );
 
       await client.flush();
       expect(transport.lastBatch.first.severity, 'SEV1');

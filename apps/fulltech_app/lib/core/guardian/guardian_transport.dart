@@ -8,6 +8,7 @@ class GuardianSendResult {
     this.rejected = const [],
     this.retryable = true,
     this.reason,
+    this.retryAfterMs,
   });
 
   /// Eventos persistidos por el servidor (se pueden borrar localmente).
@@ -23,6 +24,7 @@ class GuardianSendResult {
   final bool retryable;
 
   final String? reason;
+  final int? retryAfterMs;
 }
 
 abstract class GuardianTransport {
