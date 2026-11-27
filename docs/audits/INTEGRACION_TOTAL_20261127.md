@@ -24,8 +24,9 @@ No hubo merge remoto, deploy, release ni modificación de producción.
 | CRM: planes/pagos | `ced7fd0` | Patch-equivalent en master; no reaplicar | 2674 backend y 433 Flutter aprobadas sobre master + Guardian |
 | CRM: Guardian | `5f23972` → `76db563` | Integrado sobre master `3651996` | PR7; conserva chat, adjuntos, corrector y recuperación |
 | CRM: multimedia/sesión/redacción | `b02fcd6`, `50b1d0f`, `d198d87`, `3aacc05` | Antecesores de la nueva rama CRM | No sobrescribir su servidor/repositorio/shell con archivos antiguos |
-| Puente comercial | `0ea6d3f`, `dd80d7f` | Integración local contra main `afa4230` | 95 pruebas aprobadas; push bloqueado por historial privado, sin eludir controles |
+| Puente comercial | `0ea6d3f`, `dd80d7f`, corrección `1d64545` | Integración local contra main `afa4230` | 97 pruebas aprobadas; push bloqueado por historial privado, sin eludir controles |
 | IA: Biblioteca/Memoria/Chats móvil | Cambios locales de `ai-memory-20261127` → `99ba7bd` | Integrados en rama propia contra main `8ee0458` | PR5; 993 unitarias y 21 HTTP/PG aprobadas; feature apagada por defecto |
+| IA: siete archivos del otro chat | Snapshot íntegro `8410203` | Conservado en Git e integrado con resolución explícita | Se mantiene la navegación móvil más reciente; se recuperan Reglas, Catálogo, alias y carga de Conexiones |
 
 La comparación `git range-diff e4e2f826..179a82b3 afa566eb..11651af4` devuelve
 tres correspondencias `=`. Antes de ajustes de estilo/documentación, el árbol
@@ -45,15 +46,25 @@ el análisis Flutter; no cambian condiciones ni reglas.
 - Notificaciones PostgreSQL: 4 aprobadas en base distinta.
 - Preparación fiscal/venta atómica PostgreSQL: 17 aprobadas, sin conexión externa.
 - Website: 16 pruebas y build de 14 páginas aprobados.
-- Suite Flutter completa y build web: pendientes de terminar al redactar este punto;
-  consultar el cierre de ejecución añadido antes del PR.
+- Build web release aprobado (136 s). Primera suite Flutter: 3012 aprobadas,
+  10 omitidas y un fixture antiguo fallido por ausencia de recibo de abono.
+  Se corrigió el fixture y se añadió rechazo de recibo incompleto: 20 pruebas
+  enfocadas aprobadas. Repetición completa final: **3014 aprobadas, 10 omitidas,
+  cero fallos**, en 10 min 45 s (`integration-flutter-tests-final.log`).
 - CRM: 2674 backend / 433 Flutter, con 3 / 5 omitidas. Windows Debug compilado.
   El análisis muestra 54 infos de estilo preexistentes y cero errores/warnings;
   no se presenta la salida no exitosa de analyze como PASS.
 - IA: typecheck/lint/build y 993 unitarias / 21 HTTP con PostgreSQL aprobadas sobre
   la copia integrada. Inferencia simulada para verificar contexto y aislamiento.
-- Puente: 95 aprobadas; contrato HTTP CRM/puente actualizado: 10 comprobaciones
+- Puente: 97 aprobadas; contrato HTTP CRM/puente actualizado: 10 comprobaciones
   con autoridad final simulada, sin DB real en ese arnés.
+- Cadena comercial moderna CRM → puente autenticado → controladores/servicios
+  FullPOS → PostgreSQL: 16 comprobaciones aprobadas sobre empresas ficticias.
+  Verifica contacto, asignación de plan, suspensión/reactivación, reintentos,
+  identidad administrativa y conservación de vencimiento/otra empresa/E31.
+  Sin inferencia, mensajes externos, pagos ni documentos fiscales reales.
+  Detectó y corrigió en el puente capacidades y comandos modernos que no se
+  transportaban; se conserva toda la validación en la autoridad FullPOS.
 
 Primeros intentos fallidos se conservan en `.uat`: ausencia del asset `.env`,
 puerto de fixture fuera de la allowlist y colas reutilizadas entre suites. No se
@@ -70,6 +81,10 @@ recorrido completo entre los cuatro sistemas no se declara cerrado.
 
 - FullPOS: PR contra production-main; backend y PWA posteriormente. Windows/iOS/
   Android son artefactos separados. No se genera instalador ni se activa Codemagic.
+- [PR57](https://github.com/JUNIORPRUEVA/DaleVenta_POS/pull/57), en borrador.
+  El primer control remoto falló exactamente en el fixture de abono corregido
+  en `4f436eebc`; API, web y updater pasaron. Se inició un nuevo control sobre la
+  corrección. Consultar el resultado del HEAD vigente, no el de un commit anterior.
 - CRM: [PR7](https://github.com/JUNIORPRUEVA/appyra-crm/pull/7) contra master.
 - IA: [PR5](https://github.com/JUNIORPRUEVA/appyra-ai/pull/5) contra main, en borrador.
 - Puente: rama local `agent/integracion-total-puente-20261127`; NO-GO para push.
@@ -99,6 +114,6 @@ revisada por servicio; apagar capacidades nuevas mediante sus switches si proced
 No usar una restauración general de DB para revertir cambios visuales o de código.
 No borrar rangos fiscales, contadores, pagos, colas ni documentos históricos.
 
-Estado provisional: integración preservada y PR de revisión; **NO-GO para merge
+Estado: integración preservada y PR de revisión; **NO-GO para merge
 o despliegue global** mientras haya controles/recorridos críticos pendientes y el
 puente siga bloqueado. GO local de una suite no autoriza activación productiva.
