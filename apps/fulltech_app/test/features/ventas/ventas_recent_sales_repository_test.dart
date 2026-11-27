@@ -177,8 +177,32 @@ void main() {
   test(
     'addCreditPayment envía operationId, turno operativo y paidAt',
     () async {
+      await TokenStorage().saveUserSnapshot(
+        UserModel.fromJson({
+          'id': 'user-1',
+          'email': 'credit@fixture.invalid',
+          'nombreCompleto': 'Cajero de prueba',
+          'companyId': 'company-1',
+        }),
+      );
       final repository = buildRepository(
-        (options) => jsonResponse({'sale': saleRow(id: 'sale-credit')}),
+        (options) {
+          final request = (options.data as Map).cast<String, dynamic>();
+          return jsonResponse({
+            'sale': {...saleRow(id: 'sale-credit'), 'companyId': 'company-1'},
+            'payment': {
+              'id': 'payment-1',
+              'saleId': 'sale-credit',
+              'operationId': request['operationId'],
+              'companyId': 'company-1',
+              'userId': 'user-1',
+              'cashSessionId': request['operationCashSessionId'],
+              'amount': 100,
+              'cashAmount': 75,
+              'transferAmount': 25,
+            },
+          });
+        },
       );
 
       final sale = await repository.addCreditPayment(
@@ -200,6 +224,28 @@ void main() {
       expect(body['note'], 'abono');
     },
   );
+
+  test('abono sin recibo verificable se conserva pendiente, nunca como éxito', () async {
+    await TokenStorage().saveUserSnapshot(
+      UserModel.fromJson({
+        'id': 'user-1',
+        'email': 'credit@fixture.invalid',
+        'nombreCompleto': 'Cajero de prueba',
+        'companyId': 'company-1',
+      }),
+    );
+    final repository = buildRepository(
+      (_) => jsonResponse({'sale': saleRow(id: 'sale-credit')}),
+    );
+    await expectLater(
+      repository.addCreditPayment(saleId: 'sale-credit', cashAmount: 100, transferAmount: 0),
+      throwsA(isA<ApiException>()),
+    );
+    final pending = await OfflineStore.instance.listPendingActions(
+      companyId: 'company-1', userId: 'user-1', limit: null,
+    );
+    expect(pending.where((action) => action.entityId == 'sale-credit'), hasLength(1));
+  });
 
   test('timeout en listSales termina en error (nunca cuelga)', () async {
     final repository = buildRepository(
