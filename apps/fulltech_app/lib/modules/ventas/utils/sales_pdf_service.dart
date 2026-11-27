@@ -14,6 +14,7 @@ import '../../../core/utils/money_formatters.dart';
 import '../sales_models.dart';
 import '../../../features/ecf/ecf_print_document.dart';
 import '../../../core/printing/ecf_print_footer.dart';
+import '../../../core/printing/models/ticket_data.dart';
 
 final PdfColor _pageBackground = PdfColors.white;
 final PdfColor _borderColor = PdfColor.fromHex('#D9E2EC');
@@ -975,6 +976,7 @@ pw.Widget _invoiceTotalsPanel(
 }) {
   final totals = buildSalePdfViewData(sale);
   final fiscal = totals.fiscalEnabled;
+  final credit = TicketData.fromSale(sale).credit;
 
   return _panel(
     padding: const pw.EdgeInsets.fromLTRB(14, 13, 14, 13),
@@ -1049,6 +1051,14 @@ pw.Widget _invoiceTotalsPanel(
             ],
           ),
         ),
+        if (credit != null) ...[
+          pw.SizedBox(height: 10),
+          pw.Text('Estado de cuenta', style: pw.TextStyle(fontSize: 9.5,
+            fontWeight: pw.FontWeight.bold, color: _textPrimary)),
+          pw.SizedBox(height: 6),
+          for (final row in credit.rows)
+            _pdfTotalLine(row.label, money.format(row.amount)),
+        ],
       ],
     ),
   );

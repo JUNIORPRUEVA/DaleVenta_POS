@@ -632,6 +632,10 @@ describe("SalesService tenant isolation", () => {
     const existingPayment = {
       id: "payment-1",
       operationId: "credit.payment:duplicate",
+      saleId: "sale-credit", userId: user.id,
+      cashSessionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      cashAmount: new Prisma.Decimal(100), transferAmount: new Prisma.Decimal(0),
+      paidAt: new Date("2026-10-05T17:00:00.000Z"),
       sale: { id: "sale-credit", items: [] },
     };
     const prisma = {
@@ -716,7 +720,8 @@ describe("SalesService tenant isolation", () => {
         create: jest.fn().mockResolvedValue(payment),
       },
       sale: {
-        update: jest.fn().mockResolvedValue(updatedSale),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        findFirstOrThrow: jest.fn().mockResolvedValue(updatedSale),
       },
     };
     const prisma = {

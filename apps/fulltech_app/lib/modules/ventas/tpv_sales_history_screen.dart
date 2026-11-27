@@ -34,7 +34,6 @@ import '../../core/utils/safe_url_launcher.dart';
 import '../../core/widgets/app_drawer.dart';
 import '../../core/widgets/custom_app_bar.dart';
 import '../../core/widgets/fulltech_page_header.dart';
-import '../../features/settings/data/printer_settings_repository.dart';
 import 'tpv_totals.dart';
 
 import '../../core/widgets/pdf_action_menu.dart';
@@ -44,7 +43,6 @@ import 'data/ventas_repository.dart';
 import 'fiscal_voucher_options.dart';
 import 'sales_models.dart';
 import 'sales_user_messages.dart';
-import 'utils/sales_pdf_service.dart';
 
 enum _InvoiceFilter { active, all, returned }
 
@@ -528,21 +526,9 @@ class _TpvSalesHistoryScreenState extends ConsumerState<TpvSalesHistoryScreen> {
   }
 
   Future<Uint8List> _buildInvoicePdf(SaleModel sale) async {
-    final company = await ref
-        .read(companySettingsRepositoryProvider)
-        .getCachedSettings();
-    final printerSettings = await ref
-        .read(printerSettingsRepositoryProvider)
-        .getOrCreate();
-    return buildSaleInvoicePdf(
-      sale: sale,
-      ecf: sale.requiresElectronicPrint
-          ? await ref.read(ecfRepositoryProvider).printForSale(sale.id,
-              requireElectronic: true)
-          : null,
-      company: company,
-      warrantyPolicy: printerSettings.warrantyPolicy,
-    );
+    final current = sale.paymentMethod == 'credit'
+        ? await ref.read(ventasRepositoryProvider).getById(sale.id) : sale;
+    return ref.read(unifiedTicketPrinterProvider).buildSaleInvoicePdf(sale: current);
   }
 
   String _buildClientInvoiceWhatsAppMessage(SaleModel sale, String pdfUrl) {

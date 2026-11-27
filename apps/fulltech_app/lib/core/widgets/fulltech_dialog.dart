@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'square_pos_dialog.dart';
 
 /// Tokens visuales centralizados para todos los diálogos de FullTech.
 class FullTechDialogTokens {
@@ -127,9 +128,14 @@ class _DialogPrimaryButtonState extends State<DialogPrimaryButton> {
             elevation: 0,
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(
+                SquarePosDialog.active(context)
+                    ? SquarePosDialog.cornerRadius
+                    : 10,
+              ),
             ),
-            textStyle: const TextStyle(
+            textStyle: TextStyle(
+              fontFamily: SquarePosDialog.active(context) ? 'Manrope' : null,
               fontSize: 15,
               fontWeight: FontWeight.w600,
               letterSpacing: 0.2,
@@ -197,9 +203,14 @@ class _DialogSecondaryButtonState extends State<DialogSecondaryButton> {
             elevation: 0,
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(
+                SquarePosDialog.active(context)
+                    ? SquarePosDialog.cornerRadius
+                    : 10,
+              ),
             ),
-            textStyle: const TextStyle(
+            textStyle: TextStyle(
+              fontFamily: SquarePosDialog.active(context) ? 'Manrope' : null,
               fontSize: 15,
               fontWeight: FontWeight.w600,
               letterSpacing: 0.2,
@@ -356,7 +367,9 @@ class FullTechDialog extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: FullTechDialogTokens.surfaceColor,
                   borderRadius: BorderRadius.circular(
-                    borderRadius ??
+                    (SquarePosDialog.active(context)
+                            ? SquarePosDialog.cornerRadius
+                            : borderRadius) ??
                         (maxWidth <= FullTechDialogTokens.maxWidthSmall
                             ? FullTechDialogTokens.borderRadiusSmall
                             : FullTechDialogTokens.borderRadius),
@@ -445,6 +458,8 @@ class FullTechDialog extends StatelessWidget {
 ///
 /// Uso típico: confirmar acciones como cancelar venta, eliminar, etc.
 class FullTechConfirmDialog extends StatelessWidget {
+  final Widget? iconWidget;
+  final bool square;
   final String title;
   final String message;
   final String confirmText;
@@ -458,6 +473,8 @@ class FullTechConfirmDialog extends StatelessWidget {
 
   const FullTechConfirmDialog({
     super.key,
+    this.iconWidget,
+    this.square = false,
     required this.title,
     required this.message,
     this.confirmText = 'Aceptar',
@@ -475,6 +492,8 @@ class FullTechConfirmDialog extends StatelessWidget {
     BuildContext context, {
     required String title,
     required String message,
+    Widget? iconWidget,
+    bool square = false,
     String confirmText = 'Aceptar',
     String cancelText = 'Cancelar',
     VoidCallback? onConfirm,
@@ -489,6 +508,8 @@ class FullTechConfirmDialog extends StatelessWidget {
       barrierDismissible: false,
       barrierColor: FullTechDialogTokens.overlayColor,
       builder: (ctx) => FullTechConfirmDialog(
+        iconWidget: iconWidget,
+        square: square,
         title: title,
         message: message,
         confirmText: confirmText,
@@ -509,7 +530,7 @@ class FullTechConfirmDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FullTechDialog(
+    final dialog = FullTechDialog(
       title: title,
       maxWidth: FullTechDialogTokens.maxWidthSmall,
       showCloseButton: false,
@@ -518,20 +539,24 @@ class FullTechConfirmDialog extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (icon != null) ...[
+          if (icon != null || iconWidget != null) ...[
             Container(
               width: 56,
               height: 56,
               decoration: BoxDecoration(
                 color: (iconColor ?? FullTechDialogTokens.primaryButtonColor)
                     .withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(
+                  square ? SquarePosDialog.cornerRadius : 16,
+                ),
               ),
-              child: Icon(
-                icon,
-                size: 28,
-                color: iconColor ?? FullTechDialogTokens.primaryButtonColor,
-              ),
+              child:
+                  iconWidget ??
+                  Icon(
+                    icon,
+                    size: 28,
+                    color: iconColor ?? FullTechDialogTokens.primaryButtonColor,
+                  ),
             ),
             const SizedBox(height: 16),
           ],
@@ -562,6 +587,7 @@ class FullTechConfirmDialog extends StatelessWidget {
         ],
       ),
     );
+    return square ? SquarePosDialog(child: dialog) : dialog;
   }
 }
 

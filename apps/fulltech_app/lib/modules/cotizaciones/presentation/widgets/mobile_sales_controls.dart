@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/square_pos_dialog.dart';
 
 class MobileSalesActionRow extends StatelessWidget {
   const MobileSalesActionRow({
@@ -250,10 +251,12 @@ class MobileSalesCheckoutSummary extends StatelessWidget {
     required this.clientName,
     this.priceLabel,
     this.voucherSelector,
+    this.showVoucher = true,
   });
   final String clientName;
   final String? priceLabel;
   final Widget? voucherSelector;
+  final bool showVoucher;
 
   @override
   Widget build(BuildContext context) {
@@ -288,14 +291,14 @@ class MobileSalesCheckoutSummary extends StatelessWidget {
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: AppColors.surfaceSubtle,
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: SquarePosDialog.active(context) ? SquarePosDialog.corners : BorderRadius.circular(6),
         border: Border.all(color: AppColors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           row('Cliente', text(clientName)),
-          row('Comprobante', voucherSelector ?? text('Normal')),
+          if (showVoucher) row('Comprobante', voucherSelector ?? text('Normal')),
           if (priceLabel != null) row('Precios', text(priceLabel!)),
         ],
       ),
@@ -316,12 +319,12 @@ class MobileSalesLineEditorContent extends StatelessWidget {
     if (!compact) return child;
     final theme = Theme.of(context);
     final shape = RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(4),
+      borderRadius: SquarePosDialog.active(context) ? SquarePosDialog.corners : BorderRadius.circular(4),
     );
     return Theme(
       data: theme.copyWith(
         segmentedButtonTheme: SegmentedButtonThemeData(
-          style: ButtonStyle(shape: WidgetStatePropertyAll(shape)),
+          style: (theme.segmentedButtonTheme.style ?? const ButtonStyle()).copyWith(shape: WidgetStatePropertyAll(shape)),
         ),
       ),
       child: SingleChildScrollView(child: child),

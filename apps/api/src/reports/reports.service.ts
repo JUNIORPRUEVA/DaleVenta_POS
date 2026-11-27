@@ -702,6 +702,8 @@ export class ReportsService {
         netSales,
         totalSold: netSales,
         totalCost: totals.totalCost,
+        netCost: totals.totalCost - returns.cost,
+        grossProfit: totals.totalProfit - returns.profit,
         totalProfit: totals.totalProfit,
         commercialProfit: totals.totalProfit,
         netTaxProfit:
@@ -916,6 +918,8 @@ export class ReportsService {
         netSales,
         totalSold: netSales,
         totalCost: financial.totalCost,
+        netCost: financial.totalCost - financial.returnedCost,
+        grossProfit: financial.totalProfit - financial.returnedProfit,
         totalProfit: financial.totalProfit,
         commercialProfit: financial.totalProfit,
         netTaxProfit:

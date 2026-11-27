@@ -424,7 +424,18 @@ class FullPosEscPosReceiptRenderer implements ThermalReceiptRenderer {
     addB('=' * thermalProfile.usableChars, styles: normalB);
 
     final payment = _clean(receipt.paymentMethod ?? '');
-    if (payment.isNotEmpty) {
+    if (receipt.credit case final credit?) {
+      for (final row in credit.rows) {
+        addB(
+          ReceiptTextUtils.leftRight(
+            row.label,
+            _money(row.amount),
+            thermalProfile.usableChars,
+          ),
+          styles: boldB,
+        );
+      }
+    } else if (payment.isNotEmpty) {
       addB(
         _paymentLine(payment.toUpperCase(), _money(receipt.total)),
         styles: boldB,
@@ -585,7 +596,7 @@ class FullPosEscPosReceiptRenderer implements ThermalReceiptRenderer {
         _totalLine('DESC. GENERAL', '-${_money(receipt.generalDiscount)}'),
       );
     }
-    if (receipt.exemptAmount > 0) {
+    if (receipt.showTaxBreakdown && receipt.exemptAmount > 0) {
       lines.add(_totalLine('MONTO EXENTO', _money(receipt.exemptAmount)));
     }
     if (receipt.taxableBase > 0) {

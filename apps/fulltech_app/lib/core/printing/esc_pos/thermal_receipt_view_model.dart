@@ -28,12 +28,15 @@ class ThermalReceiptViewModel {
     this.fiscalVoucherType,
     this.ncfExpirationDate,
     this.note,
+    this.originalNote,
     this.isCopy = false,
     this.ecf,
+    this.credit,
   });
 
   final String ticketNumber;
   final EcfPrintDocument? ecf;
+  final TicketCreditSummary? credit;
   final DateTime dateTime;
   final String documentTitle;
   final CompanyInfo company;
@@ -46,6 +49,11 @@ class ThermalReceiptViewModel {
   final double taxAmount;
   final double total;
   final bool fiscalTaxEnabled;
+  // An exemptAmount alone is also stored when taxes are disabled. It must
+  // not turn an ordinary receipt into a tax breakdown. Preserve real legacy
+  // tax amounts and the frozen electronic fiscal representation.
+  bool get showTaxBreakdown =>
+      fiscalTaxEnabled || ecf != null || taxAmount > 0 || taxableBase > 0;
   final bool taxIncluded;
   final ThermalReceiptClientViewModel? client;
   final String? cashierName;
@@ -56,6 +64,8 @@ class ThermalReceiptViewModel {
   final String? fiscalVoucherType;
   final DateTime? ncfExpirationDate;
   final String? note;
+  // Keep line boundaries for the 80mm template's duplicate metadata filter.
+  final String? originalNote;
   final bool isCopy;
 
   factory ThermalReceiptViewModel.fromTicketData({
@@ -64,6 +74,7 @@ class ThermalReceiptViewModel {
   }) {
     return ThermalReceiptViewModel(
       ecf: data.ecf,
+      credit: data.credit,
       ticketNumber: data.ticketNumber,
       dateTime: data.dateTime,
       documentTitle: _titleFor(data),
@@ -108,6 +119,7 @@ class ThermalReceiptViewModel {
       fiscalVoucherType: _cleanOrNull(data.fiscalVoucherType),
       ncfExpirationDate: data.ncfExpirationDate,
       note: _cleanOrNull(data.note),
+      originalNote: data.note,
       isCopy: data.isCopy,
     );
   }

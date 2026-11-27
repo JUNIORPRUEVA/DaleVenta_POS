@@ -7,6 +7,7 @@ import 'package:pdf/widgets.dart' as pw;
 import '../../core/company/company_settings_model.dart';
 import '../../core/time/business_time.dart';
 import '../../modules/ventas/sales_models.dart';
+import 'models/ticket_data.dart';
 
 class InvoiceLetterPdf {
   static Future<Uint8List> generate({
@@ -162,6 +163,9 @@ class InvoiceLetterPdf {
                     money.format(sale.totalSold),
                     strong: true,
                   ),
+                  if (TicketData.fromSale(sale).credit case final credit?)
+                    for (final row in credit.rows)
+                      _total(row.label, money.format(row.amount), strong: true),
                 ],
               ),
             ),

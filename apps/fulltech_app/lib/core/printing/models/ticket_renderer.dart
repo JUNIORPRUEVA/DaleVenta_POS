@@ -51,8 +51,8 @@ class TicketRenderer {
     bool showFiscalTotals() {
       return layout.showItbis &&
           (data.fiscalTaxEnabled ||
+              data.ecf != null ||
               data.taxableBase > 0 ||
-              data.exemptAmount > 0 ||
               data.itbis > 0) &&
           (data.taxableBase > 0 || data.exemptAmount > 0 || data.itbis > 0);
     }
@@ -273,6 +273,12 @@ class TicketRenderer {
       }
     }
     addMoneyLine('TOTAL', data.total);
+    if (data.credit case final credit?) {
+      blank();
+      for (final row in credit.rows) {
+        addMoneyLine(row.label, row.amount);
+      }
+    }
     final hasPaymentSection =
         layout.showPaymentMethod &&
         (((data.paymentMethod ?? '').trim().isNotEmpty) || data.hasCashTender);

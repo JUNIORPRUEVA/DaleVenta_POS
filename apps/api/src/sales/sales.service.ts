@@ -559,20 +559,28 @@ export class SalesService {
         new Prisma.Decimal(0),
       ).toDecimalPlaces(2);
       const reimbursablePaid = Prisma.Decimal.max(
-        new Prisma.Decimal(sale.creditPaidAmount ?? 0).minus(nextCreditAmount),
+        refundAmount.minus(sale.creditBalance),
         new Prisma.Decimal(0),
       ).toDecimalPlaces(2);
+      // creditAmount is the INITIAL financed portion (total minus initial),
+      // not total invoice value. A return first reduces the actual receivable;
+      // only its excess over that balance is refunded from confirmed money.
+      if (reimbursablePaid.gt(sale.creditPaidAmount) ||
+          (reimbursablePaid.gt(0) && paidTotal.lte(0))) {
+        throw new BadRequestException('Los pagos originales no permiten determinar el reembolso. Revisa el crédito antes de devolver.');
+      }
       const paidRatio = paidTotal.gt(0)
         ? reimbursablePaid.div(paidTotal)
         : new Prisma.Decimal(0);
       const cash = paidCash.mul(paidRatio).toDecimalPlaces(2).neg();
-      const transfer = paidTransfer.mul(paidRatio).toDecimalPlaces(2).neg();
+      // Keep the exact refunded cents when both payment channels are present.
+      const transfer = reimbursablePaid.plus(cash).neg();
       const nextCreditPaid = Prisma.Decimal.max(
         new Prisma.Decimal(sale.creditPaidAmount ?? 0).minus(reimbursablePaid),
         new Prisma.Decimal(0),
       ).toDecimalPlaces(2);
       const nextCreditBalance = Prisma.Decimal.max(
-        nextCreditAmount.minus(nextCreditPaid),
+        new Prisma.Decimal(sale.creditBalance).minus(refundAmount),
         new Prisma.Decimal(0),
       ).toDecimalPlaces(2);
 
@@ -586,13 +594,13 @@ export class SalesService {
           creditAmount: nextCreditAmount,
           creditPaidAmount: nextCreditPaid,
           creditBalance: nextCreditBalance,
-          creditStatus: nextCreditAmount.lte(0)
+          creditStatus: nextCreditPaid.plus(nextCreditBalance).lte(0)
             ? "none"
             : nextCreditBalance.gt(0)
               ? "open"
               : "paid",
           status:
-            nextCreditAmount.lte(0) || nextCreditBalance.lte(0)
+            nextCreditBalance.lte(0)
               ? "PAID"
               : "CREDIT",
         },
@@ -3351,6 +3359,17 @@ export class SalesService {
     return this.findManySalesWithFallback(where, this.saleInclude());
   }
 
+  async getById(user: TenantUser, saleId: string) {
+    const companyId = requireTenant(user);
+    const sale = await this.prisma.sale.findFirst({
+      where: { id: saleId, companyId, isDeleted: false },
+      include: this.saleInclude(),
+    });
+    if (!sale) throw new NotFoundException('Venta no encontrada');
+    const [result] = await this.withElectronicIdentities(companyId, [sale]);
+    return result;
+  }
+
   async addCreditPayment(
     user: TenantUser,
     saleId: string,
@@ -3379,12 +3398,25 @@ export class SalesService {
       throw legacyCompatRejected();
     }
     const operationId = (dto.operationId ?? "").trim();
+    const assertPaymentIdentity = (payment: {
+      saleId: string; userId: string; cashSessionId: string | null;
+      cashAmount: Prisma.Decimal; transferAmount: Prisma.Decimal; paidAt: Date;
+    }) => {
+      if (payment.saleId !== saleId || payment.userId !== user.id ||
+          payment.cashSessionId !== dto.operationCashSessionId ||
+          !payment.cashAmount.equals(dto.cashAmount ?? 0) ||
+          !payment.transferAmount.equals(dto.transferAmount ?? 0) ||
+          payment.paidAt.getTime() !== new Date(dto.paidAt!).getTime()) {
+        throw new ConflictException('La referencia del abono corresponde a otra operación. Comprueba el crédito antes de continuar.');
+      }
+    };
     if (paymentPath === "SAFE_NEW_PATH") {
       const existingPayment = await this.prisma.saleCreditPayment.findFirst({
         where: { companyId, operationId },
         include: { sale: { include: this.saleInclude() } },
       });
       if (existingPayment) {
+        assertPaymentIdentity(existingPayment);
         return { payment: existingPayment, sale: existingPayment.sale };
       }
     }
@@ -3458,8 +3490,16 @@ export class SalesService {
         const nextPaid = sale.creditPaidAmount.plus(amount);
         const nextBalance = sale.creditBalance.minus(amount);
         const nextStatus = nextBalance.lte(0) ? "paid" : "open";
-        const updatedSale = await tx.sale.update({
-          where: { id: saleId },
+        // Compare the financial snapshot atomically. A concurrent collection,
+        // refund or cancellation must not overwrite another confirmed balance.
+        const updated = await tx.sale.updateMany({
+          where: { id: saleId, companyId, isDeleted: false,
+            creditStatus: sale.creditStatus,
+            creditBalance: sale.creditBalance,
+            creditPaidAmount: sale.creditPaidAmount,
+            paymentCashAmount: sale.paymentCashAmount,
+            paymentTransferAmount: sale.paymentTransferAmount,
+          },
           data: {
             paymentCashAmount: sale.paymentCashAmount.plus(cashAmount),
             paymentTransferAmount:
@@ -3469,7 +3509,12 @@ export class SalesService {
             creditStatus: nextStatus,
             status: nextStatus === "paid" ? "PAID" : "CREDIT",
           },
-          include: this.saleInclude(),
+        });
+        if (updated.count !== 1) {
+          throw new ConflictException({ code: 'CREDIT_BALANCE_CHANGED', message: 'El saldo cambió mientras registrabas el abono. Actualiza el crédito y comprueba los pagos antes de continuar.' });
+        }
+        const updatedSale = await tx.sale.findFirstOrThrow({
+          where: { id: saleId, companyId }, include: this.saleInclude(),
         });
         return { payment, sale: updatedSale };
       });
@@ -3484,6 +3529,7 @@ export class SalesService {
           include: { sale: { include: this.saleInclude() } },
         });
         if (existing) {
+          assertPaymentIdentity(existing);
           return { payment: existing, sale: existing.sale };
         }
       }

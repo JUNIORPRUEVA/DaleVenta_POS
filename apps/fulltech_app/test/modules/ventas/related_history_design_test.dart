@@ -3,11 +3,13 @@ import 'package:daleventa_pos/core/company/company_settings_model.dart';
 import 'package:daleventa_pos/core/company/company_settings_repository.dart';
 import 'package:daleventa_pos/core/models/user_model.dart';
 import 'package:daleventa_pos/core/pagination/paged_result.dart';
+import 'package:daleventa_pos/core/printing/models/ticket_data.dart';
 import 'package:daleventa_pos/core/theme/app_theme.dart';
 import 'package:daleventa_pos/core/widgets/history_presentation.dart';
 import 'package:daleventa_pos/core/widgets/history_filter_panel.dart';
 import 'package:daleventa_pos/modules/clientes/cliente_model.dart';
 import 'package:daleventa_pos/modules/cash/cash_providers.dart';
+import 'package:daleventa_pos/modules/cash/cash_turn_menu_button.dart';
 import 'package:daleventa_pos/modules/clientes/data/clientes_repository.dart';
 import 'package:daleventa_pos/modules/cotizaciones/cotizacion_models.dart';
 import 'package:daleventa_pos/modules/cotizaciones/cotizaciones_historial_screen.dart';
@@ -28,7 +30,7 @@ import 'package:daleventa_pos/core/routing/routes.dart';
 import '../../support/platform_goldens.dart';
 
 class _Auth extends AuthController {
-  _Auth(super.ref) {
+  _Auth(super.ref, {String role = 'ADMIN'}) {
     state = AuthState(
       initialized: true,
       isAuthenticated: true,
@@ -37,7 +39,7 @@ class _Auth extends AuthController {
         email: 'admin@test.local',
         nombreCompleto: 'Ana Santos',
         telefono: '',
-        role: 'ADMIN',
+        role: role,
         companyId: 'empresa-prueba',
       ),
     );
@@ -150,6 +152,8 @@ Future<void> _pump(
   double scale = 1,
   bool empty = false,
   bool live = false,
+  bool admin = true,
+  VentasRepository? credits,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -157,12 +161,14 @@ Future<void> _pump(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        authStateProvider.overrideWith((ref) => _Auth(ref)),
+        authStateProvider.overrideWith(
+          (ref) => _Auth(ref, role: admin ? 'ADMIN' : 'CAJERO'),
+        ),
         companySettingsProvider.overrideWith(
           (ref) async => CompanySettings.empty(),
         ),
         ventasRepositoryProvider.overrideWithValue(
-          empty ? (_Credits()..rows.clear()) : _Credits(),
+          credits ?? (empty ? (_Credits()..rows.clear()) : _Credits()),
         ),
         activeCashSessionControllerProvider.overrideWith((ref) => _Cash(ref)),
         cotizacionesRepositoryProvider.overrideWithValue(
@@ -194,9 +200,14 @@ Future<void> _pump(
     await tester.pumpAndSettle();
   }
   await tester.runAsync(() async {
-    final context = tester.element(find.byType(credit ? SalesCreditScreen : CotizacionesHistorialScreen));
+    final context = tester.element(
+      find.byType(credit ? SalesCreditScreen : CotizacionesHistorialScreen),
+    );
     for (final name in ['back', 'search', 'filter', 'refresh', 'more']) {
-      await precacheImage(AssetImage('assets/image/mobile_navigation/$name.png'), context);
+      await precacheImage(
+        AssetImage('assets/image/mobile_navigation/$name.png'),
+        context,
+      );
     }
   });
   await tester.pump();
@@ -245,6 +256,193 @@ void main() {
       'MaterialIcons',
     )..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'))).load();
   });
+  testWidgets(
+    'credit controles mínimos y filtro cuadrado alineado al buscador',
+    (tester) async {
+      await _pump(tester, true, const Size(1920, 1080));
+      final filter = find.widgetWithText(FilledButton, 'Filtro');
+      final search = find.byType(TextField).first;
+      expect(tester.getSize(filter).height, tester.getSize(search).height);
+      final button = tester.widget<FilledButton>(filter);
+      final shape = button.style!.shape!.resolve({})! as RoundedRectangleBorder;
+      expect(shape.borderRadius, BorderRadius.zero);
+      expect(find.byType(HistoryMetric), findsNothing);
+      expect(find.text('Crear nuevo crédito'), findsNothing);
+      expect(find.text('Crédito seleccionado'), findsOneWidget);
+      expect(find.text('Total abonado'), findsOneWidget);
+      expect(
+        find.text('Pagos registrados'),
+        findsNothing,
+      ); // Legacy totals without channel details.
+      expect(find.byTooltip('PDF'), findsNWidgets(3));
+      expect(
+        find.descendant(
+          of: find.byType(HistoryDocumentRow),
+          matching: find.byTooltip('Registrar abono'),
+        ),
+        findsNothing,
+      );
+      expect(find.byTooltip('Registrar abono').hitTestable(), findsOneWidget);
+      expect(find.text('Saldar').hitTestable(), findsOneWidget);
+      expect(find.text('Eliminar crédito').hitTestable(), findsOneWidget);
+      expect(find.text('WhatsApp'), findsNothing);
+      expect(
+        tester.getRect(find.text('Crédito seleccionado')).center.dy,
+        closeTo(tester.getRect(search).center.dy - 8, 6),
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+  testWidgets(
+    'credit busca la factura visible y actualiza detalle y contador',
+    (tester) async {
+      await _pump(tester, true, const Size(1024, 600));
+      final number = TicketData.fromSale(_Credits().rows[1]).ticketNumber;
+      await tester.enterText(find.byType(TextField).first, number);
+      await tester.pumpAndSettle();
+      expect(find.byType(HistoryDocumentRow), findsOneWidget);
+      expect(find.text('1 crédito visible'), findsOneWidget);
+      expect(find.text('Cliente 1'), findsNWidgets(2));
+      expect(find.text('#$number'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+  testWidgets(
+    'credit conserva el permiso de eliminación solo para administrador',
+    (tester) async {
+      await _pump(tester, true, const Size(1024, 600), admin: false);
+      expect(find.text('Eliminar crédito'), findsNothing);
+      expect(find.byTooltip('Registrar abono').hitTestable(), findsOneWidget);
+      expect(find.text('Saldar').hitTestable(), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+  testWidgets(
+    'credit saldado deshabilita nuevos cobros y conserva nota del cliente',
+    (tester) async {
+      final repository = _Credits()..rows.clear();
+      repository.rows.add(
+        SaleModel.fromJson({
+          'id': 'SALE-PAID',
+          'userId': 'admin-prueba',
+          'customerName': 'Cliente saldado',
+          'paymentMethod': 'credit',
+          'totalSold': 1250,
+          'creditPaidAmount': 1250,
+          'creditBalance': 0,
+          'creditStatus': 'paid',
+          'note': 'Entregar por la tarde',
+        }),
+      );
+      await _pump(tester, true, const Size(1024, 600), credits: repository);
+      expect(
+        tester
+            .widget<FilledButton>(find.widgetWithText(FilledButton, 'Abonar'))
+            .onPressed,
+        isNull,
+      );
+      expect(
+        tester
+            .widget<OutlinedButton>(
+              find.widgetWithText(OutlinedButton, 'Saldar'),
+            )
+            .onPressed,
+        isNull,
+      );
+      expect(find.text('Entregar por la tarde'), findsOneWidget);
+      expect(find.text('Saldado'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+  testWidgets('credit detalle móvil comparte solo las tres soluciones', (
+    tester,
+  ) async {
+    await _pump(tester, true, const Size(390, 844), live: true);
+    await tester.tap(find.text('Comercial del Caribe').first);
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Registrar abono').hitTestable(), findsOneWidget);
+    expect(find.text('Saldar').hitTestable(), findsOneWidget);
+    expect(find.byTooltip('Eliminar crédito').hitTestable(), findsOneWidget);
+    expect(find.text('PDF').hitTestable(), findsNothing);
+    expect(find.text('Imprimir').hitTestable(), findsNothing);
+    expect(find.text('Total abonado').hitTestable(), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await expectLater(
+      find.byType(BottomSheet),
+      matchesGoldenFile(platformGolden('goldens/credit_detail_390.png')),
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+  for (final size in [const Size(860, 560), const Size(1266, 713)]) {
+    for (final scale in [1.0, 1.35]) {
+      testWidgets(
+        'credit detalle compacto mantiene columnas y acciones en una línea $size x$scale',
+        (tester) async {
+          final repository = _Credits()..rows.clear();
+          repository.rows.add(
+            SaleModel.fromJson({
+              'id': 'COMPACT-01',
+              'userId': 'admin-prueba',
+              'userName': 'Ana Santos',
+              'customer': {
+                'nombre': 'Cliente de prueba',
+                'telefono': '8095550101',
+              },
+              'paymentMethod': 'credit',
+              'totalSold': 1250,
+              'creditPaidAmount': 250,
+              'creditBalance': 1000,
+              'paymentCashAmount': 100,
+              'paymentTransferAmount': 150,
+              'items': [
+                {
+                  'productNameSnapshot': 'Producto de prueba',
+                  'qty': 2,
+                  'priceSoldUnit': 625,
+                  'subtotalSold': 1250,
+                },
+              ],
+            }),
+          );
+          await _pump(tester, true, size, scale: scale, credits: repository);
+          final abonar = tester.getRect(find.byTooltip('Registrar abono'));
+          final saldar = tester.getRect(find.byTooltip('Saldar crédito'));
+          final eliminar = tester.getRect(find.byTooltip('Eliminar crédito'));
+          expect(abonar.top, closeTo(saldar.top, .1));
+          expect(abonar.top, closeTo(eliminar.top, .1));
+          expect(abonar.right, lessThanOrEqualTo(saldar.left));
+          expect(saldar.right, lessThanOrEqualTo(eliminar.left));
+          final detail = tester.getRect(find.byType(HistoryPanel).last);
+          expect(detail.width, greaterThanOrEqualTo(420));
+          expect(size.width - detail.right, closeTo(12, .1));
+          expect(
+            tester.getRect(find.text('Cliente')).top,
+            closeTo(tester.getRect(find.text('Teléfono')).top, .1),
+          );
+          expect(
+            tester.getRect(find.text('Cajero')).top,
+            closeTo(tester.getRect(find.text('Estado')).top, .1),
+          );
+          expect(
+            tester.getRect(find.byType(CashTurnMenuButton)).left,
+            lessThan(tester.getRect(find.byTooltip('Actualizar')).left),
+          );
+          expect(tester.takeException(), isNull);
+          if (scale == 1) {
+            await expectLater(
+              find.byType(Scaffold).first,
+              matchesGoldenFile(
+                platformGolden(
+                  'goldens/credit_compact_${size.width.toInt()}.png',
+                ),
+              ),
+            );
+          }
+          await tester.pumpWidget(const SizedBox.shrink());
+        },
+      );
+    }
+  }
   for (final credit in [true, false]) {
     final name = credit ? 'credit' : 'quote';
     for (final size in [const Size(1024, 600), const Size(1920, 1080)]) {
@@ -313,19 +511,29 @@ void main() {
       testWidgets('$name vacío centrado como ventas en $size', (tester) async {
         await _pump(tester, credit, size, empty: true);
         final panel = find.byType(HistoryPanel).first;
-        final header = find.byType(HistoryListHeader).first;
         final content = find.byKey(const ValueKey('history-empty-content'));
         final area = tester.getRect(panel);
         expect(tester.getCenter(content).dx, closeTo(area.center.dx, 1));
         expect(
           tester.getCenter(content).dy,
-          closeTo((tester.getRect(header).bottom + area.bottom) / 2, 2),
+          closeTo(
+            credit
+                ? area.center.dy
+                : (tester.getRect(find.byType(HistoryListHeader).first).bottom +
+                          area.bottom) /
+                      2,
+            2,
+          ),
         );
         final cta = find.text(
           credit ? 'Crear nuevo crédito' : 'Crear nueva cotización',
         );
-        expect(cta, findsOneWidget);
-        expect(tester.getCenter(cta).dx, closeTo(area.center.dx + 12, 15));
+        if (credit) {
+          expect(cta, findsNothing);
+        } else {
+          expect(cta, findsOneWidget);
+          expect(tester.getCenter(cta).dx, closeTo(area.center.dx + 12, 15));
+        }
         expect(tester.takeException(), isNull);
         await expectLater(
           find.byType(Scaffold).first,
@@ -346,6 +554,15 @@ void main() {
         await _pump(tester, credit, size);
         expect(find.text('Comercial del Caribe'), findsWidgets);
         if (size.width >= 860) {
+          if (credit) {
+            expect(find.text('FACTURA A CRÉDITO'), findsOneWidget);
+            expect(
+              find.text(
+                '#${TicketData.fromSale(_Credits().rows.first).ticketNumber}',
+              ),
+              findsOneWidget,
+            );
+          }
           expect(find.byType(HistoryPanel), findsNWidgets(2));
           expect(find.byType(HistoryDocumentRow), findsNWidgets(3));
           expect(
@@ -356,7 +573,11 @@ void main() {
           );
           expect(
             find
-                .text(credit ? 'Registrar abono' : 'Pasar a ticket')
+                .text(
+                  credit
+                      ? (size.width < 1360 ? 'Abonar' : 'Registrar abono')
+                      : 'Pasar a ticket',
+                )
                 .hitTestable(),
             findsOneWidget,
           );
@@ -402,25 +623,38 @@ void main() {
           findsNWidgets(2),
         );
       }
-      final more = find.descendant(
-        of: find.byType(HistoryActionBar),
-        matching: find.byTooltip('Más acciones'),
-      );
-      await tester.tap(more);
-      await tester.pumpAndSettle();
-      expect(find.text(credit ? 'WhatsApp' : 'Duplicar'), findsOneWidget);
-      expect(
-        find.text(credit ? 'Eliminar crédito' : 'Eliminar'),
-        findsOneWidget,
-      );
-      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-      await tester.pumpAndSettle();
+      if (credit) {
+        expect(find.text('WhatsApp'), findsNothing);
+        expect(
+          find.byTooltip('Eliminar crédito').hitTestable(),
+          findsOneWidget,
+        );
+        expect(find.text('Saldar').hitTestable(), findsOneWidget);
+        expect(find.byTooltip('Más acciones'), findsNothing);
+      } else {
+        final more = find.descendant(
+          of: find.byType(HistoryActionBar),
+          matching: find.byTooltip('Más acciones'),
+        );
+        await tester.tap(more);
+        await tester.pumpAndSettle();
+        expect(find.text(credit ? 'WhatsApp' : 'Duplicar'), findsOneWidget);
+        expect(
+          find.text(credit ? 'Eliminar crédito' : 'Eliminar'),
+          findsOneWidget,
+        );
+        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        await tester.pumpAndSettle();
+      }
       expect(
         find.text(credit ? 'Total factura' : 'Total cotización').hitTestable(),
         findsOneWidget,
       );
       expect(
-        find.text(credit ? 'Registrar abono' : 'Pasar a ticket').hitTestable(),
+        (credit
+                ? find.byTooltip('Registrar abono')
+                : find.text('Pasar a ticket'))
+            .hitTestable(),
         findsOneWidget,
       );
       expect(tester.takeException(), isNull);
@@ -429,7 +663,9 @@ void main() {
   }
   for (final credit in [true, false]) {
     testWidgets(
-      'Crear ${credit ? 'crédito' : 'cotización'} abre Facturar sin crear operaciones',
+      credit
+          ? 'Créditos no permite crear operaciones desde el historial'
+          : 'Crear cotización abre Facturar sin crear operaciones',
       (tester) async {
         final router = GoRouter(
           initialLocation: '/credits',
@@ -477,13 +713,18 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
-        await tester.tap(
-          find
-              .text(credit ? 'Crear nuevo crédito' : 'Crear nueva cotización')
-              .first,
-        );
-        await tester.pumpAndSettle();
-        expect(find.text('Facturar existente'), findsOneWidget);
+        if (credit) {
+          expect(find.text('Crear nuevo crédito'), findsNothing);
+          expect(find.text('Facturar existente'), findsNothing);
+        } else {
+          await tester.tap(
+            find
+                .text(credit ? 'Crear nuevo crédito' : 'Crear nueva cotización')
+                .first,
+          );
+          await tester.pumpAndSettle();
+          expect(find.text('Facturar existente'), findsOneWidget);
+        }
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
       },

@@ -213,7 +213,7 @@ class KpisData {
       totalProfit: grossProfit,
       netProfit: netProfit,
       totalExpenses: totalExpenses,
-      totalCost: _toDouble(kpis['totalCost']),
+      totalCost: _toDouble(kpis['netCost'] ?? kpis['totalCost']),
       salesCount: totalSales,
       quotesCount: 0,
       quotesConverted: 0,
