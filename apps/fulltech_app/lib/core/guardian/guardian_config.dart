@@ -107,17 +107,19 @@ class GuardianConfig {
 
     return GuardianConfig(
       enabled: true,
-      endpointPath: String.fromEnvironment(
+      // Environment constructors must be constant on dart2js release. The VM
+      // accepts dynamic calls, so native/debug tests did not catch this crash.
+      endpointPath: const String.fromEnvironment(
         'GUARDIAN_ENDPOINT_PATH',
         defaultValue: '/guardian/incidents',
       ),
-      maxEvents: int.fromEnvironment('GUARDIAN_MAX_EVENTS', defaultValue: 200),
-      maxBytes: int.fromEnvironment(
+      maxEvents: const int.fromEnvironment('GUARDIAN_MAX_EVENTS', defaultValue: 200),
+      maxBytes: const int.fromEnvironment(
         'GUARDIAN_MAX_BYTES',
         defaultValue: 5242880,
       ),
-      batchSize: int.fromEnvironment('GUARDIAN_BATCH_SIZE', defaultValue: 20),
-      minSeverityToPersist: String.fromEnvironment(
+      batchSize: const int.fromEnvironment('GUARDIAN_BATCH_SIZE', defaultValue: 20),
+      minSeverityToPersist: const String.fromEnvironment(
         'GUARDIAN_MIN_SEVERITY',
         defaultValue: 'SEV3',
       ),

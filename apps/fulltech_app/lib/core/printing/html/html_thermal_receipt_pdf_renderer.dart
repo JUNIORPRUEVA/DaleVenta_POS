@@ -73,12 +73,12 @@ class HtmlThermalReceiptPdfRenderer {
               _payment(receipt),
               _notes(receipt),
               _warrantyPolicy(),
-              _footer(),
               ecfPrintFooter(
                 receipt.ecf,
                 pageLeftInsetMm: _wideRoll ? 0.25 : 0.5,
                 textStyle: _wideRoll ? _style(9) : null,
               ),
+              _footer(),
             ],
           ),
         ),
@@ -90,24 +90,13 @@ class HtmlThermalReceiptPdfRenderer {
   pw.Widget _header(ThermalReceiptViewModel receipt) {
     final company = receipt.company;
     final logoBytes = company.logoBytes;
-    if (receipt.ecf != null) {
-      return pw.Column(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
-        children: [
-          pw.Text(company.name, style: _style(11, bold: true)),
-          pw.Text('RNC: ${company.rnc}', style: _style(8)),
-          pw.Text(company.address, style: _style(8)),
-          if (company.phone.isNotEmpty)
-            pw.Text('Tel: ${company.phone}', style: _style(8)),
-        ],
-      );
-    }
     return pw.Padding(
       padding: pw.EdgeInsets.only(bottom: 1.8 * PdfPageFormat.mm),
       child: pw.Row(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          if (!_wideRoll || (logoBytes != null && logoBytes.isNotEmpty)) ...[
+          if ((!_wideRoll && receipt.ecf == null) ||
+              (logoBytes != null && logoBytes.isNotEmpty)) ...[
             pw.SizedBox(
               width: 16 * PdfPageFormat.mm,
               height: 16 * PdfPageFormat.mm,

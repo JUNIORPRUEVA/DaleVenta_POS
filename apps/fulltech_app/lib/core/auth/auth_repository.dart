@@ -22,6 +22,7 @@ import '../utils/is_flutter_test.dart';
 import 'admin_authorization_session.dart';
 import 'auth_interceptor.dart';
 import 'auth_session_events.dart';
+import 'operation_scope.dart';
 import 'token_storage.dart';
 import 'offline_login.dart';
 import '../debug/trace_log.dart';
@@ -1219,7 +1220,10 @@ class AuthRepository {
   /// lo consume y responde con una sesión ya rotada (access + refresh + user).
   /// Se reutiliza la misma normalización que `login`, de modo que el snapshot
   /// local, la empresa activa y el rol quedan idénticos a un acceso normal.
-  Future<UserModel> exchangeHandoffTicket(String ticket) async {
+  Future<UserModel> exchangeHandoffTicket(
+    String ticket, {
+    Duration timeout = _loginTimeout,
+  }) async {
     final raw = ticket.trim();
     if (raw.isEmpty) {
       throw ApiException.detailed(
@@ -1230,23 +1234,31 @@ class AuthRepository {
       );
     }
 
+    final cancellation = CancelToken();
     final res = await _dio
         .post(
           ApiRoutes.handoffExchange,
           data: {'ticket': raw},
+          cancelToken: cancellation,
           options: Options(
             extra: const {
               'silent': true,
               'skipLoader': true,
               'disableOfflineCache': true,
+              'disableRetry': true,
             },
           ),
         )
-        .timeout(_loginTimeout);
+        .timeout(timeout, onTimeout: () {
+          // A Future timeout alone leaves the one-use request alive. Cancel the
+          // transport too, and never persist a response arriving after expiry.
+          cancellation.cancel('Handoff deadline exceeded');
+          throw TimeoutException('Handoff deadline exceeded', timeout);
+        });
 
     final access = res.data['accessToken'] as String?;
     final refresh = res.data['refreshToken'] as String?;
-    if (access == null || access.isEmpty) {
+    if (access == null || access.isEmpty || refresh == null || refresh.isEmpty) {
       throw ApiException.detailed(
         message: 'No pudimos preparar tu acceso. Inicia sesión nuevamente.',
         type: ApiErrorType.parse,
@@ -1255,36 +1267,24 @@ class AuthRepository {
       );
     }
 
-    await _safeClearTokens();
-    await _storage.saveTokens(access, refresh);
-
-    try {
-      final me = await _dio
-          .get(
-            ApiRoutes.usersMe,
-            options: Options(
-              extra: const {'disableOfflineCache': true, 'skipLoader': true},
-            ),
-          )
-          .timeout(_loginTimeout);
-      final user = _requireReadySession(
-        _userFromMeResponse(me.data, access),
-        accountCreated: true,
-      );
-      await _storage.saveUserSnapshot(user);
-      unawaited(_refreshOfflineEmergencyAuthorizationSafe());
-      return user;
-    } on DioException {
-      final fallbackUser = _userFromLoginResponse(res.data);
-      if (fallbackUser == null) rethrow;
-      final user = _requireReadySession(
-        _ensureCompanyFromAccessToken(fallbackUser, access),
-        accountCreated: true,
-      );
-      await _storage.saveUserSnapshot(user);
-      unawaited(_refreshOfflineEmergencyAuthorizationSafe());
-      return user;
+    // The exchange already authenticates the user and returns the current
+    // company/membership projection. A second /users/me before runApp added a
+    // second deadline, telemetry/refresh dependencies and possible retries.
+    final candidate = _userFromLoginResponse(res.data);
+    if (candidate == null) throw StateError('Incomplete handoff identity');
+    final user = _requireReadySession(
+      _ensureCompanyFromAccessToken(candidate, access),
+      accountCreated: true,
+    );
+    if (!OperationScope(user.companyId!, user.id).matchesToken(access)) {
+      throw StateError('Handoff identity mismatch');
     }
+    // Do not let a timed-out cleanup complete after saving the new identity.
+    await _storage.clearTokens();
+    await _storage.saveTokens(access, refresh);
+    await _storage.saveUserSnapshot(user);
+    unawaited(_refreshOfflineEmergencyAuthorizationSafe());
+    return user;
   }
 
   /// Revoca la sesión actual en el servidor (logout voluntario del dispositivo).

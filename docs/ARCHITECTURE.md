@@ -48,6 +48,14 @@ Flutter app / PWA / Windows
 
 ## Repository Structure
 
+Ticket retry identity (2026-11-27): revision zero retains the original POS
+request hash. A subsequent revision is derived from the same company, user,
+device and ticket only across archived RESOLVED_NOT_PERFORMED reviews carrying
+their confirmed review ID. The revision is local queue metadata; it changes no
+API payload contract or database schema. SQLite reservation remains atomic for
+double submission. A timeout on the new revision keeps that same revision
+blocked across restarts; registered or money-received archives are not bypassed.
+
 POS recovery identity (2026-11-20): the editor passes its persisted ticket ID
 to the sales repository. The repository derives a stable SHA-256 request ID
 from company, original user, persistent device identity and ticket. The local
@@ -532,3 +540,12 @@ Client queues bind new events to company identity and preserve uncertain/rejecte
 evidence; old unscoped events are not assigned to a new account. New release builds
 include Guardian, while server company policy still controls enrollment and ingestion.
 Manual opt-out is marked so auto-enrollment cannot silently reactivate it.
+
+Guardian company defaults (2026-11-27): new companies have `guardianEnabled=true`.
+Migration `20261127190000_guardian_default_enabled` only enables non-archived
+legacy rows with a false flag and NULL decision source; explicit decisions remain
+unchanged. Global switches, tenant credentials, license eligibility and quotas
+remain authoritative. When auto-enrollment is enabled, an absent company scope
+means all eligible companies; explicit empty/allowlisted scopes remain restrictive.
+The platform company projection exposes valid credential counts and last use,
+not keys. An enabled flag or zero incidents is not proof of a healthy installation.

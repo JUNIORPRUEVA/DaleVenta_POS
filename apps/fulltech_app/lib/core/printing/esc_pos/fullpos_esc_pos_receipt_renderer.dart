@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:intl/intl.dart';
+import 'package:image/image.dart' as img;
 
 import '../models/receipt_text_utils.dart';
 import '../ecf_print_footer.dart';
@@ -60,7 +61,28 @@ class FullPosEscPosReceiptRenderer implements ThermalReceiptRenderer {
 
     bytes.addAll(generator.reset());
     bytes.addAll(generator.setGlobalCodeTable(codeTable));
-    for (final entry in _styledLines(receipt)) {
+    final logoBytes = receipt.company.logoBytes;
+    if (receipt.ecf != null && logoBytes != null && logoBytes.isNotEmpty) {
+      final decoded = img.decodeImage(logoBytes);
+      if (decoded != null) {
+        final oriented = img.bakeOrientation(decoded);
+        final largest = oriented.width > oriented.height
+            ? oriented.width
+            : oriented.height;
+        final logo = largest > 128
+            ? img.copyResize(
+                oriented,
+                width: (oriented.width * 128 / largest).round().clamp(1, 128),
+                height: (oriented.height * 128 / largest).round().clamp(1, 128),
+              )
+            : oriented;
+        final white = img.Image(width: logo.width, height: logo.height);
+        img.fill(white, color: img.ColorRgb8(255, 255, 255));
+        img.compositeImage(white, logo);
+        bytes.addAll(generator.imageRaster(white, align: PosAlign.center));
+      }
+    }
+    for (final entry in _styledLines(receipt, includeFooter: false)) {
       bytes.addAll(
         generator.text(
           entry.text,
@@ -105,6 +127,15 @@ class FullPosEscPosReceiptRenderer implements ThermalReceiptRenderer {
           );
         }
       }
+    }
+    for (final entry in _closingLines()) {
+      bytes.addAll(
+        generator.text(
+          entry.text,
+          styles: entry.styles,
+          maxCharsPerLine: entry.width,
+        ),
+      );
     }
     bytes.addAll(generator.feed(2));
     if (openCashDrawer) {
@@ -337,7 +368,10 @@ class FullPosEscPosReceiptRenderer implements ThermalReceiptRenderer {
     return _styledLines(receipt).map((line) => line.text).toList();
   }
 
-  List<_EscPosLine> _styledLines(ThermalReceiptViewModel receipt) {
+  List<_EscPosLine> _styledLines(
+    ThermalReceiptViewModel receipt, {
+    bool includeFooter = true,
+  }) {
     final lines = <_EscPosLine>[];
     final normalA = EscPosLayout.normalA(codeTable: codeTable);
     final boldA = EscPosLayout.boldA(codeTable: codeTable);
@@ -477,11 +511,33 @@ class FullPosEscPosReceiptRenderer implements ThermalReceiptRenderer {
       }
     }
 
-    addB(_rule(thermalProfile.usableChars), styles: normalB);
-    addB(_centerContent('¡GRACIAS POR SU PREFERENCIA!'), styles: boldB);
-    addB(_centerContent('FullPOS Cloud'), styles: normalB);
+    if (includeFooter) lines.addAll(_closingLines());
 
     return lines;
+  }
+
+  List<_EscPosLine> _closingLines() {
+    _EscPosLine closing(String text, PosStyles styles) {
+      final line = _withLeftSafe(
+        _fitSingleLine(text, thermalProfile.usableChars),
+      );
+      return _EscPosLine(line, styles, line.length);
+    }
+
+    return [
+      closing(
+        _rule(thermalProfile.usableChars),
+        EscPosLayout.normalB(codeTable: codeTable),
+      ),
+      closing(
+        _centerContent('¡GRACIAS POR SU PREFERENCIA!'),
+        EscPosLayout.boldB(codeTable: codeTable),
+      ),
+      closing(
+        _centerContent('FullPOS Cloud'),
+        EscPosLayout.normalB(codeTable: codeTable),
+      ),
+    ];
   }
 
   void _addClient(

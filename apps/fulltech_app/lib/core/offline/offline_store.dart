@@ -812,6 +812,46 @@ class OfflineStore {
   /// mientras el intento anterior sigue sin resolver.
   static const Duration sameCartOverrideWindow = Duration(minutes: 10);
 
+  /// Reuse the current attempt across retries/restarts. Advance only across
+  /// server-confirmed withdrawals; retain all original payloads and decisions.
+  Future<int> saleAttemptRevisionForTicket({
+    required String companyId,
+    required String userId,
+    required String deviceId,
+    required String ticketId,
+  }) async {
+    final actions = await listPendingActions(
+      companyId: companyId, userId: userId, limit: null, includeUnscoped: false,
+    );
+    final byKey = {
+      for (final action in actions)
+        if (action.type == 'sales.attempt' || action.type == 'sales.create')
+          action.idempotencyKey: action,
+    };
+    var revision = 0;
+    while (revision <= actions.length) {
+      final key = posSaleRequestId(companyId: companyId, userId: userId,
+        deviceId: deviceId, ticketId: ticketId, attemptRevision: revision);
+      if (key == null) throw StateError('No se pudo identificar el ticket.');
+      final previous = byKey[key];
+      if (previous == null) return revision;
+      if (previous.status != 'review_resolved' ||
+          previous.payload['recoveryReviewStatus'] != 'RESOLVED_NOT_PERFORMED' ||
+          (previous.payload['recoveryReviewId'] is! String) ||
+          (previous.payload['recoveryReviewId'] as String).trim().isEmpty) {
+        return revision;
+      }
+      // Do not accept a malformed/mismatched archived ticket as permission.
+      if (previous.payload['posTicketId'] != ticketId ||
+          previous.payload['deviceFingerprint'] != deviceId ||
+          posSaleAttemptRevision(previous.payload) != revision) {
+        throw StateError('La revisión no coincide con el ticket original.');
+      }
+      revision++;
+    }
+    throw StateError('No se pudo comprobar el historial de este cobro.');
+  }
+
   /// Duradero: es un INTENTO, no una venta. Un resultado remoto desconocido
   /// exige resolución supervisada y nunca lo ejecuta el worker genérico.
   ///
@@ -830,10 +870,13 @@ class OfflineStore {
     final fingerprint = (attempt.operationFingerprint ?? '').trim();
     await db.transaction((txn) async {
       // 1) La MISMA operación ya está reservada: repetirla podría duplicar.
-      final sameOperation = await txn.query('pending_actions', columns: ['id'],
+      final sameOperation = await txn.query('pending_actions', columns: ['id', 'status'],
         where: 'company_id = ? AND idempotency_key = ?',
         whereArgs: [attempt.companyId, attempt.idempotencyKey], limit: 1);
       if (sameOperation.isNotEmpty) {
+        if (sameOperation.single['status'] == 'review_resolved') {
+          throw StateError('Este cobro ya fue revisado. Consulta su resultado en el Centro de recuperación.');
+        }
         throw StateError('Este mismo cobro ya está pendiente de verificar. Revisa su resultado antes de volver a cobrar.');
       }
 
@@ -864,7 +907,8 @@ class OfflineStore {
         String? trustedTicket(Map<String, dynamic> payload, String? key, String? userId) {
           final ticket = payload['posTicketId'] as String?;
           final expected = posSaleRequestId(companyId: attempt.companyId, userId: userId,
-            deviceId: payload['deviceFingerprint'] as String?, ticketId: ticket);
+            deviceId: payload['deviceFingerprint'] as String?, ticketId: ticket,
+            attemptRevision: posSaleAttemptRevision(payload));
           return expected != null && key == expected ? ticket : null;
         }
         final newTicket = trustedTicket(attempt.payload, attempt.idempotencyKey, attempt.userId);

@@ -22,7 +22,10 @@ class AppStorageScopeGuard {
       // quedó vacío/corrupto, ANTES de que cualquier imagen lo lea.
       await CacheInfoFileGuard.repairDefaultCacheManagerInfo();
 
-      final prefs = await SharedPreferences.getInstance();
+      // Bound the read before starting any mutation. Timing out the whole
+      // guard could clear a newly established session when a late read ends.
+      final prefs = await SharedPreferences.getInstance()
+          .timeout(const Duration(seconds: 6));
       final current = await _currentScope();
       final previous = prefs.getString(_scopeKey);
 

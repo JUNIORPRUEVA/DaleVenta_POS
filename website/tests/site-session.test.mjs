@@ -4,6 +4,7 @@ import {
   saveSessionFromAuth, readSession, getAccessToken, clearSession,
   SiteSessionStorageError,
   getAppHandoffUrl,
+  withSiteRequestDeadline, SiteRequestTimeoutError,
 } from '../src/scripts/site-session.ts';
 
 const originalFetch = globalThis.fetch;
@@ -12,6 +13,26 @@ const auth = () => ({
   accessToken: 'test-access', refreshToken: 'test-refresh',
   user: { email: 'qa@example.invalid' }, activeCompany: { name: 'QA' },
   requiresOnboarding: true,
+});
+
+test('request deadline aborts a stalled transport and rejects without waiting forever', async () => {
+  let signal;
+  await assert.rejects(withSiteRequestDeadline(s => {
+    signal = s;
+    return new Promise(() => {});
+  }, 20), SiteRequestTimeoutError);
+  assert.equal(signal.aborted, true);
+});
+
+test('request deadline includes a stalled response body and ignores late data', async () => {
+  let finish;
+  const operation = withSiteRequestDeadline(async () => {
+    return await new Promise(resolve => { finish = resolve; });
+  }, 20);
+  await assert.rejects(operation, SiteRequestTimeoutError);
+  finish(auth());
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(readSession(), null);
 });
 
 beforeEach(() => {

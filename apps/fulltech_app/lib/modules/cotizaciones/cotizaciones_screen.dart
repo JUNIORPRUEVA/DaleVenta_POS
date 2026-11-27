@@ -7626,17 +7626,34 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
 
   Future<void> _openCheckoutDialog() async {
     if (_finalizingCheckout) return;
+    setState(() => _finalizingCheckout = true);
+    try {
+      await _runCheckoutDialog();
+    } catch (error, stackTrace) {
+      TraceLog.log('checkout', 'checkout preparation failed', error: error, stackTrace: stackTrace);
+      if (mounted) {
+        _showSalesNotice(title: 'No se pudo completar',
+          message: userSafeErrorMessage(error,
+            fallback: 'No se pudo comprobar la caja. Conserva el ticket y vuelve a intentar.'),
+          icon: Icons.error_outline_rounded, accent: const Color(0xFFDC2626));
+      }
+    } finally {
+      if (mounted) setState(() => _finalizingCheckout = false);
+    }
+  }
+
+  Future<void> _runCheckoutDialog() async {
     if (!_validateCheckoutReady()) return;
     if (!await _ensureEcfReadyBeforeCheckout()) return;
 
     final cashState = await _cashStateWithAuthorizationFallback();
     if (cashState == null) return;
-    if (cashState.activeSession == null) {
+    final cashBlock = cashState.checkoutBlockReason();
+    if (cashBlock != null) {
       if (!mounted) return;
       _showSalesNotice(
-        title: 'Caja cerrada',
-        message:
-            'La caja debe estar abierta para cobrar una venta. Puedes guardar el ticket como cotización.',
+        title: 'Revisa el turno de caja',
+        message: cashBlock,
         icon: Icons.lock_outline_rounded,
         accent: const Color(0xFFF59E0B),
       );
@@ -7695,12 +7712,7 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     }
 
     if (!mounted) return;
-    setState(() => _finalizingCheckout = true);
-    try {
-      await _finalizeCotizacion(checkout: result);
-    } finally {
-      if (mounted) setState(() => _finalizingCheckout = false);
-    }
+    await _finalizeCotizacion(checkout: result);
   }
 
   Future<void> _finalizeCotizacion({_CheckoutResult? checkout}) async {
@@ -7715,11 +7727,8 @@ class _CotizacionesScreenState extends ConsumerState<CotizacionesScreen>
     final popOnSave =
         (_safeRouteUri()?.queryParameters['popOnSave'] ?? '').trim() == '1';
 
-    // El gate de caja NO se repite aquí: `_openCheckoutDialog` ya lo ejecutó
-    // (con el mismo `_cashStateWithAuthorizationFallback`) antes de abrir el
-    // diálogo de cobro, y el backend vuelve a validar la sesión activa antes de
-    // crear la venta. Repetirlo costaba un `GET /cash/state` completo — ~1 RTT
-    // extra en CADA cobro — sin añadir ninguna garantía nueva.
+    // El repositorio vuelve a comprobar la caja antes de reservar el intento:
+    // el turno puede cerrarse o vencer mientras el diálogo de pago está abierto.
 
     final paymentLabel = checkout == null
         ? null

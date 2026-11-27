@@ -30,6 +30,13 @@ separator and NOTA with the payment method once, followed by the thank-you
 footer. Deduplicate automatic payment lines while preserving customer notes
 and all applicable fiscal fields, including the authentic e-CF stamp.
 
+Electronic thermal receipts retain the configured company logo in the header,
+including Windows PDF and RAW ESC/POS paths. With no configured logo they do not
+invent a placeholder for the electronic receipt. The authentic QR, security code
+and signature date precede the closing thank-you message. The operational e-CF
+module has no screen-preview selector, including development builds; standalone
+design previews remain separate from the customer workflow.
+
 Observed sizes include:
 
 - Display: 34

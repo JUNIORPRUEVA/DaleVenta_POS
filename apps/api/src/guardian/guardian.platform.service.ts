@@ -12,6 +12,11 @@ import { resolveGuardianAiRuntime } from './ai/guardian.ai.runtime';
 import { resolveGuardianConfig } from './guardian.config';
 import { GuardianDurableOutbox } from './guardian.durable-outbox';
 import { CrmGuardianAiProvider } from './ai/crm-guardian-ai.provider';
+import {
+  resolveGuardianAutoEnrollmentConfig,
+  isCompanyAllowedForAutoEnrollment,
+  isCompanyLicenseEligible,
+} from './guardian.auto-enrollment.config';
 
 export type PlatformIncidentFilters = {
   companyId?: string;
@@ -140,7 +145,11 @@ export class GuardianPlatformService {
   async companies() {
     const companies = await this.prisma.company.findMany({
       where: { status: { not: 'ARCHIVED' } },
-      select: { id: true, name: true, status: true, licenseStatus: true, guardianEnabled: true },
+      select: {
+        id: true, name: true, status: true, licenseStatus: true,
+        guardianEnabled: true, guardianEnabledBy: true,
+        licenseBlockedAt: true, licenseExpiresAt: true,
+      },
       orderBy: { name: 'asc' },
       take: 1_000,
     });
@@ -150,6 +159,20 @@ export class GuardianPlatformService {
       where: { status: { in: ['OPEN', 'ACKNOWLEDGED', 'INVESTIGATING'] } },
       _count: { _all: true },
     });
+
+    const now = new Date();
+    const enrollment = resolveGuardianAutoEnrollmentConfig();
+    const installations = await this.prisma.guardianMachineCredential.groupBy({
+      by: ['companyId'],
+      where: {
+        companyId: { in: companies.map((company) => company.id) },
+        enabled: true, revokedAt: null,
+        OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+      },
+      _count: { _all: true },
+      _max: { lastUsedAt: true },
+    });
+    const machines = new Map(installations.map((row) => [row.companyId, row]));
 
     const byCompany = new Map<string, { open: number; critical: number }>();
     for (const row of grouped) {
@@ -163,6 +186,11 @@ export class GuardianPlatformService {
 
     return companies.map((company) => {
       const counters = byCompany.get(company.id);
+      const enrollmentBlockReason = !enrollment.enabled
+        ? 'ENROLLMENT_DISABLED'
+        : !isCompanyAllowedForAutoEnrollment(enrollment, company.id)
+          ? 'ENROLLMENT_RESTRICTED'
+          : !isCompanyLicenseEligible(company, now) ? 'COMPANY_NOT_ELIGIBLE' : null;
       return {
         id: company.id,
         name: company.name,
@@ -171,6 +199,11 @@ export class GuardianPlatformService {
         openIncidents: counters?.open ?? 0,
         criticalIncidents: counters?.critical ?? 0,
         monitored: company.guardianEnabled === true,
+        manuallyDisabled: !company.guardianEnabled && company.guardianEnabledBy?.startsWith('DISABLED_BY_') === true,
+        activeInstallations: machines.get(company.id)?._count._all ?? 0,
+        lastContactAt: machines.get(company.id)?._max.lastUsedAt ?? null,
+        enrollmentAvailable: enrollmentBlockReason === null,
+        enrollmentBlockReason,
       };
     });
   }
@@ -396,7 +429,10 @@ export class GuardianPlatformService {
     // proveedor real que el código no está usando.
     const aiRuntime = resolveGuardianAiRuntime();
     const guardianConfig = resolveGuardianConfig();
+    const enrollment = resolveGuardianAutoEnrollmentConfig();
     return {
+      autoEnrollmentEnabled: enrollment.enabled,
+      enrollmentAllCompanies: enrollment.allowedCompanyIds.includes('*'),
       alertsEnabled:guardianConfig.alertsEnabled,
       diagnosisEnabled:guardianConfig.diagnosisEnabled,
       ingestEnabled:guardianConfig.ingestEnabled,

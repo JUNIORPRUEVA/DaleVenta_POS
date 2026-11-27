@@ -163,15 +163,15 @@ describe('configuracion del auto-enrolamiento', () => {
     process.env = { ...BASE_ENV };
   });
 
-  it('esta deshabilitado y sin empresas por defecto (fail-closed)', () => {
+  it('conserva el interruptor global apagado y admite empresas futuras por defecto', () => {
     setEnv({
       GUARDIAN_AUTO_ENROLL_ENABLED: undefined,
       GUARDIAN_AUTO_ENROLL_COMPANIES: undefined,
     });
     const config = resolveGuardianAutoEnrollmentConfig();
     expect(config.enabled).toBe(false);
-    expect(config.allowedCompanyIds).toEqual([]);
-    expect(isCompanyAllowedForAutoEnrollment(config, COMPANY_A)).toBe(false);
+    expect(config.allowedCompanyIds).toEqual(['*']);
+    expect(isCompanyAllowedForAutoEnrollment(config, COMPANY_A)).toBe(true);
   });
 
   it('una lista vacia nunca autoriza y el comodin autoriza a todas', () => {

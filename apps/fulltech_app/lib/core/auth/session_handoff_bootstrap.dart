@@ -76,13 +76,7 @@ class SessionHandoffBootstrap {
       final base = Uri.base;
       if (!base.queryParameters.containsKey(_queryKey)) return;
 
-      final kept = Map<String, String>.from(base.queryParameters)
-        ..remove(_queryKey);
-      final cleaned = base.replace(queryParameters: kept.isEmpty ? null : kept);
-
-      final path =
-          '${cleaned.path}${cleaned.hasQuery ? '?${cleaned.query}' : ''}';
-      replaceHistoryState(path);
+      replaceHistoryState(sessionHandoffCleanPath(base));
     } catch (_) {
       // Si el navegador no permite reescribir el historial, el canje sigue:
       // el ticket es de un solo uso y queda inutilizable igualmente.

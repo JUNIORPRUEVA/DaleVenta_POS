@@ -137,7 +137,7 @@ const appUrl = import.meta.env.PUBLIC_APP_URL ?? '/home';
 
 <script>
   import '../../scripts/niche-picker';
-  import { saveSessionFromAuth, SiteSessionStorageError, getAppHandoffUrl } from '../../scripts/site-session';
+  import { saveSessionFromAuth, SiteSessionStorageError, SiteRequestTimeoutError, withSiteRequestDeadline, getAppHandoffUrl } from '../../scripts/site-session';
   import { waLink } from '../../config/site';
 
   type StepOne = { firstName?: string; email?: string; password?: string };
@@ -347,10 +347,16 @@ const appUrl = import.meta.env.PUBLIC_APP_URL ?? '/home';
         form.setAttribute('aria-busy', 'true');
 
         try {
-          const response = await fetch(`${apiBase}/auth/register-business`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
+          const { response, result } = await withSiteRequestDeadline(async (signal) => {
+            const response = await fetch(`${apiBase}/auth/register-business`, {
+              method: 'POST', signal,
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            });
+            // Even if the response body stalls, a 2xx means the account exists.
+            if (response.ok) accountCreated = true;
+            const result = await response.json().catch(() => ({}));
+            return { response, result };
           });
 
           if (!response.ok) {
@@ -363,17 +369,11 @@ const appUrl = import.meta.env.PUBLIC_APP_URL ?? '/home';
               showAlert('Ya existe una cuenta con este correo.', true);
               return;
             }
-            const detail = await response
-              .json()
-              .then((body: { message?: string | string[] }) =>
-                Array.isArray(body.message) ? body.message.join(' ') : body.message,
-              )
-              .catch(() => null);
+            const detail = Array.isArray(result.message) ? result.message.join(' ') : result.message;
             showAlert(detail || 'No pudimos crear la cuenta. Inténtalo de nuevo.');
             return;
           }
 
-          const result = await response.json().catch(() => ({}));
           accountCreated = true;
           sessionStorage.removeItem('fullpos_registro_paso1');
           saveSessionFromAuth(result, email);
@@ -387,11 +387,13 @@ const appUrl = import.meta.env.PUBLIC_APP_URL ?? '/home';
           submitButton.textContent = 'Finalizar';
           form.removeAttribute('aria-busy');
           submitting = false;
-          if (accountCreated) {
+          if (accountCreated || error instanceof SiteRequestTimeoutError) {
             showAlert(
               error instanceof SiteSessionStorageError
                 ? `Tu cuenta ya está creada. ${error.message}`
-                : 'Tu cuenta ya está creada. Inicia sesión para continuar.',
+                : accountCreated
+                  ? 'Tu cuenta ya está creada. Inicia sesión para continuar.'
+                  : 'No pudimos confirmar si tu cuenta se creó. Intenta iniciar sesión con tus datos antes de volver a registrarte.',
               true,
             );
             form.querySelector<HTMLButtonElement>('[data-submit]')!.disabled = true;

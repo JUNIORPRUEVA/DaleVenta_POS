@@ -2,7 +2,7 @@
  * FASE 8 — Opt-in de Guardian por empresa sobre PostgreSQL real.
  *
  * Cubre, con evidencia y sin tocar bases compartidas:
- *   1. Empresa nueva: Guardian DESACTIVADO por defecto → ingesta rechazada.
+ *   1. Empresa nueva: Guardian activado por defecto; desactivación explícita respetada.
  *   2. Activación explícita → ingesta aceptada.
  *   3. Desactivación → ingesta rechazada y cola pendiente neutralizada.
  *   4. Una credencial de máquina válida NO salta la desactivación.
@@ -76,14 +76,16 @@ describeOnPg('Guardian opt-in por empresa sobre PostgreSQL real', () => {
     await prisma?.$disconnect();
   });
 
-  it('una empresa nueva nace con Guardian DESACTIVADO', async () => {
+  it('una empresa nueva nace con Guardian activado y admite desactivación explícita', async () => {
     const rows = await prisma.company.findMany({
       where: { id: { in: [companyA.id, companyB.id] } },
       select: { guardianEnabled: true, guardianEnabledAt: true },
     });
     expect(rows).toHaveLength(2);
-    expect(rows.every((row) => row.guardianEnabled === false)).toBe(true);
+    expect(rows.every((row) => row.guardianEnabled === true)).toBe(true);
     expect(rows.every((row) => row.guardianEnabledAt === null)).toBe(true);
+    await platform.setCompanyGuardianEnabled(companyA.id, false);
+    await platform.setCompanyGuardianEnabled(companyB.id, false);
   }, 30_000);
 
   it('con Guardian desactivado la ingesta se rechaza sin persistir', async () => {

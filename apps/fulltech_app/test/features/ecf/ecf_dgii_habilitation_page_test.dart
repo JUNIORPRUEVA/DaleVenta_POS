@@ -485,6 +485,15 @@ Future<void> _pumpAdmin(
 }
 
 void main() {
+  for (final state in ['NOT_STARTED', 'APPROVED']) {
+    testWidgets('el módulo no ofrece Ver pantallas: $state', (tester) async {
+      await tester.pumpWidget(_harness(view: _view(state: state)));
+      await tester.pumpAndSettle();
+      expect(find.text('Ver pantallas'), findsNothing);
+      final container = ProviderScope.containerOf(tester.element(find.byType(EcfDgiiHabilitationPage)));
+      expect(container.read(desktopShellRouteActionsProvider)?.actions, isEmpty);
+    });
+  }
   setUpAll(() async {
     final font = FontLoader('Manrope');
     for (final weight in ['Regular', 'Medium', 'SemiBold', 'Bold']) {

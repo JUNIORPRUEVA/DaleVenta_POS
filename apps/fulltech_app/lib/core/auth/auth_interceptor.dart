@@ -114,7 +114,9 @@ class AuthInterceptor extends Interceptor {
       options.headers['Authorization'] is String;
 
   bool _isPublicAuthPath(String path) {
-    return path == ApiRoutes.login ||
+    return path == ApiRoutes.handoffExchange ||
+        path.endsWith(ApiRoutes.handoffExchange) ||
+        path == ApiRoutes.login ||
         path.endsWith(ApiRoutes.login) ||
         path == ApiRoutes.registerBusiness ||
         path.endsWith(ApiRoutes.registerBusiness) ||

@@ -95,6 +95,15 @@ Confirmed capabilities:
 
 ## Multi-Company Behavior
 
+Checkout recovery correction (2026-11-27): opening payment honors the cash
+operating verdict, including stale shifts, closure and review requirements.
+Sale creation rechecks that verdict before reserving a durable attempt. Known
+typed pre-transaction cash rejections do not leave an uncertain charge; generic
+conflicts and interrupted responses remain protected. A ticket withdrawn as
+not performed by a confirmed company recovery review may start a new stable
+attempt while all withdrawn records remain archived. Declared money, registered
+sales and unresolved reviews never authorize this transition.
+
 Recovery UI refinement (2026-11-20): the Center is ADMIN-only. Uncertain
 charges are checked automatically, with a bounded manual read-only check when
 needed. A missing record permits an audited human withdrawal or preparation
@@ -377,6 +386,15 @@ A new Sandbox declaration/renewal/allocation must stay above its reviewed
 frontier, including the original range counter; an unclassified TEST history
 requires review before further TEST numbering. No production authorization is
 copied to TEST and no historic counter is reset.
+
+### Guardian company monitoring defaults (2026-11-27)
+
+Monitoring is enabled for new companies and for legacy companies still using the
+initial disabled value. Administrative disable decisions remain respected.
+Platform administrators can search companies, inspect scoped incidents and toggle
+monitoring with confirmation. The CRM distinguishes disabled monitoring, equipment
+awaiting connection and reported incidents. Diagnosis, alert delivery and enrollment
+are independent server capabilities and must not be implied by a company flag.
 
 ### Admission and ordinary printing
 
