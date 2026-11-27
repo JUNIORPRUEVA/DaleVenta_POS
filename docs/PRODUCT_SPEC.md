@@ -95,6 +95,15 @@ Confirmed capabilities:
 
 ## Multi-Company Behavior
 
+Checkout recovery correction (2026-11-27): opening payment honors the cash
+operating verdict, including stale shifts, closure and review requirements.
+Sale creation rechecks that verdict before reserving a durable attempt. Known
+typed pre-transaction cash rejections do not leave an uncertain charge; generic
+conflicts and interrupted responses remain protected. A ticket withdrawn as
+not performed by a confirmed company recovery review may start a new stable
+attempt while all withdrawn records remain archived. Declared money, registered
+sales and unresolved reviews never authorize this transition.
+
 Recovery UI refinement (2026-11-20): the Center is ADMIN-only. Uncertain
 charges are checked automatically, with a bounded manual read-only check when
 needed. A missing record permits an audited human withdrawal or preparation

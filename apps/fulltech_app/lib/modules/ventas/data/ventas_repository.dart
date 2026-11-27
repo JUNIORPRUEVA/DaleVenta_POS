@@ -1160,17 +1160,29 @@ class VentasRepository {
     if (items.isEmpty) {
       throw ApiException('Agrega al menos un item');
     }
+    // Validate before creating any durable attempt. The UI's initial check may
+    // be obsolete by the time the payment dialog is confirmed.
+    final originCashSessionId = await _saleCheckoutCashSessionId();
     final normalizedCustomerId = (customerId ?? '').trim();
     final normalizedSourceQuotationId = (sourceQuotationId ?? '').trim();
     final normalizedPriceListId = (priceListId ?? '').trim();
     final occurredAt = DateTime.now().toUtc();
     final syncIdentity = await _resolveSaleSyncIdentity();
     final owner = await _tokenStorage.getUserSnapshot();
+    final attemptRevision = (clientTicketId ?? '').trim().isEmpty
+        ? 0
+        : await _offlineStore.saleAttemptRevisionForTicket(
+            companyId: owner?.companyId?.trim() ?? '',
+            userId: owner?.id.trim() ?? '',
+            deviceId: syncIdentity.deviceFingerprint?.trim() ?? '',
+            ticketId: clientTicketId!.trim(),
+          );
     final ticketRequestId = posSaleRequestId(
       companyId: owner?.companyId,
       userId: owner?.id,
       deviceId: syncIdentity.deviceFingerprint,
       ticketId: clientTicketId,
+      attemptRevision: attemptRevision,
     );
     if ((clientTicketId ?? '').trim().isNotEmpty && ticketRequestId == null) {
       throw ApiException(
@@ -1187,10 +1199,6 @@ class VentasRepository {
         ((clientRequestId ?? '').trim().isNotEmpty
             ? clientRequestId!.trim()
             : 'sale_req_${DateTime.now().microsecondsSinceEpoch}');
-    final originCashSessionId = await _resolveOriginCashSessionId();
-    if (originCashSessionId.isEmpty) {
-      throw ApiException('Debes abrir caja antes de facturar.');
-    }
     final inventoryEnabled = await _currentInventoryEnabled();
     final capturedItems = items
         .map(
@@ -1205,6 +1213,7 @@ class VentasRepository {
       'clientRequestId': requestId,
       'originCashSessionId': originCashSessionId,
       if (ticketRequestId != null) 'posTicketId': clientTicketId!.trim(),
+      if (attemptRevision > 0) 'posAttemptRevision': attemptRevision,
       'saleOccurredAt': occurredAt.toIso8601String(),
       if ((syncIdentity.deviceFingerprint ?? '').isNotEmpty)
         'deviceFingerprint': syncIdentity.deviceFingerprint,
@@ -1355,7 +1364,8 @@ class VentasRepository {
         // Only definitive validation/auth rejections release the attempt.
         // 409 and 5xx can require reconciliation with an existing remote sale.
         if (remoteAttemptId != null &&
-            const [400, 401, 403, 404, 422].contains(e.response?.statusCode)) {
+            (const [400, 401, 403, 404, 422].contains(e.response?.statusCode) ||
+                _isDefinitiveCashRejection(e))) {
           await _offlineStore.removePendingAction(remoteAttemptId);
         }
         throw ApiErrorMapper.fromDio(
@@ -1592,6 +1602,34 @@ class VentasRepository {
     if ((fromResolver ?? '').isNotEmpty) return fromResolver!;
     final originCashSession = await _cashRepository.cachedActiveSession();
     return originCashSession?.shiftId.trim() ?? '';
+  }
+
+  Future<String> _saleCheckoutCashSessionId() async {
+    // Explicit resolver is used by isolated repository fixtures.
+    if (_originCashSessionIdResolver != null) {
+      final id = (await _originCashSessionIdResolver())?.trim() ?? '';
+      if (id.isEmpty) throw ApiException('Abre un turno de caja antes de cobrar.');
+      return id;
+    }
+    final gate = await _cashRepository.state();
+    final reason = gate.checkoutBlockReason();
+    if (reason != null) throw ApiException(reason);
+    return gate.activeSession!.shiftId;
+  }
+
+  bool _isDefinitiveCashRejection(DioException error) {
+    if (error.response?.statusCode != 409 || error.response?.data is! Map) return false;
+    final data = error.response!.data as Map;
+    final code = data['code'];
+    // Only typed rejections issued BEFORE the backend sale transaction. A
+    // generic 409, idempotency conflict, timeout or 5xx remains uncertain.
+    return data['errorCode'] == code && const {
+      'CASH_SESSION_STALE',
+      'ORIGIN_SESSION_CLOSED',
+      'ORIGIN_SESSION_NOT_FOUND',
+      'CASH_OPERATION_BEFORE_SHIFT',
+      'CASH_OPERATION_AFTER_CLOSE',
+    }.contains(code);
   }
 
   bool _shouldQueueNetworkFailure(DioException error) {

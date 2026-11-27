@@ -5,6 +5,7 @@
 // pantalla lo leía con `ref.read` sin suscribirse, así que se destruía antes de
 // resolver. El carrito mostraba «Comprobante electrónico no disponible» y el
 // cobro quedaba bloqueado aunque la empresa facturara electrónicamente.
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -13,6 +14,7 @@ import 'package:daleventa_pos/core/auth/auth_provider.dart';
 import 'package:daleventa_pos/core/auth/auth_repository.dart';
 import 'package:daleventa_pos/core/auth/auth_session_events.dart';
 import 'package:daleventa_pos/core/auth/token_storage.dart';
+import 'package:daleventa_pos/core/errors/api_exception.dart';
 import 'package:daleventa_pos/core/company/company_settings_model.dart';
 import 'package:daleventa_pos/core/company/company_settings_repository.dart';
 import 'package:daleventa_pos/core/models/user_model.dart';
@@ -76,14 +78,16 @@ class _Auth extends AuthController {
 }
 
 class _Catalog implements HttpClientAdapter {
-  _Catalog({this.productCount = 1});
+  _Catalog({this.productCount = 1, this.requests});
   final int productCount;
+  final List<RequestOptions>? requests;
   @override
   Future<ResponseBody> fetch(
     RequestOptions request,
     Stream<Uint8List>? stream,
     Future<void>? cancel,
   ) async {
+    requests?.add(request);
     return ResponseBody.fromString(
       jsonEncode({
         'items': List.generate(
@@ -119,10 +123,12 @@ class _PriceLists extends PriceListsRepository {
 }
 
 class _OpenCash implements CashRepository {
-  _OpenCash({this.open = true});
+  _OpenCash({this.open = true, this.gate, this.load});
   final bool open;
+  final CashGateState? gate;
+  final Future<CashGateState> Function()? load;
   @override
-  Future<CashGateState> state() async => CashGateState(
+  Future<CashGateState> state() async => load != null ? await load!() : gate ?? CashGateState(
     businessDate: '2026-11-21', canOperate: true,
     activeSession: !open ? null : ActiveCashSession(userId: 'selector-test-user',
       shiftId: 'local-test-shift', openedAt: DateTime.utc(2026, 11, 21),
@@ -190,6 +196,9 @@ Future<void> _pumpScreen(
   Size viewport = const Size(1280, 900),
   int productCount = 1,
   bool cashOpen = true,
+  CashGateState? cashGate,
+  List<RequestOptions>? requests,
+  Future<CashGateState> Function()? loadCash,
 }) async {
   tester.view.physicalSize = viewport;
   tester.view.devicePixelRatio = 1;
@@ -197,11 +206,11 @@ Future<void> _pumpScreen(
   addTearDown(tester.view.resetDevicePixelRatio);
 
   final dio = Dio(BaseOptions(baseUrl: 'https://billing.example.test'));
-  dio.httpClientAdapter = _Catalog(productCount: productCount);
+  dio.httpClientAdapter = _Catalog(productCount: productCount, requests: requests);
   final container = ProviderContainer(
     overrides: [
       dioProvider.overrideWithValue(dio),
-      cashRepositoryProvider.overrideWithValue(_OpenCash(open: cashOpen)),
+      cashRepositoryProvider.overrideWithValue(_OpenCash(open: cashOpen, gate: cashGate, load: loadCash)),
       tokenStorageProvider.overrideWithValue(_MemoryStorage()),
       authSessionEventsProvider.overrideWith((_) => AuthSessionEvents()),
       authStateProvider.overrideWith(_Auth.new),
@@ -454,6 +463,62 @@ void main() {
       TargetPlatform.iOS,
     }),
   );
+
+  testWidgets('checkout ignores double taps and can reopen after a cash check fails', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    var delayed = false;
+    var cashChecks = 0;
+    final check = Completer<CashGateState>();
+    final gate = await _OpenCash().state();
+    await _pumpScreen(tester, quotationEditor: false, loadCash: () async {
+      if (!delayed) return gate;
+      cashChecks++;
+      return check.future;
+    });
+    delayed = true;
+    await tester.tap(find.text('Cobrar'));
+    for (var i = 0; i < 12; i++) { await tester.pump(const Duration(milliseconds: 100)); }
+    await tester.tap(find.text('Cobrar'));
+    await tester.pump();
+    expect(cashChecks, 1);
+    check.completeError(ApiException('No se pudo consultar el turno.'));
+    for (var i = 0; i < 12; i++) { await tester.pump(const Duration(milliseconds: 100)); }
+    expect(find.text('No se pudo consultar el turno.'), findsOneWidget);
+    expect(find.text('Cobrar y facturar'), findsNothing);
+    delayed = false;
+    await tester.tap(find.text('Cobrar'));
+    for (var i = 0; i < 12; i++) { await tester.pump(const Duration(milliseconds: 100)); }
+    expect(find.text('Cobrar y facturar'), findsOneWidget);
+    await tester.tap(find.text('Cancelar'));
+    // The error toast animates while visible; wait for the dialog transition,
+    // rather than requiring every animation in the sales screen to stop.
+    for (var i = 0; i < 12; i++) { await tester.pump(const Duration(milliseconds: 100)); }
+    expect(find.text('Cobrar y facturar'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('expired open shift never opens payment or submits a sale', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final phone = defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS;
+    final requests = <RequestOptions>[];
+    await _pumpScreen(tester,
+      viewport: phone ? const Size(390, 844) : const Size(1280, 900),
+      quotationEditor: false, requests: requests,
+      cashGate: CashGateState(businessDate: '2026-11-27', canOperate: false,
+        staleBusinessDate: true, requiresClosure: true,
+        activeSession: ActiveCashSession(userId: 'selector-test-user', shiftId: 'old-shift',
+          status: 'OPEN', userName: 'Prueba', openedAt: DateTime.utc(2026, 11, 20), businessDate: '2026-11-20')),
+    );
+    await tester.tap(find.text('Cobrar'));
+    for (var i = 0; i < 12; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.text('Cierra el turno anterior y abre uno nuevo antes de cobrar.'), findsOneWidget);
+    expect(find.text('Cobrar y facturar'), findsNothing);
+    expect(requests.where((r) => r.method == 'POST'), isEmpty);
+    expect(tester.takeException(), isNull);
+    await _savePhonePreview(tester, 'stale-shift-checkout-blocked');
+  }, variant: TargetPlatformVariant({TargetPlatform.windows, TargetPlatform.android, TargetPlatform.iOS}));
 
   testWidgets(
     'phone quick checkout shows general customer without requiring selection',

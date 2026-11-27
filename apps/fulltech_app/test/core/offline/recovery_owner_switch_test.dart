@@ -15,6 +15,7 @@ import 'package:daleventa_pos/core/models/user_model.dart';
 import 'package:daleventa_pos/core/offline/offline_store.dart';
 import 'package:daleventa_pos/core/offline/sync_queue_service.dart';
 import 'package:daleventa_pos/core/storage/serialized_secure_storage.dart';
+import 'package:daleventa_pos/core/time/business_time.dart';
 import 'package:daleventa_pos/modules/cash/cash_repository.dart';
 import 'package:daleventa_pos/modules/ventas/data/ventas_repository.dart';
 import 'package:daleventa_pos/modules/ventas/sales_models.dart';
@@ -75,6 +76,15 @@ void main() {
             'status': 'OPEN',
             'openedAt': DateTime.now().toUtc().toIso8601String(),
             'businessDate': '2026-11-20',
+          };
+        }
+        if (request.path == '/cash/state') {
+          final actor = OperationScope.current!.userId;
+          final now = DateTime.now().toUtc();
+          return {
+            'businessDate': businessDateKey(now), 'canOperate': true,
+            'activeSession': {'userId': actor, 'shiftId': 'shift-${actor.split('-').last}',
+              'status': 'OPEN', 'openedAt': now.toIso8601String(), 'businessDate': businessDateKey(now)},
           };
         }
         if (request.path == '/sales') {

@@ -48,6 +48,14 @@ Flutter app / PWA / Windows
 
 ## Repository Structure
 
+Ticket retry identity (2026-11-27): revision zero retains the original POS
+request hash. A subsequent revision is derived from the same company, user,
+device and ticket only across archived RESOLVED_NOT_PERFORMED reviews carrying
+their confirmed review ID. The revision is local queue metadata; it changes no
+API payload contract or database schema. SQLite reservation remains atomic for
+double submission. A timeout on the new revision keeps that same revision
+blocked across restarts; registered or money-received archives are not bypassed.
+
 POS recovery identity (2026-11-20): the editor passes its persisted ticket ID
 to the sales repository. The repository derives a stable SHA-256 request ID
 from company, original user, persistent device identity and ticket. The local

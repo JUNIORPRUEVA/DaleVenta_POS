@@ -118,7 +118,11 @@ void main() {
 
       // La excepción (error backend / validación / pago) también retorna antes
       // de la remoción.
-      final catchBlock = source.indexOf("title: 'No se pudo completar'");
+      // Checkout preparation now has its own error notice. Check the error
+      // branch of sale finalization, where the persisted ticket is removed.
+      final finalize = source.indexOf('Future<void> _finalizeCotizacion(');
+      expect(finalize, greaterThanOrEqualTo(0));
+      final catchBlock = source.indexOf("title: 'No se pudo completar'", finalize);
       expect(catchBlock, greaterThanOrEqualTo(0));
       expect(removalCall, lessThan(catchBlock));
     });

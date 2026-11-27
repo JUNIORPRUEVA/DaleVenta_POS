@@ -83,6 +83,25 @@ class CashGateState {
   /// `true` cuando el servidor exige cerrar ese turno antes de abrir otro.
   final bool requiresClosure;
 
+  /// Sale checkout must honor the operating verdict, not just an open row.
+  /// Cached snapshots cannot authorize yesterday's shift after midnight.
+  String? checkoutBlockReason({DateTime? now}) {
+    if (requiresReview) {
+      return reviewMessage ?? 'Revisa el turno de caja antes de cobrar.';
+    }
+    if (pendingClose) return 'Termina el cierre de caja antes de cobrar.';
+    final active = activeSession;
+    if (active == null || !active.isOpen || active.shiftId.trim().isEmpty) {
+      return 'Abre un turno de caja antes de cobrar.';
+    }
+    if (staleBusinessDate || requiresClosure ||
+        (fromCache && active.businessDate != businessDateKey(now ?? DateTime.now()))) {
+      return 'Cierra el turno anterior y abre uno nuevo antes de cobrar.';
+    }
+    if (!canOperate) return 'El turno de caja no está habilitado para cobrar.';
+    return null;
+  }
+
   factory CashGateState.fromJson(Map<String, dynamic> json) {
     final active = json['activeSession'];
     return CashGateState(
@@ -93,6 +112,8 @@ class CashGateState {
           : null,
       fromCache: json['fromCache'] == true,
       pendingClose: json['pendingClose'] == true,
+      requiresReview: json['requiresReview'] == true,
+      reviewMessage: json['reviewMessage'] is String ? json['reviewMessage'] as String : null,
       staleBusinessDate: json['staleBusinessDate'] == true,
       requiresClosure: json['requiresClosure'] == true,
     );
