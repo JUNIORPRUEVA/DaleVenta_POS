@@ -1,4 +1,5 @@
 import 'dart:math';
+import '../../core/app_update/update_critical_operation_gate.dart';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -316,7 +317,12 @@ class CashRepository {
     () => _openSession(openingAmount: openingAmount, note: note),
   );
 
-  Future<T> _withCurrentOwner<T>(Future<T> Function() body) async {
+  Future<T> _withCurrentOwner<T>(Future<T> Function() body) =>
+      UpdateCriticalOperationGate.instance.run(
+        () => _withCurrentOwnerGuarded(body),
+      );
+
+  Future<T> _withCurrentOwnerGuarded<T>(Future<T> Function() body) async {
     Future<T> finish() async {
       final result = await body();
       await _assertCurrentOwner();

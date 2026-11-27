@@ -458,34 +458,51 @@ void PrintResult(const Result& result) {
   std::wprintf(L"RESULT=%ls\n", result.code.c_str());
 }
 
-void WaitForParent(const Options& options) {
+bool WaitForParent(const Options& options) {
   if (options.parent_pid == 0) {
     AppendLog(options, L"parent wait skipped: no parent pid");
-    return;
+    return true;
   }
   HANDLE process = OpenProcess(SYNCHRONIZE, FALSE, options.parent_pid);
   if (process == nullptr) {
+    const DWORD error = GetLastError();
     AppendLog(options, L"parent wait skipped: parent not found");
-    return;
+    return error == ERROR_INVALID_PARAMETER;
   }
   AppendLog(options, L"parent wait started");
   DWORD wait = WaitForSingleObject(process, kWaitTimeoutMs);
   CloseHandle(process);
   AppendLog(options, wait == WAIT_OBJECT_0 ? L"parent exited"
                                            : L"parent wait timeout");
+  return wait == WAIT_OBJECT_0;
 }
 
-void WaitForMutex(const Options& options) {
-  HANDLE mutex = OpenMutexW(SYNCHRONIZE, FALSE, kSingleInstanceMutexName);
+bool WaitForMutex(const Options& options) {
+  std::wstring mutex_name(kSingleInstanceMutexName);
+  if (!options.restart_exe.empty()) {
+    const size_t slash = options.restart_exe.find_last_of(L"\\/");
+    if (slash != std::wstring::npos) {
+      const std::wstring marker = options.restart_exe.substr(0, slash + 1) +
+                                  L"UAT_BUILD_MANIFEST.json";
+      if (GetFileAttributesW(marker.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        mutex_name += L"_UAT";
+      }
+    }
+  }
+  HANDLE mutex = OpenMutexW(SYNCHRONIZE | MUTEX_MODIFY_STATE, FALSE, mutex_name.c_str());
   if (mutex == nullptr) {
+    const DWORD error = GetLastError();
     AppendLog(options, L"mutex wait skipped: mutex not present");
-    return;
+    return error == ERROR_FILE_NOT_FOUND;
   }
   AppendLog(options, L"mutex wait started");
   DWORD wait = WaitForSingleObject(mutex, kWaitTimeoutMs);
+  const bool released = wait == WAIT_OBJECT_0 || wait == WAIT_ABANDONED;
+  if (released) ReleaseMutex(mutex);
   CloseHandle(mutex);
   AppendLog(options, wait == WAIT_OBJECT_0 ? L"mutex released"
                                            : L"mutex wait timeout");
+  return released;
 }
 
 Result RunInstaller(const Options& options) {
@@ -580,7 +597,11 @@ int APIENTRY wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int) {
     return static_cast<int>(validation.exit_code);
   }
   if (options.verify_only) {
-    if (options.parent_pid != 0) WaitForParent(options);
+    if (options.parent_pid != 0 && !WaitForParent(options)) {
+      Result busy{L"PARENT_STILL_RUNNING", 11};
+      WriteResultFile(options, busy);
+      return 11;
+    }
     HANDLE locked_package = INVALID_HANDLE_VALUE;
     Result final_validation = LockAndValidatePackage(options, &locked_package);
     if (final_validation.code != L"SUCCESS") {
@@ -595,8 +616,20 @@ int APIENTRY wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int) {
     return 0;
   }
 
-  WaitForParent(options);
-  WaitForMutex(options);
+  HANDLE installation_mutex = CreateMutexW(nullptr, TRUE,
+      L"Local\\FullposUpdaterInstallSingleInstance");
+  const DWORD mutex_error = GetLastError();
+  if (installation_mutex == nullptr || mutex_error == ERROR_ALREADY_EXISTS) {
+    if (installation_mutex != nullptr) CloseHandle(installation_mutex);
+    AppendLog(options, L"installation aborted: another updater owns installation");
+    return 10;
+  }
+  if (!WaitForParent(options) || !WaitForMutex(options)) {
+    Result busy{L"APPLICATION_STILL_RUNNING", 11};
+    WriteResultFile(options, busy);
+    AppendLog(options, L"installation aborted: application still running");
+    return 11;
+  }
   Result install_result = RunInstaller(options);
   WriteResultFile(options, install_result);
   if (install_result.code == L"SUCCESS") {
@@ -604,5 +637,7 @@ int APIENTRY wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int) {
   }
   Relaunch(options);
   PrintResult(install_result);
+  ReleaseMutex(installation_mutex);
+  CloseHandle(installation_mutex);
   return install_result.code == L"SUCCESS" ? 0 : static_cast<int>(install_result.exit_code);
 }

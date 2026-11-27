@@ -43,8 +43,13 @@
 #ifndef MyAppPrivileges
 #define MyAppPrivileges "admin"
 #endif
+#ifndef MyAppMutex
+#define MyAppMutex "Local\DaleVentasPOSSingleInstance"
+#endif
 
 #ifdef MyAppUatMayoreo
+#undef MyAppMutex
+#define MyAppMutex "Local\DaleVentasPOSUATMayoreoSingleInstance"
 #undef MyAppName
 #define MyAppName "FullPOS UAT Mayoreo"
 #undef MyAppFolderName
@@ -62,12 +67,23 @@
 ; Variante UAT (aislada): AppId, carpeta y entrada de desinstalación PROPIAS.
 ; Objetivo: una instalación UAT nunca puede sobrescribir la instalación real
 ; de FullPOS Cloud en el mismo equipo.
+#ifndef MyAppUatName
+#define MyAppUatName "FullPOS UAT"
+#endif
+#ifndef MyAppUatAppId
+#define MyAppUatAppId "{{4C1F9E6A-2D74-4E33-9B57-7A0E5F1C8D21}"
+#endif
+#ifndef MyAppUatMutex
+#define MyAppUatMutex "Local\DaleVentasPOSSingleInstance_UAT"
+#endif
+#undef MyAppMutex
+#define MyAppMutex MyAppUatMutex
 #undef MyAppName
-#define MyAppName "FullPOS UAT"
+#define MyAppName MyAppUatName
 #undef MyAppFolderName
 #define MyAppFolderName "DaleVentas POS UAT"
 #undef MyAppId
-#define MyAppId "{{4C1F9E6A-2D74-4E33-9B57-7A0E5F1C8D21}"
+#define MyAppId MyAppUatAppId
 #undef MyAppOutputBaseFilename
 #define MyAppOutputBaseFilename "FullPOS-UAT-Setup"
 #endif
@@ -89,7 +105,15 @@ VersionInfoProductVersion={#MyAppVersionInfo}
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppPublisherURL}
 AppSupportURL={#MyAppSupportURL}
+#ifdef MyAppUat
+#ifdef MyAppUatInstallDir
+DefaultDirName={#MyAppUatInstallDir}
+#else
 DefaultDirName={autopf}\{#MyAppFolderName}
+#endif
+#else
+DefaultDirName={autopf}\{#MyAppFolderName}
+#endif
 UsePreviousAppDir=no
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
@@ -102,6 +126,11 @@ ArchitecturesInstallIn64BitMode=x64compatible
 WizardStyle=modern
 SetupIconFile={#BrandSetupIcon}
 PrivilegesRequired={#MyAppPrivileges}
+; Recheck after UAC: another instance could have opened during consent.
+; The installer never closes a live POS; the helper owns safe shutdown.
+AppMutex={#MyAppMutex}
+CloseApplications=no
+RestartApplications=no
 UninstallDisplayIcon={app}\app\{#MyAppExeName}
 
 [Messages]

@@ -1,6 +1,6 @@
 # Windows Auto-Update Architecture
 
-Last updated: 2026-10-07.
+Last updated: 2026-11-27.
 
 This document records the Windows auto-update architecture used by FullPOS Cloud and the UAT findings from Phase 8. Production release is not approved by this document.
 
@@ -85,7 +85,11 @@ The bootstrap release can be technically prepared only after:
 - UAT release metadata points to HTTPS storage, not `file://` or local paths;
 - the update package passes size, SHA-256, and signature policy validation in UAT.
 
-Production readiness additionally requires a production Authenticode certificate and a production-safe Inno Setup toolchain. Without those, production release remains NO-GO.
+Signing policy follows `WINDOWS_RELEASE_PROCESS.md` and `RELEASE.md`: the temporary
+owner-approved unsigned exception retains HTTPS, allowed host, size, SHA-256,
+strictly increasing build and stable/published metadata. It does not bypass UAC,
+SmartScreen or local application control. A safe Inno Setup toolchain and
+release-specific validation remain required; this document approves no publication.
 
 ## Phase 8B Versioning Preparation
 
@@ -99,6 +103,38 @@ candidate must increment the build number in `pubspec.yaml` before building, for
 example `1.0.6+131` or the next owner-approved marketing version. Do not reuse
 build `130` for the UAT release record.
 
-Unsigned packages are acceptable only when the UAT release policy explicitly
-allows unsigned Windows packages. Production must continue to require a trusted
-Authenticode signature and expected publisher validation.
+Unsigned UAT packages require their explicit UAT policy. Commercial packages
+require either valid Authenticode/publisher validation or the temporary production
+exception above. Cached approval cannot override the current client's policy.
+
+## Durable recovery and install coordination
+
+- A failed release check preserves a verified prepared package. Startup and manual
+  install revalidate its confined path, size, hash and current signature policy.
+- A no-update response requires an explicit boolean `updateAvailable: false`.
+  Missing, null or incorrectly typed flags are contract errors, not evidence of
+  being up to date; they preserve an existing verified package.
+- Closing while waiting to restart restores READY without starting installation.
+- State replacement retains a backup and recovers a flushed temporary file;
+  corrupt/locked historical files do not hide another valid state.
+- READY and installation require confirmed durable state writes. Write errors
+  leave the POS usable without advertising installation readiness.
+- One in-flight request owns installation. Sales, credit payments, cash, financial
+  sync, mutating HTTP requests and printing share an operation gate. Restart
+  reserves it after current work finishes and releases it if launch fails.
+- Each manual attempt archives the previous result. Failed installation can retry
+  its valid local package offline without a fresh manifest.
+- The helper aborts if parent/mutex does not exit safely. An open shift or queued
+  offline work alone does not block restart or change financial data.
+- Inno rechecks the application mutex at startup (after UAC), with automatic
+  application closure/restart disabled. Reopening the POS during consent makes
+  installation cancel safely instead of closing the new running instance.
+- A handled UAC cancellation allows later release checks. The actual installed
+  build takes precedence over stale failure/cancellation metadata when confirming
+  a completed update, including while the release API is unavailable.
+- Incomplete partial downloads restart from zero. A complete `.part` with matching
+  size and SHA-256 is reused after restart and still passes native signature/build
+  verification before READY. Completed prepared packages are reused as well.
+  Streaming stops if bytes exceed the declared size. Progress persistence is
+  limited to once per second plus the final chunk, avoiding an unbounded disk
+  write backlog; final verification and readiness remain durable.

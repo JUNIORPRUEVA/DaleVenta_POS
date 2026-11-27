@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
@@ -97,6 +98,27 @@ class UpdateDownloader {
 
     final partFile = File(p.join(buildDirectory.path, '$fileName.part'));
     final readyFile = File(p.join(buildDirectory.path, '$fileName.ready'));
+    if (await partFile.exists() &&
+        await partFile.length() == expectedSize &&
+        manifest.sha256 != null) {
+      final digest = await sha256.bind(partFile.openRead()).first;
+      if (digest.toString().toLowerCase() == manifest.sha256!.toLowerCase()) {
+        onProgress?.call(
+          UpdateDownloadProgress(
+            bytesDownloaded: expectedSize,
+            totalBytes: expectedSize,
+          ),
+        );
+        return UpdateDownloadResult(
+          partPath: partFile.path,
+          readyPath: readyFile.path,
+          artifactRelativePath: p.join(build.toString(), '$fileName.ready'),
+          updateRootPath: updateRoot.path,
+          bytesDownloaded: expectedSize,
+          fileSizeExpected: expectedSize,
+        );
+      }
+    }
     await _deleteIfExists(partFile);
 
     final dio = _dio ?? _createDio();
@@ -132,6 +154,11 @@ class UpdateDownloader {
       sink = outputSink;
       final stream = response.data!.stream.timeout(_streamIdleTimeout);
       await for (final chunk in stream) {
+        if (bytesDownloaded + chunk.length > expectedSize) {
+          await closeSinkIfOpen();
+          await _deleteIfExists(partFile);
+          throw const UpdateDownloadException('SIZE_MISMATCH');
+        }
         outputSink.add(chunk);
         bytesDownloaded += chunk.length;
         onProgress?.call(
@@ -203,6 +230,46 @@ class UpdateDownloader {
     await partFile.rename(readyFile.path);
     if (!await readyFile.exists()) {
       throw const UpdateDownloadException('READY_FILE_MISSING');
+    }
+  }
+
+  Future<String> resolvePreparedArtifact(PersistedUpdateState state) async {
+    final build = state.targetBuild;
+    final relative = state.artifactRelativePath;
+    if (build == null ||
+        build <= 0 ||
+        relative == null ||
+        p.isAbsolute(relative)) {
+      throw const UpdateDownloadException('INVALID_PREPARED_PATH');
+    }
+    final directory = await _buildDirectory(build);
+    final normalized = p.normalize(relative);
+    if (p.dirname(normalized) != build.toString() ||
+        !normalized.endsWith('.ready') ||
+        normalized.contains('..')) {
+      throw const UpdateDownloadException('INVALID_PREPARED_PATH');
+    }
+    final file = File(p.join(directory.parent.path, normalized));
+    final root = await directory.parent.resolveSymbolicLinks();
+    final actual = await file.resolveSymbolicLinks();
+    if (!p.isWithin(root, actual) ||
+        !p.equals(p.dirname(actual), p.join(root, build.toString())) ||
+        await file.length() != state.fileSizeExpected) {
+      throw const UpdateDownloadException('PREPARED_FILE_INVALID');
+    }
+    return actual;
+  }
+
+  Future<String> preparedUpdateRoot() async =>
+      (_rootDirectory ?? await _defaultRoot()).path;
+
+  Future<void> beginInstallAttempt(int buildNumber) async {
+    final directory = await _buildDirectory(buildNumber);
+    final result = File(p.join(directory.path, 'installer_result.json'));
+    if (await result.exists()) {
+      await result.rename(
+        '${result.path}.${DateTime.now().microsecondsSinceEpoch}.previous',
+      );
     }
   }
 

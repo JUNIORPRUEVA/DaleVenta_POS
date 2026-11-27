@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import '../config/uat_network_guard.dart';
 import 'env.dart';
+import '../app_update/update_critical_operation_gate.dart';
 
 class ApiClient {
   final Dio dio;
@@ -18,9 +19,51 @@ class ApiClient {
           followRedirects: !UatNetworkGuard.isUat,
         ),
       ) {
+    dio.interceptors.add(_UpdateOperationInterceptor());
     if (UatNetworkGuard.isUat) {
       dio.interceptors.add(_UatDestinationInterceptor());
     }
+  }
+}
+
+class _UpdateOperationInterceptor extends Interceptor {
+  final _key = 'fullpos.update.operation';
+  @override
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    if (const {
+      'GET',
+      'HEAD',
+      'OPTIONS',
+    }.contains(options.method.toUpperCase())) {
+      handler.next(options);
+      return;
+    }
+    try {
+      options.extra[_key] = UpdateCriticalOperationGate.instance
+          .beginCriticalOperation();
+      handler.next(options);
+    } on Object catch (error, stack) {
+      handler.reject(
+        DioException(requestOptions: options, error: error, stackTrace: stack),
+      );
+    }
+  }
+
+  void _finish(RequestOptions options) {
+    final token = options.extra.remove(_key);
+    if (token is UpdateCriticalOperationToken) token.end();
+  }
+
+  @override
+  void onResponse(Response response, ResponseInterceptorHandler handler) {
+    _finish(response.requestOptions);
+    handler.next(response);
+  }
+
+  @override
+  void onError(DioException error, ErrorInterceptorHandler handler) {
+    _finish(error.requestOptions);
+    handler.next(error);
   }
 }
 

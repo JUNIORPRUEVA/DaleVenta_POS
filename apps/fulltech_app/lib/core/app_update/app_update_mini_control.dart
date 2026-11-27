@@ -18,8 +18,10 @@ class AppUpdateMiniControl extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(appUpdateProvider);
     final phase = state.phase;
+    final targetBuild =
+        state.manifest?.buildNumber ?? state.persisted.targetBuild;
     final dismissed =
-        state.manifest?.isDismissedBy(state.persisted.dismissedBuild) ?? false;
+        targetBuild != null && targetBuild == state.persisted.dismissedBuild;
     final canPrepare =
         phase == AppUpdatePhase.available ||
         phase == AppUpdatePhase.installFailed;
@@ -31,9 +33,7 @@ class AppUpdateMiniControl extends ConsumerWidget {
     final waiting = phase == AppUpdatePhase.waitingSafeState;
     final installing = phase == AppUpdatePhase.installRequested;
     final ready = phase == AppUpdatePhase.readyToInstall;
-    final visible =
-        !dismissed &&
-        (canPrepare || isPreparing || ready || waiting || installing);
+    final visible = !dismissed && (ready || waiting || installing);
     if (!visible) return const SizedBox.shrink();
 
     final controller = ref.read(appUpdateProvider.notifier);
@@ -45,8 +45,7 @@ class AppUpdateMiniControl extends ConsumerWidget {
         ? 'Preparando actualización...'
         : 'Actualizar';
     final actionEnabled = ready || canPrepare;
-    final canDismiss =
-        state.manifest?.buildNumber != null && !waiting && !installing;
+    final canDismiss = targetBuild != null && !waiting && !installing;
 
     final iconSize = inTitle ? 15.0 : 17.0;
     final closeSize = inTitle ? 14.0 : 16.0;

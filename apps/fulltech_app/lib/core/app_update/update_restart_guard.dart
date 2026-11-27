@@ -2,6 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../offline/sync_queue_service.dart';
 import '../update/print_activity_tracker.dart';
+import 'update_critical_operation_gate.dart';
+export 'update_critical_operation_gate.dart';
 
 final updateRestartGuardProvider = Provider<UpdateRestartGuard>((ref) {
   return AppUpdateRestartGuard(ref);
@@ -9,35 +11,11 @@ final updateRestartGuardProvider = Provider<UpdateRestartGuard>((ref) {
 
 final updateCriticalOperationGateProvider =
     Provider<UpdateCriticalOperationGate>(
-      (ref) => UpdateCriticalOperationGate(),
+      (ref) => UpdateCriticalOperationGate.instance,
     );
 
-class UpdateCriticalOperationGate {
-  int _activeOperations = 0;
-
-  bool get hasActiveCriticalOperation => _activeOperations > 0;
-
-  UpdateCriticalOperationToken beginCriticalOperation() {
-    _activeOperations += 1;
-    return UpdateCriticalOperationToken._(this);
-  }
-
-  void _endCriticalOperation() {
-    if (_activeOperations > 0) _activeOperations -= 1;
-  }
-}
-
-class UpdateCriticalOperationToken {
-  UpdateCriticalOperationToken._(this._gate);
-
-  final UpdateCriticalOperationGate _gate;
-  bool _ended = false;
-
-  void end() {
-    if (_ended) return;
-    _ended = true;
-    _gate._endCriticalOperation();
-  }
+abstract interface class UpdateRestartLeaseGuard {
+  void releaseRestart();
 }
 
 abstract class UpdateRestartGuard {
@@ -57,7 +35,8 @@ class UpdateRestartReadiness {
   const UpdateRestartReadiness.blocked(this.reason) : safe = false;
 }
 
-class AppUpdateRestartGuard implements UpdateRestartGuard {
+class AppUpdateRestartGuard
+    implements UpdateRestartGuard, UpdateRestartLeaseGuard {
   const AppUpdateRestartGuard(this._ref);
 
   final Ref _ref;
@@ -86,8 +65,16 @@ class AppUpdateRestartGuard implements UpdateRestartGuard {
     if (!printIdle) {
       return const UpdateRestartReadiness.blocked('PRINT_IN_PROGRESS');
     }
-    return canSafelyRestartForUpdate();
+    final readiness = await canSafelyRestartForUpdate();
+    if (!readiness.safe) return readiness;
+    return _ref.read(updateCriticalOperationGateProvider).reserveRestart()
+        ? const UpdateRestartReadiness.safe()
+        : const UpdateRestartReadiness.blocked('CRITICAL_OPERATION');
   }
+
+  @override
+  void releaseRestart() =>
+      _ref.read(updateCriticalOperationGateProvider).releaseRestart();
 }
 
 class PermissiveUpdateRestartGuard implements UpdateRestartGuard {

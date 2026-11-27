@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../app_update/update_critical_operation_gate.dart';
 import 'dart:math';
 
 import 'package:dio/dio.dart';
@@ -305,7 +306,7 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
     Map<String, dynamic>? cachePayload,
     bool requireDatabase = false,
     DateTime? createdAt,
-  }) async {
+  }) => UpdateCriticalOperationGate.instance.run(() async {
     final activeScope = await _resolveScope();
     final resolvedCompanyId =
         _clean(companyId) ??
@@ -341,7 +342,7 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
     TraceLog.log('sync_queue', 'enqueued type=$type scope=$scope id=$id');
     await refreshStats();
     unawaited(processPending());
-  }
+  });
 
   Future<void> remove(String id) async {
     await _store.removePendingAction(id);
@@ -405,6 +406,11 @@ class SyncQueueService extends StateNotifier<SyncQueueState> {
   }
 
   Future<void> processPending() async {
+    if (UpdateCriticalOperationGate.instance.restartReserved) return;
+    return UpdateCriticalOperationGate.instance.run(_processPendingGuarded);
+  }
+
+  Future<void> _processPendingGuarded() async {
     if (_processing) return;
     _processing = true;
     _patchState(

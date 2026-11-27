@@ -22,6 +22,7 @@ class UpdateSignatureVerifier {
     required String filePath,
     required String updateRootPath,
     String? expectedSha256,
+    int? targetBuild,
     String? expectedPublisher,
     bool? allowUnsignedForUat,
     bool? allowUnsignedForProduction,
