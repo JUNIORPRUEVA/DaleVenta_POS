@@ -113,6 +113,19 @@
       font-weight: 700;
     }
 
+    #startup-recovery { max-width: 420px; text-align: center; }
+    #startup-recovery[hidden] { display: none; }
+    #startup-recovery p { color: var(--muted); font-size: 14px; line-height: 1.6; }
+    #startup-recovery a {
+      display: inline-block;
+      padding: 12px 20px;
+      border-radius: 1px;
+      background: var(--primary);
+      color: white;
+      font-size: 14px;
+      text-decoration: none;
+    }
+
     .no-js-seo {
       width: min(760px, calc(100% - 32px));
       margin: 0 auto;
@@ -311,6 +324,10 @@
 
   <div id="app-loader" role="status" aria-live="polite" aria-label="Cargando FullPOS Cloud">
     <p class="loader-copy">Iniciando…</p>
+    <div id="startup-recovery" hidden>
+      <p>No pudimos terminar de abrir FullPOS. Puedes iniciar sesión para continuar. No necesitas crear otra cuenta.</p>
+      <a href="/login?access=retry">Ir a iniciar sesión</a>
+    </div>
   </div>
 
   <div id="pwa-banner" aria-live="polite">
@@ -490,7 +507,31 @@
     })();
   </script>
   <script>
+    var fullposStartupCompleted = false;
+    window.fullposWebStartupStage = 'download';
+    window.fullposSetWebStartupStage = function (stage) {
+      // Diagnostic codes only: never a URL, token, email or exception payload.
+      if (['engine', 'preferences', 'storage', 'session', 'first-frame'].indexOf(stage) >= 0) {
+        window.fullposWebStartupStage = stage;
+      }
+    };
+    var fullposStartupDeadline = window.setTimeout(function () {
+      window.fullposFailWebStartup();
+    }, 45000);
+    window.fullposFailWebStartup = function () {
+      if (fullposStartupCompleted) return;
+      window.clearTimeout(fullposStartupDeadline);
+      var recovery = document.getElementById('startup-recovery');
+      var loader = document.getElementById('app-loader');
+      if (recovery) recovery.hidden = false;
+      if (loader) {
+        var copy = loader.querySelector('.loader-copy');
+        if (copy) copy.textContent = 'No se pudo abrir la aplicación';
+      }
+    };
     window.fullposCompleteWebStartup = function () {
+      fullposStartupCompleted = true;
+      window.clearTimeout(fullposStartupDeadline);
       var loader = document.getElementById('app-loader');
       if (loader) {
         loader.classList.add('is-hidden');
@@ -800,6 +841,6 @@
       });
     })();
   </script>
-  <script src="flutter_bootstrap.js" async></script>
+  <script src="flutter_bootstrap.js" async onerror="window.fullposFailWebStartup()"></script>
 </body>
 </html>

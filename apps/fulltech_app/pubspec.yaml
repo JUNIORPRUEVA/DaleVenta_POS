@@ -198,6 +198,12 @@ flutter:
   # list giving the asset and other descriptors for the font. For
   # example:
   fonts:
+    # CanvasKit otherwise downloads its mandatory default font from gstatic
+    # before Dart main. Keep that fallback local even when the theme is Manrope.
+    - family: Roboto
+      fonts:
+        - asset: assets/fonts/Roboto-Regular.ttf
+          weight: 400
     - family: Manrope
       fonts:
         - asset: assets/fonts/manrope/Manrope-Regular.ttf

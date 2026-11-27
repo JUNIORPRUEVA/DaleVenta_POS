@@ -85,14 +85,13 @@ Future<void> main([List<String> args = const []]) async {
   runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
+      setWebStartupStage('preferences');
+      // Capture startup failures before preferences or other async setup.
+      GuardianBootstrap.installStartupCapture();
       // Límite de avisos recuperables: debe estar cargado antes de que
       // cualquier componente (por ejemplo el actualizador) reporte un error.
       // Si falla, el gate opera solo en memoria y nunca lanza.
       await ErrorNoticeGate.instance.load();
-      // Captura de fallos de arranque de Guardian: síncrona y barata. Debe ir
-      // antes de SQLite, almacenamiento y licencias para no perder los errores
-      // previos a que el agente esté listo. Sin `--dart-define` no hace nada.
-      GuardianBootstrap.installStartupCapture();
       await logFullPosRuntimeDiagnostics();
       usePathUrlStrategy();
       GoogleFonts.config.allowRuntimeFetching = false;
@@ -101,11 +100,13 @@ Future<void> main([List<String> args = const []]) async {
       }
       _configureImageCacheForPlatform();
       _initializeSqlite();
+      setWebStartupStage('storage');
       await AppStorageScopeGuard.ensureCurrentScope();
 
       // Handoff del sitio web: canjea `?handoff=` ANTES de que Riverpod
       // inicialice la sesión, para no pedir la contraseña una segunda vez.
       // Es no-op fuera de Web y nunca lanza.
+      setWebStartupStage('session');
       final accessReady = await SessionHandoffBootstrap.consumeFromUrl();
       if (!accessReady) {
         SessionHandoffBootstrap.openRecoveryLogin();
@@ -117,8 +118,8 @@ Future<void> main([List<String> args = const []]) async {
         AppErrorReporter.instance.recordFlutterError(details);
       };
 
-      // APPYRA Guardian: agente de incidentes. Desactivado por defecto y
-      // fail-closed: si no está configurado no hace nada.
+      // Guardian is enabled by default in release. Enrollment and server
+      // authorization still determine whether incidents can be delivered.
       unawaited(GuardianBootstrap.start());
 
       ErrorWidget.builder = (details) {
@@ -136,9 +137,11 @@ Future<void> main([List<String> args = const []]) async {
         ),
       );
 
+      setWebStartupStage('first-frame');
       runApp(const ProviderScope(child: AppBootstrap()));
     },
     (error, stack) {
+      failWebStartup();
       AppErrorReporter.instance.record(error, stack, context: 'Zone');
     },
   );

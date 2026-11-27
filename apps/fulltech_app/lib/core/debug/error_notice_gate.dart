@@ -32,7 +32,8 @@ class ErrorNoticeGate {
     if (_loaded) return;
     _loaded = true;
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final prefs = await SharedPreferences.getInstance()
+          .timeout(const Duration(seconds: 2));
       _prefs = prefs;
       for (final key in prefs.getKeys()) {
         if (!key.startsWith(_keyPrefix)) continue;

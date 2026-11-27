@@ -15,7 +15,20 @@
   } finally {
     clearTimeout(timer);
   }
-  _flutter.loader.load({
-    serviceWorkerSettings: { serviceWorkerVersion: {{flutter_service_worker_version}} },
-  });
+  try {
+    await _flutter.loader.load({
+      serviceWorkerSettings: { serviceWorkerVersion: {{flutter_service_worker_version}} },
+      onEntrypointLoaded: async function (engineInitializer) {
+        try {
+          window.fullposSetWebStartupStage('engine');
+          const appRunner = await engineInitializer.initializeEngine();
+          await appRunner.runApp();
+        } catch (_) {
+          window.fullposFailWebStartup();
+        }
+      },
+    });
+  } catch (_) {
+    window.fullposFailWebStartup();
+  }
 })();

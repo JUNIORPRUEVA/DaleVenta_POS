@@ -12,6 +12,35 @@
 
 const STORAGE_KEY = 'fullpos.site.session.v1';
 
+export class SiteRequestTimeoutError extends Error {
+  constructor() {
+    super('El servidor tardó demasiado. Inicia sesión para continuar.');
+    this.name = 'SiteRequestTimeoutError';
+  }
+}
+
+/** Bounds headers AND body; aborted or late responses cannot update a session. */
+export async function withSiteRequestDeadline<T>(
+  request: (signal: AbortSignal) => Promise<T>,
+  timeoutMs = 20000,
+): Promise<T> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new SiteRequestTimeoutError());
+          controller.abort();
+        }, timeoutMs);
+      }),
+      request(controller.signal),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export class SiteSessionStorageError extends Error {
   constructor() {
     super('Tu navegador no permite guardar la sesión. Habilita el almacenamiento del sitio e inicia sesión de nuevo.');
@@ -93,13 +122,15 @@ export function clearSession(): void {
 export async function getAppHandoffUrl(apiBase: string, appUrl = '/home'): Promise<string> {
   const token = await getAccessToken(apiBase);
   if (!token) throw new Error('Tu sesión expiró. Inicia sesión para continuar.');
-  const response = await fetch(`${apiBase}/auth/handoff/ticket`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ platform: 'web' }),
+  const data = await withSiteRequestDeadline(async (signal) => {
+    const response = await fetch(`${apiBase}/auth/handoff/ticket`, {
+      method: 'POST', signal,
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ platform: 'web' }),
+    });
+    if (!response.ok) throw new Error('No pudimos abrir FullPOS. Inicia sesión para continuar.');
+    return await response.json() as { ticket?: string };
   });
-  if (!response.ok) throw new Error('No pudimos abrir FullPOS. Inicia sesión para continuar.');
-  const data = await response.json() as { ticket?: string };
   if (!data.ticket?.trim()) throw new Error('El servidor no pudo preparar tu acceso.');
   const target = new URL(appUrl, window.location.origin);
   target.searchParams.set('handoff', data.ticket);
@@ -115,9 +146,9 @@ export async function getAccessToken(apiBase: string): Promise<string | null> {
   if (!session) return null;
 
   try {
-    const response = await fetch(`${apiBase}/auth/me`, {
-      headers: { Authorization: `Bearer ${session.accessToken}` },
-    });
+    const response = await withSiteRequestDeadline(signal => fetch(`${apiBase}/auth/me`, {
+      signal, headers: { Authorization: `Bearer ${session.accessToken}` },
+    }));
     if (response.ok) return session.accessToken;
     if (response.status !== 401) return session.accessToken;
   } catch {
@@ -125,17 +156,16 @@ export async function getAccessToken(apiBase: string): Promise<string | null> {
   }
 
   try {
-    const refreshed = await fetch(`${apiBase}/auth/refresh`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken: session.refreshToken }),
+    const data = await withSiteRequestDeadline(async (signal) => {
+      const refreshed = await fetch(`${apiBase}/auth/refresh`, {
+        method: 'POST', signal,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken: session.refreshToken }),
+      });
+      if (!refreshed.ok) return null;
+      return await refreshed.json() as ApiAuthResponse;
     });
-    if (!refreshed.ok) {
-      clearSession();
-      return null;
-    }
-    const data = (await refreshed.json()) as ApiAuthResponse;
-    if (!data.accessToken) {
+    if (!data?.accessToken) {
       clearSession();
       return null;
     }
