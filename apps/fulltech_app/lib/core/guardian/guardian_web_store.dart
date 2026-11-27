@@ -59,8 +59,9 @@ class WebGuardianStore implements GuardianStore {
 
   Future<void> _saveEvents(Map<String, dynamic> events) async {
     final prefs = await _prefs();
-    if (!await prefs.setString(_eventsKey, jsonEncode(events)))
+    if (!await prefs.setString(_eventsKey, jsonEncode(events))) {
       throw StateError('Guardian web storage did not confirm persistence');
+    }
   }
 
   @override

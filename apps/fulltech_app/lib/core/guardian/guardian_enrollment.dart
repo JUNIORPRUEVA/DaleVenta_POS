@@ -179,9 +179,10 @@ class GuardianEnrollmentService {
     if (raw is Map) {
       final code = raw['code']?.toString() ?? '';
       final message = raw['message']?.toString() ?? '';
-      if (code.isNotEmpty || message.isNotEmpty)
+      if (code.isNotEmpty || message.isNotEmpty) {
         return '${code.isEmpty ? 'sin_code' : code} ${message.isEmpty ? '' : message}'
             .trim();
+      }
       return 'mapa(${raw.length} claves)';
     }
     final text = raw.toString();

@@ -32,8 +32,9 @@ GuardianSendResult parseGuardianIngestResponse(
         results
                 .where((entry) => entry is Map && entry['eventId'] == eventId)
                 .length !=
-            1)
+            1) {
       continue;
+    }
 
     switch (status) {
       case 'accepted':

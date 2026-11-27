@@ -80,8 +80,9 @@ class GuardianBootstrap {
       _bufferEarlyFault(details);
 
   static void _bufferEarlyFault(AppErrorDetails details) {
-    if (_earlyFaults.any((fault) => fault.details.eventId == details.eventId))
+    if (_earlyFaults.any((fault) => fault.details.eventId == details.eventId)) {
       return;
+    }
     _earlyFaults.add(_EarlyFault(details));
     while (_earlyFaults.length > _maxEarlyFaults) {
       _earlyFaults.removeAt(0);
@@ -125,8 +126,9 @@ class GuardianBootstrap {
         config: config,
         companyIdProvider: () async {
           final token = await TokenStorage().getAccessToken();
-          if (token != null && token.isNotEmpty)
+          if (token != null && token.isNotEmpty) {
             return guardianCompanyFromToken(token);
+          }
           if (!config.usesInstallCredential) return null;
           final credential = await GuardianInstallCredentialStore().read();
           return credential?.isValid(margin: Duration.zero) == true

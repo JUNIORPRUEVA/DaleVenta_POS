@@ -134,11 +134,13 @@ class GuardianReporter {
     if (has('/sales')) return 'sales';
     if (has('/sync') || has('sincroniz')) return 'sync';
     if (has('/license') || has('licencia')) return 'license';
-    if (has('/app-updates') || has('/app_update') || has('actualizaci'))
+    if (has('/app-updates') || has('/app_update') || has('actualizaci')) {
       return 'updater';
+    }
     if (has('/auth') || has('/login') || has('session')) return 'auth';
-    if (has('/products') || has('/inventory') || has('/warehouses'))
+    if (has('/products') || has('/inventory') || has('/warehouses')) {
       return 'inventory';
+    }
     if (has('/reports')) return 'reporting';
     if (has('/tax') || has('/ncf') || has('/ecf')) return 'fiscal';
     if (has('print') || has('impresi')) return 'printing';

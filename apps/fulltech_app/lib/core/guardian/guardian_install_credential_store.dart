@@ -46,8 +46,9 @@ class GuardianInstallCredential {
       final expiresAt = DateTime.tryParse(
         decoded['expiresAt']?.toString() ?? '',
       );
-      if (installId.isEmpty || credential.isEmpty || expiresAt == null)
+      if (installId.isEmpty || credential.isEmpty || expiresAt == null) {
         return null;
+      }
       return GuardianInstallCredential(
         installId: installId,
         credential: credential,
