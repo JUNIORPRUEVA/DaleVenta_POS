@@ -392,13 +392,24 @@ class FullPosEscPosReceiptRenderer implements ThermalReceiptRenderer {
       lines.add(_EscPosLine(line, styles ?? normalB, line.length));
     }
 
-    for (final line in _companyHeaderLines(
-      companyName: receipt.company.name,
-      address: receipt.company.address,
-      phone: receipt.company.phone,
-      rnc: receipt.company.rnc,
+    for (final line in ReceiptTextUtils.wrap(
+      _clean(receipt.company.name).toUpperCase(),
+      thermalProfile.usableFontAChars,
     )) {
-      addB(line, styles: line.contains(receipt.company.name) ? boldB : normalB);
+      addA(line, styles: boldA);
+    }
+    for (final detail in [
+      receipt.company.address,
+      if (receipt.company.phone.trim().isNotEmpty)
+        'Tel: ${receipt.company.phone}',
+      if (receipt.company.rnc.trim().isNotEmpty) 'RNC: ${receipt.company.rnc}',
+    ]) {
+      for (final line in ReceiptTextUtils.wrap(
+        _clean(detail),
+        thermalProfile.usableFontAChars,
+      )) {
+        addA(line, styles: normalA);
+      }
     }
 
     addB(_rule(thermalProfile.usableChars), styles: normalB);
@@ -430,7 +441,7 @@ class FullPosEscPosReceiptRenderer implements ThermalReceiptRenderer {
     addB(_itemHeader(), styles: boldB);
     addB(_rule(thermalProfile.usableChars), styles: normalB);
     for (final item in receipt.items) {
-      if (receipt.ecf == null) {
+      if (receipt.ecf == null || thermalProfile.paperSize == PaperSize.mm80) {
         addB(_itemLine(item), styles: normalB);
       } else {
         for (final line in ReceiptTextUtils.wrap(
@@ -439,10 +450,12 @@ class FullPosEscPosReceiptRenderer implements ThermalReceiptRenderer {
         )) {
           addB(line);
         }
-        addB(
-          '${item.qtyText} x ${_amount(item.unitPrice)} = ${_amount(item.total)}',
-        );
-        addB('ITBIS: ${_money(item.taxAmount)}');
+        for (final line in ReceiptTextUtils.wrap(
+          '${item.qtyText} x ${_amount(item.unitPrice)} | ITBIS ${_amount(item.taxAmount)} | ${_amount(item.total)}',
+          thermalProfile.usableChars,
+        )) {
+          addB(line);
+        }
       }
       if (item.discount > 0) {
         addB('   Desc. -${_money(item.discount)}', styles: normalB);
@@ -641,7 +654,12 @@ class FullPosEscPosReceiptRenderer implements ThermalReceiptRenderer {
   }
 
   List<String> _summaryLines(ThermalReceiptViewModel receipt) {
-    final lines = <String>[_totalLine('SUBTOTAL', _money(receipt.subtotal))];
+    final lines = <String>[
+      _totalLine(
+        receipt.combinesSubtotal ? 'SUBTOTAL GRAVADO' : 'SUBTOTAL',
+        _money(receipt.subtotal),
+      ),
+    ];
     if (receipt.productDiscount > 0) {
       lines.add(
         _totalLine('DESC. PRODUCTOS', '-${_money(receipt.productDiscount)}'),
@@ -655,7 +673,7 @@ class FullPosEscPosReceiptRenderer implements ThermalReceiptRenderer {
     if (receipt.showTaxBreakdown && receipt.exemptAmount > 0) {
       lines.add(_totalLine('MONTO EXENTO', _money(receipt.exemptAmount)));
     }
-    if (receipt.taxableBase > 0) {
+    if (receipt.taxableBase > 0 && !receipt.combinesSubtotal) {
       lines.add(_totalLine('MONTO GRAVADO', _money(receipt.taxableBase)));
     }
     if (receipt.taxAmount > 0) {
@@ -674,7 +692,11 @@ class FullPosEscPosReceiptRenderer implements ThermalReceiptRenderer {
   String _itemLine(ThermalReceiptItemViewModel item) {
     return _diagnosticItemLine(
       qty: item.qtyText,
-      product: _clean(item.name).toUpperCase(),
+      product: _clean(
+        thermalProfile.paperSize == PaperSize.mm80
+            ? item.compactName ?? item.name
+            : item.name,
+      ).toUpperCase(),
       price: _amount(item.unitPrice),
       total: _amount(item.total),
     );

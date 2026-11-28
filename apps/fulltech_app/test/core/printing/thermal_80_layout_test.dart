@@ -61,14 +61,21 @@ void main() {
             .lastWhere((word) => word.text == 'TOTAL')
             .bounds
             .top;
+        final invoiceTop = words
+            .firstWhere((word) => word.text == 'FACTURA')
+            .bounds
+            .top;
         for (final word in words) {
+          final companyHeader = word.bounds.top < invoiceTop;
           expect(
             word.fontSize,
-            closeTo(9, 0.05),
-            reason: 'Consistent 9pt text: ${word.text}',
+            companyHeader
+                ? anyOf(closeTo(12, 0.05), closeTo(9.5, 0.05))
+                : closeTo(9, 0.05),
+            reason: 'Emphasized company header, compact 9pt body: ${word.text}',
           );
           expect(word.fontName, startsWith('RobotoCondensed'));
-          if (word.bounds.top < subtotalTop) {
+          if (!companyHeader && word.bounds.top < subtotalTop) {
             expect(
               word.fontStyle,
               isNot(contains(pdf.PdfFontStyle.bold)),
@@ -201,7 +208,8 @@ void main() {
           final extractor = pdf.PdfTextExtractor(document);
           final text = extractor.extractText().replaceAll(RegExp(r'\s+'), ' ');
           for (final required in [
-            receipt.items.single.name,
+            'Lector inalámbrico',
+            '...',
             '2,469,135.78',
             '1,234,567.89',
             'DESC. PRODUCTOS',

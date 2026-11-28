@@ -15,6 +15,7 @@ import '../sales_models.dart';
 import '../../../features/ecf/ecf_print_document.dart';
 import '../../../core/printing/ecf_print_footer.dart';
 import '../../../core/printing/models/ticket_data.dart';
+import '../../../core/printing/models/receipt_subtotal.dart';
 
 final PdfColor _pageBackground = PdfColors.white;
 final PdfColor _borderColor = PdfColor.fromHex('#D9E2EC');
@@ -977,6 +978,18 @@ pw.Widget _invoiceTotalsPanel(
   final totals = buildSalePdfViewData(sale);
   final fiscal = totals.fiscalEnabled;
   final credit = TicketData.fromSale(sale).credit;
+  final subtotal = double.tryParse(ecf?.subtotal ?? '') ?? totals.subtotal;
+  final combinesSubtotal = combinesElectronicSubtotal(
+    electronic: ecf != null,
+    subtotal: subtotal,
+    taxableBase: totals.taxableBase,
+    exemptAmount: totals.exemptAmount,
+    discounts: [
+      totals.productDiscount,
+      totals.generalDiscount,
+      sale.discountAmount,
+    ],
+  );
 
   return _panel(
     padding: const pw.EdgeInsets.fromLTRB(14, 13, 14, 13),
@@ -995,8 +1008,8 @@ pw.Widget _invoiceTotalsPanel(
         ),
         pw.SizedBox(height: 9),
         _pdfTotalLine(
-          'Subtotal',
-          money.format(double.tryParse(ecf?.subtotal ?? '') ?? totals.subtotal),
+          combinesSubtotal ? 'Subtotal gravado' : 'Subtotal',
+          money.format(subtotal),
         ),
         if (totals.productDiscount > 0)
           _pdfTotalLine(
@@ -1013,7 +1026,7 @@ pw.Widget _invoiceTotalsPanel(
         if (fiscal) ...[
           if (totals.exemptAmount > 0)
             _pdfTotalLine('Monto exento', money.format(totals.exemptAmount)),
-          if (totals.taxableBase > 0)
+          if (totals.taxableBase > 0 && !combinesSubtotal)
             _pdfTotalLine('Base imponible', money.format(totals.taxableBase)),
           if (totals.taxAmount > 0)
             _pdfTotalLine('ITBIS', money.format(totals.taxAmount)),

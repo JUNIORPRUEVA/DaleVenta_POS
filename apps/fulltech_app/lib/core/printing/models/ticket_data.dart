@@ -1,4 +1,5 @@
 import 'package:intl/intl.dart';
+import 'receipt_subtotal.dart';
 import '../../../features/ecf/ecf_print_document.dart';
 
 import '../../time/business_time.dart';
@@ -45,9 +46,11 @@ class TicketItemData {
     this.taxAmount = 0,
     this.exemptAmount = 0,
     this.taxExempt = false,
+    this.compactName,
   });
 
   final String name;
+  final String? compactName;
   final double qty;
   final double unitPrice;
   final double total;
@@ -132,6 +135,19 @@ class TicketData {
   final bool isCopy;
   final List<String>? customLines;
 
+  bool get combinesSubtotal => combinesElectronicSubtotal(
+    electronic: ecf != null,
+    subtotal: resolvedSubtotal,
+    taxableBase: taxableBase,
+    exemptAmount: exemptAmount,
+    discounts: [
+      discount,
+      productDiscount,
+      generalDiscount,
+      ...items.map((item) => item.discount),
+    ],
+  );
+
   double get resolvedSubtotal =>
       subtotal ?? items.fold(0.0, (sum, item) => sum + item.total);
 
@@ -189,6 +205,7 @@ class TicketData {
             (line) => TicketItemData(
               name:
                   '${line.taxExempt ? 'E ' : ''}${line.name}${line.unitOfMeasure == null ? '' : ' (UM ${line.unitOfMeasure})'}',
+              compactName: '${line.taxExempt ? 'E ' : ''}${line.name}',
               qty: line.quantity,
               unitPrice: line.unitPrice,
               total: line.total,
@@ -239,6 +256,8 @@ class TicketData {
               name: ecf == null
                   ? item.productNameSnapshot
                   : '${item.taxExempt ? 'E ' : ''}${item.productNameSnapshot} (${item.unitNameSnapshot})',
+              compactName:
+                  '${ecf != null && item.taxExempt ? 'E ' : ''}${item.productNameSnapshot}',
               qty: item.qty,
               unitPrice: item.priceSoldUnit,
               total: item.subtotalSold,
@@ -263,7 +282,9 @@ class TicketData {
       generalDiscount: generalDiscount,
       taxIncluded: sale.fiscalPriceMode == 'TAX_INCLUDED',
       ncf: ecf?.encf ?? sale.ncf,
-      fiscalVoucherType: sale.isExplicitNormal ? null : ecf?.documentType ?? sale.fiscalVoucherType,
+      fiscalVoucherType: sale.isExplicitNormal
+          ? null
+          : ecf?.documentType ?? sale.fiscalVoucherType,
       ncfExpirationDate: ecf != null
           ? DateTime.tryParse(ecf.expiresAt ?? '')
           : sale.ncfExpirationDate,
