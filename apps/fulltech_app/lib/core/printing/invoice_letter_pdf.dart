@@ -141,10 +141,7 @@ class InvoiceLetterPdf {
               width: 260,
               child: pw.Column(
                 children: [
-                  _total(
-                    sale.fiscalTaxEnabled ? 'Monto gravado' : 'Subtotal',
-                    money.format(subtotal),
-                  ),
+                  _total('Subtotal', money.format(subtotal)),
                   if (sale.fiscalTaxEnabled &&
                       sale.fiscalPriceMode == 'TAX_INCLUDED')
                     _total('ITBIS incluido', ''),

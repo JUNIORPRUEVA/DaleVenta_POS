@@ -1,6 +1,7 @@
 import '../models/company_info.dart';
 import '../models/receipt_text_utils.dart';
 import '../models/ticket_data.dart';
+import '../models/receipt_subtotal.dart';
 import '../../../features/ecf/ecf_print_document.dart';
 
 class ThermalReceiptViewModel {
@@ -32,6 +33,7 @@ class ThermalReceiptViewModel {
     this.isCopy = false,
     this.ecf,
     this.credit,
+    this.legacyDiscount = 0,
   });
 
   final String ticketNumber;
@@ -44,6 +46,19 @@ class ThermalReceiptViewModel {
   final double subtotal;
   final double productDiscount;
   final double generalDiscount;
+  final double legacyDiscount;
+  bool get combinesSubtotal => combinesElectronicSubtotal(
+    electronic: ecf != null,
+    subtotal: subtotal,
+    taxableBase: taxableBase,
+    exemptAmount: exemptAmount,
+    discounts: [
+      legacyDiscount,
+      productDiscount,
+      generalDiscount,
+      ...items.map((item) => item.discount),
+    ],
+  );
   final double taxableBase;
   final double exemptAmount;
   final double taxAmount;
@@ -91,6 +106,7 @@ class ThermalReceiptViewModel {
           .map(
             (item) => ThermalReceiptItemViewModel(
               name: item.name,
+              compactName: item.compactName,
               qty: item.qty,
               unitPrice: item.unitPrice,
               total: item.total,
@@ -102,6 +118,7 @@ class ThermalReceiptViewModel {
           )
           .toList(growable: false),
       subtotal: data.resolvedSubtotal,
+      legacyDiscount: data.discount,
       productDiscount: data.productDiscount,
       generalDiscount: data.generalDiscount,
       taxableBase: data.taxableBase,
@@ -150,9 +167,11 @@ class ThermalReceiptItemViewModel {
     required this.taxableBase,
     required this.exemptAmount,
     required this.taxAmount,
+    this.compactName,
   });
 
   final String name;
+  final String? compactName;
   final double qty;
   final double unitPrice;
   final double total;

@@ -18,10 +18,18 @@ This document records the current UI system. Do not redesign FullPOS as part of 
 Primary font family is Manrope. The app defines display, headline, title, body, and label styles through `AppTypography.textTheme()`. Use existing text theme and `AppTextStyles` before adding custom text styles.
 
 The 80mm thermal PDF uses its own print typography: embedded Roboto Condensed
-Regular at 9pt for headings, labels and data; Medium at the same size only for
-emphasized totals. Preserve the compact right-aligned totals and complete
-single-line product text (scale down only when the available width requires
-it). This exception does not change the app theme or the 58mm receipt.
+Regular at 9pt for body headings, labels and data; Medium at the same size for
+emphasized totals. Owner refinement2026-11-28: the company header uses a12pt
+Medium company name and9.5pt contact/address/RNC data, without clipping the
+issuer identity. Owner override2026-11-28:80mm tickets use only CANT, ITEM,
+PRECIO and TOTAL, with ITBIS in the totals section. Product descriptions stay
+at9pt on one line and are abbreviated with an ellipsis when necessary; omit
+the automatically appended unit of measure. Full invoice PDFs and58mm
+receipts retain their existing fiscal detail. This80mm simplified electronic
+ticket is LOCAL REVIEW ONLY and NO-GO for fiscal publication: DGII technical
+report18.2.2 requires per-item ITBIS and applicable units in the RI, including
+paper-continuous examples. No production rollout is approved by this design
+override. Preserve the compact right-aligned totals and the app theme.
 For a simple 80mm cash sale, show only TOTAL and DEVUELTA (including zero).
 Show SUBTOTAL when discounts, fiscal breakdown or a differing subtotal explain
 the total. Credit adds ABONADO and PENDIENTE; mixed payments preserve each

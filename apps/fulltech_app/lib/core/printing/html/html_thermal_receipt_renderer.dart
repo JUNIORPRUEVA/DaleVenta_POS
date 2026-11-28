@@ -32,7 +32,9 @@ class HtmlThermalReceiptRenderer {
   <title>Ticket ${_escape(receipt.ticketNumber)}</title>
   <style>
 ${_css()}
-${receipt.ecf == null ? '' : '.company-name,.company-line,.client-line,.item-name{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}'}
+${receipt.ecf == null ? '' : '.client-line{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}'}
+${paperWidthMm == 58 && receipt.ecf != null ? '.item-name{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}.items col.item{width:30%}.items col.price{width:19%}.items col.tax{width:18%}.items col.total{width:20%}' : ''}
+${paperWidthMm == 80 ? '.item-name{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.items th{font-size:12px}' : ''}
   </style>
 </head>
 <body>
@@ -121,15 +123,20 @@ body {
 
 .company-name {
   font-weight: 800;
-  font-size: 13px;
+  font-size: 16px;
   line-height: 1.1;
   margin-bottom: 0.6mm;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
-.company-line,
+.company-line {
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .client-line,
 .note-line {
   white-space: nowrap;
@@ -406,9 +413,7 @@ body {
   }
 
   String _items(ThermalReceiptViewModel receipt) {
-    if (receipt.ecf != null && paperWidthMm == 58) {
-      return '<section><strong>DETALLE</strong>${receipt.items.map((item) => '<div style="padding:1mm 0;border-bottom:1px solid #ccc"><div>${_escape(item.name)}</div><div style="display:flex;justify-content:space-between"><span>${_escape(item.qtyText)} x ${_escape(_money(item.unitPrice))}</span><strong>${_escape(_money(item.total))}</strong></div><div>ITBIS: ${_escape(_money(item.taxAmount))}</div>${item.discount > 0 ? '<div>Descuento: ${_escape(_money(item.discount))}</div>' : ''}</div>').join()}</section>';
-    }
+    final showItemTax = receipt.ecf != null && paperWidthMm != 80;
     final rows = receipt.items.map((item) {
       final discount = item.discount > 0
           ? '<div class="line-discount">Desc. -${_escape(_money(item.discount))}</div>'
@@ -416,8 +421,9 @@ body {
       return '''
       <tr>
         <td class="qty-cell">${_escape(item.qtyText)}</td>
-        <td><div class="item-name">${_escape(item.name.toUpperCase())}</div>$discount</td>
+        <td><div class="item-name">${_escape((paperWidthMm == 80 ? item.compactName ?? item.name : item.name).toUpperCase())}</div>$discount</td>
         <td class="price">${_escape(_amount(item.unitPrice))}</td>
+        ${!showItemTax ? '' : '<td class="price">${_escape(_amount(item.taxAmount))}</td>'}
         <td class="total">${_escape(_amount(item.total))}</td>
       </tr>
 ''';
@@ -428,6 +434,7 @@ body {
         <col class="qty">
         <col class="item">
         <col class="price">
+        ${!showItemTax ? '' : '<col class="tax">'}
         <col class="total">
       </colgroup>
       <thead>
@@ -435,6 +442,7 @@ body {
           <th>CANT</th>
           <th>ITEM</th>
           <th class="price">PRECIO</th>
+          ${!showItemTax ? '' : '<th class="price">ITBIS</th>'}
           <th class="total">TOTAL</th>
         </tr>
       </thead>
@@ -447,14 +455,17 @@ body {
 
   String _totals(ThermalReceiptViewModel receipt) {
     final rows = <String>[
-      _totalRow('SUBTOTAL', _money(receipt.subtotal)),
+      _totalRow(
+        receipt.combinesSubtotal ? 'SUBTOTAL GRAVADO' : 'SUBTOTAL',
+        _money(receipt.subtotal),
+      ),
       if (receipt.productDiscount > 0)
         _totalRow('DESC. PRODUCTOS', '-${_money(receipt.productDiscount)}'),
       if (receipt.generalDiscount > 0)
         _totalRow('DESC. GENERAL', '-${_money(receipt.generalDiscount)}'),
       if (receipt.showTaxBreakdown && receipt.exemptAmount > 0)
         _totalRow('MONTO EXENTO', _money(receipt.exemptAmount)),
-      if (receipt.taxableBase > 0)
+      if (receipt.taxableBase > 0 && !receipt.combinesSubtotal)
         _totalRow('MONTO GRAVADO', _money(receipt.taxableBase)),
       if (receipt.taxAmount > 0) _totalRow('ITBIS', _money(receipt.taxAmount)),
       _totalRow('TOTAL', _money(receipt.total), grand: true),

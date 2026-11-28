@@ -823,7 +823,7 @@ class TicketBuilder {
         (data.taxableBase > 0 || data.exemptAmount > 0 || data.itbis > 0);
     if (layout.showSubtotalItbisTotal) {
       rows.add((
-        label: 'SUBTOTAL',
+        label: data.combinesSubtotal ? 'SUBTOTAL GRAVADO' : 'SUBTOTAL',
         value: ReceiptTextUtils.money(data.resolvedSubtotal),
         bold: false,
       ));
@@ -863,7 +863,7 @@ class TicketBuilder {
             bold: false,
           ));
         }
-        if (data.taxableBase > 0) {
+        if (data.taxableBase > 0 && !data.combinesSubtotal) {
           rows.add((
             label: 'MONTO GRAVADO',
             value: ReceiptTextUtils.money(data.taxableBase),

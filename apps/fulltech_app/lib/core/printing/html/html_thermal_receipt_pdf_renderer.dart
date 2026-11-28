@@ -118,7 +118,7 @@ class HtmlThermalReceiptPdfRenderer {
               children: [
                 pw.Text(
                   _clean(company.name),
-                  style: _style(_wideRoll ? 11.5 : 13, bold: true),
+                  style: _style(_wideRoll ? 12 : 13, bold: true, header: true),
                 ),
                 pw.SizedBox(height: 0.6 * PdfPageFormat.mm),
                 ...[
@@ -128,7 +128,12 @@ class HtmlThermalReceiptPdfRenderer {
                       if (company.rnc.trim().isNotEmpty) 'RNC: ${company.rnc}',
                     ]
                     .where((line) => _clean(line).isNotEmpty)
-                    .map((line) => pw.Text(_clean(line), style: _style(9))),
+                    .map(
+                      (line) => pw.Text(
+                        _clean(line),
+                        style: _style(_wideRoll ? 9.5 : 9, header: true),
+                      ),
+                    ),
               ],
             ),
           ),
@@ -241,36 +246,25 @@ class HtmlThermalReceiptPdfRenderer {
   }
 
   pw.Widget _items(ThermalReceiptViewModel receipt) {
-    if (receipt.ecf != null && paperWidthMm == 58) {
-      return pw.Column(
-        mainAxisSize: pw.MainAxisSize.min,
-        crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-        children: [
-          _rule(),
-          pw.Text('DETALLE', style: _style(8, bold: true)),
-          for (final item in receipt.items) ...[
-            pw.SizedBox(height: 3),
-            pw.Text(item.name, style: _style(8)),
-            pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              children: [
-                pw.Text(
-                  '${item.qtyText} x ${_money(item.unitPrice)}',
-                  style: _style(7.5),
-                ),
-                pw.Text(_money(item.total), style: _style(8, bold: true)),
-              ],
-            ),
-            pw.Text('ITBIS: ${_money(item.taxAmount)}', style: _style(7)),
-            if (item.discount > 0)
-              pw.Text('Descuento: ${_money(item.discount)}', style: _style(7)),
-          ],
-          _rule(),
-        ],
-      );
-    }
+    final electronic = receipt.ecf != null && !_wideRoll;
     return pw.Table(
-      columnWidths: _wideRoll
+      columnWidths: electronic
+          ? _wideRoll
+                ? const {
+                    0: pw.FlexColumnWidth(7),
+                    1: pw.FlexColumnWidth(42),
+                    2: pw.FlexColumnWidth(17),
+                    3: pw.FlexColumnWidth(15),
+                    4: pw.FlexColumnWidth(19),
+                  }
+                : const {
+                    0: pw.FlexColumnWidth(9),
+                    1: pw.FlexColumnWidth(37),
+                    2: pw.FlexColumnWidth(18),
+                    3: pw.FlexColumnWidth(17),
+                    4: pw.FlexColumnWidth(19),
+                  }
+          : _wideRoll
           ? {
               0: const pw.FixedColumnWidth(8 * PdfPageFormat.mm),
               1: const pw.FixedColumnWidth(37.5 * PdfPageFormat.mm),
@@ -292,9 +286,13 @@ class HtmlThermalReceiptPdfRenderer {
             ),
           ),
           children: [
-            _tableHeader('CANT', align: pw.TextAlign.center),
+            _tableHeader(
+              paperWidthMm == 58 ? 'C.' : 'CANT',
+              align: pw.TextAlign.center,
+            ),
             _tableHeader('ITEM'),
             _tableHeader('PRECIO', align: pw.TextAlign.right),
+            if (electronic) _tableHeader('ITBIS', align: pw.TextAlign.right),
             _tableHeader('TOTAL', align: pw.TextAlign.right),
           ],
         ),
@@ -314,7 +312,7 @@ class HtmlThermalReceiptPdfRenderer {
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
                     if (_wideRoll)
-                      _singleLine(_clean(item.name), size: 8.6, bold: true)
+                      _compactProductName(item.compactName ?? item.name)
                     else
                       pw.Text(
                         _clean(item.name).toUpperCase(),
@@ -325,11 +323,6 @@ class HtmlThermalReceiptPdfRenderer {
                         'Desc. -${_money(item.discount)}',
                         style: _style(7.5),
                       ),
-                    if (receipt.ecf != null)
-                      pw.Text(
-                        'ITBIS: ${_money(item.taxAmount)}',
-                        style: _style(7),
-                      ),
                   ],
                 ),
               ),
@@ -338,6 +331,12 @@ class HtmlThermalReceiptPdfRenderer {
                 align: pw.TextAlign.right,
                 fontSize: paperWidthMm == 58 ? 6.2 : 7.8,
               ),
+              if (electronic)
+                _tableCell(
+                  _amount(item.taxAmount),
+                  align: pw.TextAlign.right,
+                  fontSize: paperWidthMm == 58 ? 6.2 : 7.8,
+                ),
               _tableCell(
                 _amount(item.total),
                 align: pw.TextAlign.right,
@@ -361,14 +360,18 @@ class HtmlThermalReceiptPdfRenderer {
                 receipt.taxableBase > 0 ||
                 receipt.taxAmount > 0));
     final rows = <pw.Widget>[
-      if (showSubtotal) _totalRow('SUBTOTAL', _money(receipt.subtotal)),
+      if (showSubtotal)
+        _totalRow(
+          receipt.combinesSubtotal ? 'SUBTOTAL GRAVADO' : 'SUBTOTAL',
+          _money(receipt.subtotal),
+        ),
       if (receipt.productDiscount > 0)
         _totalRow('DESC. PRODUCTOS', '-${_money(receipt.productDiscount)}'),
       if (receipt.generalDiscount > 0)
         _totalRow('DESC. GENERAL', '-${_money(receipt.generalDiscount)}'),
       if (receipt.showTaxBreakdown && receipt.exemptAmount > 0)
         _totalRow('MONTO EXENTO', _money(receipt.exemptAmount)),
-      if (receipt.taxableBase > 0)
+      if (receipt.taxableBase > 0 && !receipt.combinesSubtotal)
         _totalRow('MONTO GRAVADO', _money(receipt.taxableBase)),
       if (receipt.taxAmount > 0) _totalRow('ITBIS', _money(receipt.taxAmount)),
       _totalRow('TOTAL', _money(receipt.total), grand: true),
@@ -582,7 +585,13 @@ class HtmlThermalReceiptPdfRenderer {
         horizontal: _wideRoll ? 0.5 : 1.4,
       ),
       child: _wideRoll
-          ? _singleLine(text, size: 7.5, bold: true, align: align)
+          ? pw.Text(
+              text,
+              textAlign: align,
+              style: _style(9),
+              softWrap: false,
+              maxLines: 1,
+            )
           : pw.Text(
               text,
               textAlign: align,
@@ -603,6 +612,36 @@ class HtmlThermalReceiptPdfRenderer {
           : pw.Text(text, textAlign: align, style: _style(fontSize)),
     );
   }
+
+  pw.Widget _compactProductName(String value) => pw.LayoutBuilder(
+    builder: (context, constraints) {
+      final text = _clean(value);
+      final font = pw.Theme.of(context).defaultTextStyle.font!.getFont(context);
+      final maxWidth = constraints?.maxWidth ?? double.infinity;
+      bool fits(String candidate) =>
+          font.stringMetrics(candidate).advanceWidth * 9 <= maxWidth;
+      var display = text;
+      if (!fits(text)) {
+        final characters = text.runes.toList();
+        var end = characters.length;
+        while (end > 0 &&
+            !fits(
+              '${String.fromCharCodes(characters.take(end)).trimRight()}...',
+            )) {
+          end--;
+        }
+        display =
+            '${String.fromCharCodes(characters.take(end)).trimRight()}...';
+      }
+      return pw.Text(
+        display,
+        style: _style(9),
+        softWrap: false,
+        maxLines: 1,
+        overflow: pw.TextOverflow.clip,
+      );
+    },
+  );
 
   pw.Widget _totalRow(
     String label,
@@ -693,19 +732,24 @@ class HtmlThermalReceiptPdfRenderer {
     );
   }
 
-  // 80mm: one regular 9pt face throughout; medium weight only for totals.
+  // 80mm: compact 9pt body, with an emphasized company header and totals.
   // Keep the existing 58mm typography independent of this template.
-  pw.TextStyle _style(double size, {bool bold = false, bool total = false}) {
+  pw.TextStyle _style(
+    double size, {
+    bool bold = false,
+    bool total = false,
+    bool header = false,
+  }) {
     return pw.TextStyle(
       font: _wideRoll
           ? null
           : bold
           ? pw.Font.helveticaBold()
           : pw.Font.helvetica(),
-      fontWeight: bold && (!_wideRoll || total)
+      fontWeight: bold && (!_wideRoll || total || header)
           ? pw.FontWeight.bold
           : pw.FontWeight.normal,
-      fontSize: _wideRoll ? 9 : size,
+      fontSize: _wideRoll && !header ? 9 : size,
       height: 1.1,
     );
   }

@@ -225,7 +225,10 @@ class TicketRenderer {
 
     add(sep);
     if (layout.showSubtotalItbisTotal) {
-      addMoneyLine('Subtotal', data.resolvedSubtotal);
+      addMoneyLine(
+        data.combinesSubtotal ? 'Subtotal gravado' : 'Subtotal',
+        data.resolvedSubtotal,
+      );
       if (layout.showDiscounts) {
         if (data.productDiscount > 0) {
           add(
@@ -264,7 +267,7 @@ class TicketRenderer {
         if (data.exemptAmount > 0) {
           addMoneyLine('Monto exento', data.exemptAmount);
         }
-        if (data.taxableBase > 0) {
+        if (data.taxableBase > 0 && !data.combinesSubtotal) {
           addMoneyLine('Monto gravado', data.taxableBase);
         }
         if (data.itbis > 0) {
